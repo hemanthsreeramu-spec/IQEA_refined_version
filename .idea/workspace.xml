@@ -42,29 +42,7 @@
       <change afterPath="$PROJECT_DIR$/../TestCase Generator/accelerator/pages/5__LLM_OrthogonalArray.py" afterPathEscaped="$PROJECT_DIR$/../TestCase Generator/accelerator/pages/5_🔢_LLM_OrthogonalArray.py" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/../TestCase Generator/accelerator/pages/__init__.py" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/../TestCase Generator/pyproject.toml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/TestCase Generator.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/ai-accelerator.iml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/.python-version" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/E2E-Page-Images/CartPage.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/E2E-Page-Images/CktCompletePage.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/E2E-Page-Images/CktOverviewPage.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/E2E-Page-Images/CktPage.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/E2E-Page-Images/Loginpage.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/E2E-Page-Images/PLP.png" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/Utilities.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/accelerator/Gen-AI-Accelerators.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/accelerator/pages/1__Functional-TestCase-Generator.py" afterPathEscaped="$PROJECT_DIR$/accelerator/pages/1_📝_Functional-TestCase-Generator.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/accelerator/pages/2__E2E-TestCaseGenerator.py" afterPathEscaped="$PROJECT_DIR$/accelerator/pages/2_🧮_E2E-TestCaseGenerator.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/accelerator/pages/4__SQL-QueryGenerator.py" afterPathEscaped="$PROJECT_DIR$/accelerator/pages/4_🧱_SQL-QueryGenerator.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/accelerator/pages/5__LLM_OrthogonalArray.py" afterPathEscaped="$PROJECT_DIR$/accelerator/pages/5_🔢_LLM_OrthogonalArray.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/accelerator/pages/__init__.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
