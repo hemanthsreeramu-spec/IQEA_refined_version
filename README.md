@@ -1,1 +1,3 @@
-# ai-accelerator
+## Sample Prompt for Demo
+As a customer, I want all sign-in/updates to primary address in profile to also update the global shipping zip code. So I can seamlessly log-in to my account and have my preferred address be the basis for all default shipping information. Acceptance Criteria: If a primary address is present then the any of these account events must update the global ship zip Sign-In Edit and Save of current primary address Switch to new primary address If a primary address is not associated with the account then no action will be taken Updates to global ship zip manually elsewhere on the site will not update the primary address
+

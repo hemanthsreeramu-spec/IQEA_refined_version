@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="b4ee9c5e-1643-4cc1-ac9d-d90eee7a127c" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/../DATF/QE_ATF" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../LLMEvaluation/.idea/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../LLMEvaluation/.idea/LLMEvaluation.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../LLMEvaluation/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../LLMEvaluation/.idea/misc.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../LLMEvaluation/.idea/modules.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../LLMEvaluation/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../LLMEvaluation/evaluation_result.xlsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../LLMEvaluation/gpt_answers.xlsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../LLMEvaluation/gpt_response.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../LLMEvaluation/llm_eavl_questions_updated.xlsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../LLMEvaluation/llm_eval_questions.xlsx" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../LLMEvaluation/llm_evaluation.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../LLMEvaluation/requirements.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/.env" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/.idea/TestCase Generator.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/.idea/misc.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/.idea/workspace.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/.python-version" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/E2E-Page-Images/CartPage.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/E2E-Page-Images/CktCompletePage.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/E2E-Page-Images/CktOverviewPage.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/E2E-Page-Images/CktPage.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/E2E-Page-Images/Loginpage.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/E2E-Page-Images/PLP.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/README.md" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/Utilities.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/accelerator/Gen-AI-Accelerators.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/accelerator/pages/1__Functional-TestCase-Generator.py" afterPathEscaped="$PROJECT_DIR$/../TestCase Generator/accelerator/pages/1_📝_Functional-TestCase-Generator.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/accelerator/pages/2__E2E-TestCaseGenerator.py" afterPathEscaped="$PROJECT_DIR$/../TestCase Generator/accelerator/pages/2_🧮_E2E-TestCaseGenerator.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/accelerator/pages/4__SQL-QueryGenerator.py" afterPathEscaped="$PROJECT_DIR$/../TestCase Generator/accelerator/pages/4_🧱_SQL-QueryGenerator.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/accelerator/pages/5__LLM_OrthogonalArray.py" afterPathEscaped="$PROJECT_DIR$/../TestCase Generator/accelerator/pages/5_🔢_LLM_OrthogonalArray.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/accelerator/pages/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/../TestCase Generator/pyproject.toml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/TestCase Generator.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/ai-accelerator.iml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/modules.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.python-version" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/E2E-Page-Images/CartPage.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/E2E-Page-Images/CktCompletePage.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/E2E-Page-Images/CktOverviewPage.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/E2E-Page-Images/CktPage.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/E2E-Page-Images/Loginpage.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/E2E-Page-Images/PLP.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Utilities.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/accelerator/Gen-AI-Accelerators.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/accelerator/pages/1__Functional-TestCase-Generator.py" afterPathEscaped="$PROJECT_DIR$/accelerator/pages/1_📝_Functional-TestCase-Generator.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/accelerator/pages/2__E2E-TestCaseGenerator.py" afterPathEscaped="$PROJECT_DIR$/accelerator/pages/2_🧮_E2E-TestCaseGenerator.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/accelerator/pages/4__SQL-QueryGenerator.py" afterPathEscaped="$PROJECT_DIR$/accelerator/pages/4_🧱_SQL-QueryGenerator.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/accelerator/pages/5__LLM_OrthogonalArray.py" afterPathEscaped="$PROJECT_DIR$/accelerator/pages/5_🔢_LLM_OrthogonalArray.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/accelerator/pages/__init__.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 1
+}</component>
+  <component name="ProjectId" id="2wXzIbMvjpM2kQeDdeOKCgpuNG4" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "git-widget-placeholder": "main",
+    "last_opened_file_path": "C:/Project/CoE Demo/ai-accelerator"
+  }
+}]]></component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Project\CoE Demo\TestCase Generator" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Project\CoE Demo\TestCase Generator\E2E-Page-Images" />
+      <recent name="C:\Project\CoE Demo\TestCase Generator\ai accelerator" />
+      <recent name="C:\Project\CoE Demo\TestCase Generator\ai acceleators" />
+    </key>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-python-sdk-fc1d50d2d915-aa17d162503b-com.jetbrains.pycharm.community.sharedIndexes.bundled-PC-243.24978.54" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="b4ee9c5e-1643-4cc1-ac9d-d90eee7a127c" name="Changes" comment="" />
+      <created>1746202627478</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1746202627478</updated>
+    </task>
+    <servers />
+  </component>
+</project>
