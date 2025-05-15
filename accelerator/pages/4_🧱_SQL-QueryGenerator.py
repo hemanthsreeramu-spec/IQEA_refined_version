@@ -14,11 +14,14 @@ def main():
     # File uploader to select Excel file
     uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx", "xls"])
 
+    database_names = get_database_name_dropdown()
+    print(database_names)
+    selected_database = st.multiselect("Select a database", database_names)
 
     # Button to generate and validate queries
     if st.button("Generate and Validate Queries"):
         if uploaded_file is not None:
-            get_queries_from_ai(uploaded_file)
+            get_queries_from_ai(uploaded_file,selected_database)
             html=QueryValidationAndReport()
             st.markdown(html, unsafe_allow_html=True)  # Display HTML content
 
@@ -32,19 +35,31 @@ def main():
     Prompt = st.text_input('Enter the prompt to generate sql query', '')
 
     if st.button("Generate sql query and validate"):
-        html=get_queries_from_ai_prompt(Prompt)
+        html=get_queries_from_ai_prompt(Prompt,selected_database)
         st.markdown(html, unsafe_allow_html=True)  # Display HTML content
         st.write("Query Generated and results are validated")
 
 
+def get_database_name_dropdown():
+    conn = pyodbc.connect('Driver={SQL Server};'
+                          'Server=TIGER03699\MSSQLSERVER2019;'
+                          f'Database=Employee;'
+                          'Trusted_Connection=yes;')
 
-def get_table_header():
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT name FROM master.sys.databases WHERE database_id > 4;")
+    table_names = cursor.fetchall()
+
+    return [row[0] for row in table_names]
+
+def get_table_header(selected_database):
     #val =['Employee']
-    val = ['Customer_Core', 'Customer_Core_Combined', 'Customer_Level_Segmentation', 'CustomerMapping','CustomerMappingSplit', 'CustomerMappingPCCalc', 'CustomerMappingPreTarget', 'CustomerMappingTarget']
+    val = selected_database
     tables = {}
     for val1 in val:
         conn = pyodbc.connect('Driver={SQL Server};'
-                              'Server=qe-vm1;'
+                              'Server=TIGER03699\MSSQLSERVER2019;'
                               f'Database={val1};'
                               'Trusted_Connection=yes;')
         print(conn)
@@ -66,12 +81,12 @@ def get_table_header():
     return tables
 
 
-def get_table_dataframes():
-    tables = get_table_header()
+def get_table_dataframes(selected_database):
+    tables = get_table_header(selected_database)
     print(tables)
     conn = pyodbc.connect('Driver={SQL Server};'
-                          'Server=qe-vm1;'
-                          'Database=Customer_Core;'
+                          'Server=TIGER03699\MSSQLSERVER2019;'
+                          f'Database=Raw_data;'
                           'Trusted_Connection=yes;')
     dfs = {}
     for keys in tables:
@@ -83,7 +98,7 @@ def get_table_dataframes():
     return dfs
 
 
-def get_queries_from_ai(uploaded_file):
+def get_queries_from_ai(uploaded_file,selected_database):
     # Access the variables
     api_key = os.getenv("AZURE_OPENAI_API_KEY")
     endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
@@ -91,9 +106,10 @@ def get_queries_from_ai(uploaded_file):
     # Set the environment variables explicitly if needed
     os.environ["AZURE_OPENAI_API_KEY"] = api_key
     os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
+
     df=pd.read_excel(uploaded_file)
-    tableHeader = get_table_header()
-    dfs = get_table_dataframes()
+    tableHeader = get_table_header(selected_database)
+    dfs = get_table_dataframes(selected_database)
     print(df)
     # Loop over the values in the DataFrame
     for index, row in df.iterrows():
@@ -164,7 +180,7 @@ def get_queries_from_ai(uploaded_file):
 
     get_prompt_desc()
 
-def get_queries_from_ai_prompt(prompt):
+def get_queries_from_ai_prompt(prompt,selected_database):
     # Access the variables
     api_key = os.getenv("AZURE_OPENAI_API_KEY")
     endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
@@ -173,7 +189,7 @@ def get_queries_from_ai_prompt(prompt):
     os.environ["AZURE_OPENAI_API_KEY"] = api_key
     os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
 
-    tableHeader = get_table_header()
+    tableHeader = get_table_header(selected_database)
     # Loop over the values in the DataFrame
 
     value1 = prompt
@@ -215,22 +231,22 @@ def get_queries_from_ai_prompt(prompt):
     output_valuenew = extract_values(str(model([message1])))
     print(model([message1]))
     conn = pyodbc.connect('Driver={SQL Server};'
-                          'Server=qe-vm1;'
+                          'Server=TIGER03699\MSSQLSERVER2019;'
                           f'Database=Employee;'
                           'Trusted_Connection=yes;')
-
     try:
-
         cursor = conn.cursor()
         cursor.execute(val3)
-        if cursor.fetchmany(5) is not None:
-            valresult = cursor.fetchmany(5)
-        else:
-            print("No result from the db")
-    except:
-        print("Validate the query")
-        valresult=["validate the query"]
+        valresult = cursor.fetchall()
 
+        if not valresult:
+            print("No result from the db")
+        else:
+            # Limiting to first 5 results
+            valresult = valresult[:5]
+    except Exception as e:
+        print("Error executing query:", e)
+        valresult = ["Error executing query"]
 
     tables={}
     key = prompt, val3, output_valuenew
@@ -341,7 +357,7 @@ def QueryValidationAndReport():
 
     # Extract data from database
     conn = pyodbc.connect('Driver={SQL Server};'
-                          'Server=qe-vm1;'
+                                  'Server=TIGER03699\MSSQLSERVER2019;'
                                   f'Database=Employee;'
                                   'Trusted_Connection=yes;')
     tables={}
