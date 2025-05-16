@@ -5,8 +5,6 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="b4ee9c5e-1643-4cc1-ac9d-d90eee7a127c" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/ai-accelerator.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/ai-accelerator.iml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/accelerator/pages/4__SQL-QueryGenerator.py" beforePathEscaped="$PROJECT_DIR$/accelerator/pages/4_🧱_SQL-QueryGenerator.py" beforeDir="false" afterPath="$PROJECT_DIR$/accelerator/pages/4__SQL-QueryGenerator.py" afterPathEscaped="$PROJECT_DIR$/accelerator/pages/4_🧱_SQL-QueryGenerator.py" afterDir="false" />
     </list>

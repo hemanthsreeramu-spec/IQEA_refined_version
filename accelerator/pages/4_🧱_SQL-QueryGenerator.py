@@ -6,7 +6,10 @@ import re
 from langchain_core.messages import HumanMessage
 from langchain_openai import AzureChatOpenAI
 from datetime import datetime
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
 
 def main():
     st.title("Upload Excel File and Generate Queries")
