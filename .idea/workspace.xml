@@ -5,7 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="b4ee9c5e-1643-4cc1-ac9d-d90eee7a127c" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/Utilities_Xpath.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/ai-accelerator.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/ai-accelerator.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/accelerator/pages/2__E2E-TestCaseGenerator.py" beforePathEscaped="$PROJECT_DIR$/accelerator/pages/2_🧮_E2E-TestCaseGenerator.py" beforeDir="false" afterPath="$PROJECT_DIR$/accelerator/pages/2__E2E-TestCaseGenerator.py" afterPathEscaped="$PROJECT_DIR$/accelerator/pages/2_🧮_E2E-TestCaseGenerator.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/accelerator/pages/4__SQL-QueryGenerator.py" beforePathEscaped="$PROJECT_DIR$/accelerator/pages/4_🧱_SQL-QueryGenerator.py" beforeDir="false" afterPath="$PROJECT_DIR$/accelerator/pages/4__SQL-QueryGenerator.py" afterPathEscaped="$PROJECT_DIR$/accelerator/pages/4_🧱_SQL-QueryGenerator.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -21,8 +25,25 @@
     </option>
   </component>
   <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="main" />
+      </map>
+    </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;Sathanantham-aru&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/lokeshwaranamir/ai-accelerator.git&quot;,
+    &quot;accountId&quot;: &quot;dbf215f5-e1a9-4d41-a394-fda9a985db57&quot;
+  }
+}</component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
   </component>
@@ -35,23 +56,24 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "RunOnceActivity.OpenProjectViewOnStart": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
-    "git-widget-placeholder": "main",
-    "last_opened_file_path": "D:/AI accelerator/ai-accelerator/accelerator",
-    "settings.editor.selected.configurable": "com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;Ai__Accelerator__satha&quot;,
+    &quot;last_opened_file_path&quot;: &quot;D:/AI accelerator/ai-accelerator/accelerator&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="D:\AI accelerator\ai-accelerator\accelerator" />
       <recent name="C:\Project\CoE Demo\TestCase Generator" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\sathanantham.aru\PycharmProjects\ai-accelerator" />
       <recent name="C:\Project\CoE Demo\TestCase Generator\E2E-Page-Images" />
       <recent name="C:\Project\CoE Demo\TestCase Generator\ai accelerator" />
       <recent name="C:\Project\CoE Demo\TestCase Generator\ai acceleators" />
@@ -60,7 +82,7 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-python-sdk-fc1d50d2d915-aa17d162503b-com.jetbrains.pycharm.community.sharedIndexes.bundled-PC-243.24978.54" />
+        <option value="bundled-python-sdk-fb887030ada0-aa17d162503b-com.jetbrains.pycharm.community.sharedIndexes.bundled-PC-243.21565.199" />
       </set>
     </attachedChunks>
   </component>
@@ -74,5 +96,8 @@
       <updated>1746202627478</updated>
     </task>
     <servers />
+  </component>
+  <component name="UnknownFeatures">
+    <option featureType="com.intellij.fileTypeFactory" implementationName=".env" />
   </component>
 </project>

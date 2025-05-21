@@ -4,7 +4,10 @@ from PIL import Image
 import pytesseract
 from langchain_openai import AzureChatOpenAI
 import streamlit.components.v1 as components
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
 from Utilities import *
 
 
