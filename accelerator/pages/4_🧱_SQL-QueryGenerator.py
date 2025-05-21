@@ -45,7 +45,7 @@ def main():
 
 def get_database_name_dropdown():
     conn = pyodbc.connect('Driver={SQL Server};'
-                          'Server=TIGER03699\MSSQLSERVER2019;'
+                          'Server=qe-vm1;'
                           f'Database=Employee;'
                           'Trusted_Connection=yes;')
 

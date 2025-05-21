@@ -1,0 +1,568 @@
+import os
+import yaml
+import random
+import string
+import json
+import re
+from langchain_core.messages import HumanMessage
+from selenium import webdriver
+from selenium.common import StaleElementReferenceException, NoSuchElementException
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
+import streamlit as st
+from langchain_openai import AzureChatOpenAI
+from selenium.webdriver.common.by import By
+import pandas as pd
+from selenium.webdriver.support.wait import WebDriverWait
+import hashlib
+from webdriver_manager.chrome import ChromeDriverManager
+from uuid import uuid4
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+current_path = os.getcwd()
+output_folder = os.path.join(current_path, "output")
+xpath_generator_folder = os.path.join(output_folder, "xpath_generator")
+Page_file_generator = os.path.join(output_folder, "page_file_generator")
+xpath_file = os.path.join(xpath_generator_folder, "xpath_details.xlsx")
+os.makedirs(xpath_generator_folder, exist_ok=True)
+os.makedirs(Page_file_generator, exist_ok=True)
+
+
+# Check if the Excel file exists
+if not os.path.exists(xpath_file):
+    # Just create an empty Excel file (without headers)
+    with pd.ExcelWriter(xpath_file) as writer:
+        pd.DataFrame().to_excel(writer, index=False)
+    print(f"Excel file created: {xpath_file}")
+def load_prompt_from_file(prompt_type):
+    config_folder = os.path.join(os.getcwd(), "Input")
+    prompt_file = ""
+
+    if prompt_type == "Web":
+        prompt_file = os.path.join(config_folder, "web_prompt.txt")
+    elif prompt_type== "PowerBi":
+        prompt_file = os.path.join(config_folder, "powerBi_prompt.txt")
+    elif prompt_type== "Page_File":
+        prompt_file = os.path.join(config_folder, "Page_file_prompt.txt")
+    else:
+        raise ValueError(f"Invalid prompt type: {prompt_type}. Expected 'web' or 'powerBi'.")
+
+    if not os.path.exists(prompt_file):
+        raise FileNotFoundError(f"Prompt file not found at: {prompt_file}")
+
+    with open(prompt_file, "r", encoding="utf-8") as file:
+        prompt_template = file.read()
+
+    return prompt_template
+def create_java_file(file_name: str, file_extension: str,response):
+    # Ensure the file extension is .java
+    if not file_extension.startswith("."):
+        file_extension = f".{file_extension}"
+
+    # Full file path with specified directory
+    full_file_path = os.path.join(Page_file_generator, f"{file_name}{file_extension}")
+
+    with open(full_file_path, "w") as file:
+        file.write(response)
+
+    print(f"✅ Page file script generated: {full_file_path}")
+
+def get_queries_from_ai(prompt, formatted_summary):
+    # Access the variables
+    api_key = os.getenv("AZURE_OPENAI_API_KEY")
+    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+
+    # Set the environment variables explicitly if needed
+    os.environ["AZURE_OPENAI_API_KEY"] = api_key
+    os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
+
+    model = AzureChatOpenAI(
+        openai_api_version="2023-05-15",
+        azure_deployment="qepracticekey",
+    )
+    prompt_template = load_prompt_from_file(prompt)
+    print(prompt_template)
+
+    if prompt == "PowerBi":
+        #print("formatted_summary:", {formatted_summary})
+        formatted_summary_json = json.dumps(formatted_summary, indent=2)
+        final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
+        print("Final prompt:", {final_prompt})
+        json_list = formatted_summary if isinstance(formatted_summary, list) else json.loads(formatted_summary)
+        chunk_size = 15
+        json_chunks = [json_list[i:i + chunk_size] for i in range(0, len(json_list), chunk_size)]
+        # Collecting responses for all JSON chunks
+        all_responses = []
+        for i, chunk in enumerate(json_chunks):
+            print(f"Processing JSON chunk {i + 1}/{len(json_chunks)}")
+            formatted_summary_json = json.dumps(chunk, indent=2)
+            final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
+
+            message = HumanMessage(content=final_prompt)
+            output_value = model([message])
+            print(f"Response for chunk {i + 1}: {output_value.content}")
+            all_responses.append(output_value.content)
+
+        # Combine all responses into one
+        combined_response = "\n".join(all_responses)
+        return combined_response
+    elif prompt == "Web":
+        print(formatted_summary)
+        final_prompt = prompt_template.format(formatted_summary=formatted_summary)
+        message = HumanMessage(content=final_prompt)
+        output_value = model([message])
+        print(output_value)
+        return output_value.content
+    elif prompt == "Page_File":
+        print(formatted_summary)
+        message = HumanMessage(content=formatted_summary)
+        output_value = model([message])
+        print(output_value)
+        return output_value.content
+    # Split the JSON list if its length exceeds 15
+
+def get_queries_from_ai_duplicate(prompt,formatted_summary):
+    prompt_template = load_prompt_from_file(prompt)
+    print(prompt_template)
+    if prompt=="PowerBI":
+        print("formatted_summary:",{formatted_summary})
+        formatted_summary_json = json.dumps(formatted_summary, indent=2)
+        final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
+    elif prompt=="Web":
+        print("formatted_summary:", {formatted_summary})
+        final_prompt = prompt_template.format(formatted_summary=formatted_summary)
+    # Convert formatted_summary to a JSON-formatted string
+    formatted_summary_json = json.dumps(formatted_summary, indent=2)
+
+    final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
+    # Collect visible elements
+    os.environ["AZURE_OPENAI_API_KEY"] = "4fed2bedb59744a99b0424622f6d9d1b"
+    os.environ["AZURE_OPENAI_ENDPOINT"] = "https://qepracticekey.openai.azure.com/"
+
+    model = AzureChatOpenAI(
+        openai_api_version="2023-05-15",
+        azure_deployment="qepracticekey",
+    )
+    message = HumanMessage(content=final_prompt)
+    output_value = model([message])
+    print(output_value)
+    return output_value.content
+
+def is_page_loaded(driver):
+    return driver.execute_script("return document.readyState")
+def loading_newpage(driver):
+    new_page_url = driver.current_url
+    print(new_page_url)
+    driver.get(new_page_url)
+    driver.refresh()
+    WebDriverWait(driver, 30).until(is_page_loaded)
+
+def generate_random_prefix(length=8):
+    """Generate a random alphanumeric prefix."""
+    characters = string.ascii_letters + string.digits
+    return ''.join(random.choice(characters) for _ in range(length))
+def generate_unique_key(element, page_identifier):
+    """
+    Generate a truly unique key for each visible element.
+    The key is based on page identifier, tag name, ID, class, and text content (trimmed).
+    """
+    tag_name = element.tag_name
+    element_id = element.get_attribute("id")
+    element_class = element.get_attribute("class")
+    element_text = element.text.strip()[:30]  # Limiting text length for clarity
+
+    # Using unique attributes with a fallback to text if ID/Class are absent
+    key_parts = [
+        page_identifier,
+        tag_name,
+        f"id={element_id}" if element_id else "no_id",
+        f"class={element_class}" if element_class else "no_class",
+        f"text={element_text}" if element_text else "no_text"
+    ]
+
+    # Generate the base key
+    base_key = "|".join(key_parts)
+
+    # Ensuring uniqueness with a counter (auto-increment)
+    unique_key = base_key
+    counter = 1
+    while unique_key in st.session_state:
+        unique_key = f"{base_key}|{counter}"
+        counter += 1
+
+    return unique_key
+def generate_unique_key_duplicate(element,page_identifier='page', prefix='element'):
+    """Generate a unique key based on the element's properties."""
+    element_str = f"{element.get_attribute('id')}-{element.tag_name}-{element.text.strip()}"
+    unique_hash = hashlib.md5(element_str.encode()).hexdigest()
+    # Generate the next number from the counter and format it as a 3-digit number
+    # Combine prefix, unique hash, and formatted number
+    #unique_uuid = uuid.uuid4().hex
+    random_prefix = generate_random_prefix()
+    return f"{prefix}_{page_identifier}_{unique_hash}_{random_prefix}"
+def details_visible_elements(collected_elements,visible_elements,selected_tags,page_identifier):
+    for idx, element in enumerate(collected_elements):
+        try:
+            # if element.is_displayed() and element.is_enabled():
+            tag_name = element.tag_name
+
+            # If specific tags are selected or all are allowed
+            if "All" in selected_tags or tag_name in selected_tags:
+                print(f"[DEBUG] Processing element {idx + 1} with tag: {tag_name}")
+                details = {
+                    "tag": tag_name,
+                    "id": element.get_attribute("id"),
+                    "class": element.get_attribute("class"),
+                    "name": element.get_attribute("name"),
+                    "text": element.text.strip()
+                }
+
+                # Filter out empty values
+                compact_details = {k: v for k, v in details.items() if v}
+                print(f"[DEBUG] Element details: {json.dumps(compact_details, indent=2)}")
+
+                if compact_details:  # Only add if there is meaningful data
+                    visible_elements.append(compact_details)
+
+                    # Store for XPath mapping via OpenAI
+                    unique_key = generate_unique_key(element, page_identifier)
+                    if unique_key not in st.session_state:
+                        st.session_state[unique_key] = compact_details
+                        print(f"[DEBUG] Unique key stored: {unique_key}")
+
+        except (StaleElementReferenceException, NoSuchElementException) as e:
+            print(f"[WARN] Element {idx + 1} skipped due to: {str(e)}")
+
+        except Exception as e:
+            print(f"[ERROR] Unexpected error with element {idx + 1}: {str(e)}")
+
+    print(f"[INFO] Total visible elements found inside method: {len(visible_elements)}")
+    return visible_elements
+def load_config(config_path=None):
+
+    if not config_path:
+        config_path = os.path.join(os.getcwd(), "Input", "config.yaml")
+
+    if not os.path.exists(config_path):
+        raise FileNotFoundError(f"Config file not found at: {config_path}. Please ensure the config file exists.")
+
+    with open(config_path, "r") as file:
+        config = yaml.safe_load(file)
+
+    if not isinstance(config, dict) or "xpaths" not in config:
+        raise ValueError("Invalid config file format. Ensure 'xpaths' section is properly defined.")
+
+    xpaths = config.get("xpaths", {})
+    if not xpaths:
+        raise ValueError("XPath values are missing in the 'xpaths' section.")
+
+    return xpaths
+
+def get_visible_element_powerBi(driver,page_identifier):
+    # Collect visible elements
+    xpaths = load_config()
+    print("Loaded XPaths:", xpaths)
+    # Attempt 1: Fetch svg > text nodes
+    elements_svg_text = driver.find_elements(By.XPATH, xpaths["elements_svg_text"])
+
+    # Collect elements from both visual-container and SVG text elements
+    elements_visual_container = driver.find_elements(By.XPATH, xpaths["elements_visual_container"])
+    # Graph specific elements
+    graph_label_elements = driver.find_elements(By.XPATH,xpaths["graph_label_elements"])
+    graph_tick_elements = driver.find_elements(By.XPATH,xpaths["graph_tick_elements"])
+    graph_title_elements = driver.find_elements(By.XPATH,xpaths["graph_title_elements"])
+    print(f"SVG text found: {len(elements_svg_text)}")
+    print(f"Visual containers found: {len(elements_visual_container)}")
+    print(f"Graph labels found: {len(graph_label_elements)}")
+    print(f"Graph ticks found: {len(graph_tick_elements)}")
+    print(f"Graph titles found: {len(graph_title_elements)}")
+    # Merge the lists while avoiding duplicates
+    # all_elements = list(set(elements_visual_container + elements_svg_text+graph_label_elements +
+    #                         graph_tick_elements +
+    #                         graph_title_elements))
+    all_elements = (elements_visual_container +
+                    elements_svg_text +
+                    graph_label_elements +
+                    graph_tick_elements +
+                    graph_title_elements)
+    #print(all_elements)
+    visible_elements = []
+    unique_elements={}
+
+
+    for idx, element in enumerate(all_elements):
+        try:
+            if element.is_displayed() and element.is_enabled():
+                tag_name = element.tag_name
+                text_content = element.text.strip()
+                class_name = element.get_attribute("class")
+                # Generate a unique key for deduplication
+                unique_key =generate_unique_key(element,"powerBi")
+                # If specific tags are selected or all are allowed
+                #if "All" in selected_tags or tag_name in selected_tags or tag_name in ["text", "div", "span", "a", "button"]:
+                if unique_key not in unique_elements:
+                    details = {
+                        "tag": tag_name,
+                        "id": element.get_attribute("id"),
+                        "class": element.get_attribute("class"),
+                        "name": element.get_attribute("name"),
+                        "aria-label": element.get_attribute("aria-label"),
+                        "text": element.text.strip()
+                    }
+
+                    # Include only non-empty values
+                    compact_details = {k: v for k, v in details.items() if v}
+
+                    if compact_details:
+                        visible_elements.append(compact_details)
+                        unique_elements[unique_key] = compact_details
+                        # Store for XPath mapping via OpenAI
+                        session_key = generate_unique_key(element, page_identifier)
+                        if unique_key not in st.session_state:
+                            st.session_state[session_key] = compact_details
+
+        except (StaleElementReferenceException, NoSuchElementException):
+            continue
+
+    print(json.dumps(visible_elements, indent=2))
+    print(f"[INFO] Total visible elements found: {len(visible_elements)}")
+    return visible_elements
+
+def get_visible_element_iframe(driver, page_identifier, selected_tags):
+    visible_elements = []  # To store visible and relevant elements
+
+    print("[INFO] Collecting all elements from the main page...")
+    all_elements = driver.find_elements(By.XPATH, "//*")
+    print(f"[DEBUG] Total elements on main page: {len(all_elements)}")
+    #total_elements.extend(all_elements)
+
+    # Collect elements from each iframe
+    iframe_elements = driver.find_elements(By.TAG_NAME, "iframe")
+    print(f"[INFO] Total iframes found: {len(iframe_elements)}")
+    if len(iframe_elements) > 0:
+        for iframe_index, iframe_element in enumerate(iframe_elements):
+            print(f"[INFO] Switching to iframe {iframe_index + 1}...")
+            try:
+                driver.switch_to.frame(iframe_element)
+                iframe_subelements = driver.find_elements(By.XPATH, "//*")
+                details_visible_elements(iframe_subelements,visible_elements,selected_tags,page_identifier)
+                print(f"[DEBUG] Total elements in iframe {iframe_index + 1}: {len(iframe_subelements)}")
+            except Exception as e:
+                print(f"[WARN] Failed to switch to iframe {iframe_index + 1}: {str(e)}")
+            finally:
+                try:
+                    driver.switch_to.default_content()  # Return to the main page
+                except Exception as e:
+                    print(f"[ERROR] Failed to switch back to main content: {str(e)}")
+    else:
+        print("[INFO] No iframes found, directly collecting main page elements...")
+
+    visible_elements=details_visible_elements(all_elements,visible_elements,selected_tags,page_identifier)
+    # Return the list of visible, relevant elements
+    print(f"[INFO] Total visible elements found: {len(visible_elements)}")
+    print(json.dumps(visible_elements, indent=2))
+    return visible_elements
+
+
+def get_visible_element(driver,page_identifier,selected_tags):
+    all_elements = driver.find_elements(By.XPATH, "//*")
+    visible_elements = []
+
+
+    # Loop through elements and capture only relevant ones
+    for idx, element in enumerate(all_elements):
+        try:
+            # Ensure the element is visible and not disabled
+            if element.is_displayed() and element.is_enabled():
+
+                # Check if the element is a relevant type (text box, checkbox, button, link)
+                if element.tag_name in selected_tags:
+                    #, 'textarea', 'button', 'select'
+                    details = {
+                        "tag": element.tag_name,
+                        "id": element.get_attribute("id"),
+                        "class": element.get_attribute("class"),
+                        "name": element.get_attribute("name"),
+                        "text": element.text.strip()
+                    }
+
+                    # Exclude empty or redundant text (only keep the most relevant ones)
+                    compact_details = {k: v for k, v in details.items() if v}
+
+                    # Add to the list of visible elements
+                    visible_elements.append(compact_details)
+                    # Generate a unique key for each element
+                    unique_key = generate_unique_key(element, page_identifier)
+                    if unique_key not in st.session_state:
+                        st.session_state[unique_key] = unique_key
+
+        except (StaleElementReferenceException, NoSuchElementException) as e:
+            # Handle exceptions
+            #print(f"Element skipped due to: {e}")
+            continue
+
+    # Return the list of visible, relevant elements
+    print(visible_elements)
+    return visible_elements
+
+
+
+key=None
+def selecting_xpath(details):
+
+    sections = details.strip().split('\n\n')
+    print("sections is displayed as:")
+    print(sections)
+    xpath_dict = {}
+    for section in sections:
+        print("section is displayed " +section)
+        xpaths=[]
+        global key
+        #key = None
+        if '\n' in section:
+            lines = section.split('\n')
+            print("Lines are displaed as")
+            print(lines)
+            if lines:
+                #key = lines[0].replace(" Variations:", "")
+                #print("key is displayed as"+key)
+                if "//" in lines[0]:
+                    xpaths = lines
+                else:
+                    xpaths = lines[1:]
+                print("xpatha are displayed as")
+                print(xpaths)
+        else:
+            key=section
+            print("key is displayed as" + key)
+        if xpaths:
+            if key:
+                print("key available:",key)
+                xpath_dict[key] = xpaths
+                key = None
+            elif key is None:
+                print("key not available", key)
+                key = lines[0].replace(" Variations:", "")
+                print("key from lines", key)
+                xpath_dict[key] = xpaths
+                key=None
+    print("xpath_dict:",xpath_dict)
+    return xpath_dict
+
+# Filter out duplicate xpaths before passing to UI
+def filter_duplicate_xpaths(xpath_dict):
+    unique_entries = set()
+    filtered_xpath_dict = {}
+
+    for element, xpaths in xpath_dict.items():
+        filtered = []
+        for xpath in xpaths:
+            key = f"{element}_{xpath}"
+            if key not in unique_entries:
+                unique_entries.add(key)
+                filtered.append(xpath)
+        if filtered:
+            filtered_xpath_dict[element] = filtered
+    return filtered_xpath_dict
+def adding_xapth_user_view(xpath_dict):
+    print("goind to add element")
+    try:
+        for element, xpaths in xpath_dict.items():
+            st.subheader(f"{element}")
+            for xpath in xpaths:
+                if xpath.strip():
+                    # unique_id = uuid.uuid4().hex[:8]
+                    # checkbox_key = f"{element}_{xpath}_{unique_id}"
+                    checkbox_key = hashlib.md5(f"{element}_{xpath}".encode()).hexdigest()
+                    # Display checkbox and maintain state
+                    print("st.session_state.selected_xpaths", st.session_state.selected_xpaths)
+                    try:
+                        if st.checkbox(xpath, key=checkbox_key):
+                            print("st.session_state.selected_xpaths", st.session_state.selected_xpaths)
+                            if {"Element": element, "XPath": xpath} not in st.session_state.selected_xpaths:
+                                st.session_state.selected_xpaths.append({"Element": element, "XPath": xpath})
+                        else:
+                            print("st.session_state.selected_xpaths", st.session_state.selected_xpaths)
+                            st.session_state.selected_xpaths = [
+                                x for x in st.session_state.selected_xpaths if x["XPath"] != xpath
+                            ]
+                    except Exception as e:
+                        print("st.session_state.selected_xpaths", st.session_state.selected_xpaths)
+                        #print(e)
+                    except (Exception) as e:
+                        print("st.session_state.selected_xpaths", st.session_state.selected_xpaths)
+        print("st.session_state.selected_xpaths_final", st.session_state.selected_xpaths)
+        return st.session_state.selected_xpaths
+    except (Exception) as e:
+        return st.session_state.selected_xpaths
+        print(e)
+
+def adding_selected_xapth_excel(new_page_name,):
+    for item in st.session_state.selected_xpaths:
+        item['Page Name'] = new_page_name
+
+    excel_file = xpath_file
+    if os.path.exists(excel_file):
+        # Read existing file
+        existing_df = pd.read_excel(excel_file, engine='openpyxl')
+    else:
+        existing_df = pd.DataFrame()
+    new_df = pd.DataFrame(st.session_state.selected_xpaths)
+    combined_df = pd.concat([existing_df, new_df], ignore_index=True)
+    combined_df = combined_df.drop_duplicates(subset=['XPath', 'Page Name'], keep='last')
+
+    # Save the combined DataFrame back to the Excel file
+    combined_df.to_excel(excel_file, index=False, engine='openpyxl')
+    st.success(f"XPaths successfully added to Excel! Download the file [here](sandbox:{excel_file})")
+def clean_xpath(xpath):
+    """Extracts only the actual XPath from a given string."""
+    match = re.search(r'(//[^\]]+\])', xpath)  # Find everything starting with // until the first ]
+    return match.group(1) if match else xpath  # Return extracted XPath or original if not found
+def generate_pom_from_excel(prompt_type,page_name,language):
+    prompt_template = load_prompt_from_file(prompt_type)
+    print(prompt_template)
+    # Read Excel file
+    excel_file = xpath_file
+    if not os.path.exists(excel_file):
+        print(f"Excel file not found: {excel_file}")
+        return
+
+
+    df = pd.read_excel(excel_file)
+
+    # Check if required columns exist
+    if not {"Element", "XPath", "Page Name"}.issubset(df.columns):
+        print("Excel file is missing required columns: Element, XPath, Page Name")
+        return
+
+    # Filter XPaths based on Page Name
+    filtered_df = df[df["Page Name"] == page_name]
+
+    if filtered_df.empty:
+        print(f"No elements found for page: {page_name}")
+        return
+
+    # Extract XPaths
+    xpaths = "\n".join(filtered_df["XPath"].apply(clean_xpath).tolist())
+
+    final_prompt = prompt_template.format(language=language,xpaths=xpaths)
+    print(final_prompt)
+    return final_prompt
+def scroll_and_focus():
+    st.markdown("""
+        <script>
+        setTimeout(function() {
+            const topElement = document.querySelector("a[name='top-button']");
+            if (topElement) {
+                topElement.scrollIntoView({ behavior: "smooth" });
+            }
+            const buttons = Array.from(document.querySelectorAll('button'));
+            const collectButton = buttons.find(btn => btn.innerText.trim() === 'Collecting Elements');
+            if (collectButton) {
+                collectButton.focus();
+            }
+        }, 500);
+        </script>
+    """, unsafe_allow_html=True)
