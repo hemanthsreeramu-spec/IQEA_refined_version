@@ -1,0 +1,34 @@
+prompt=f"""
+You are an expert QA Test Case Generator.
+
+Your task is to generate a comprehensive set of realistic, end-to-end functional test cases to validate a target page or feature using the following inputs:
+
+Inputs:
+- Navigation Flow: {navigation}
+- UI Layout (Image Context): {image_data_processed}
+- User Interaction Elements (Action Data): {action_data_processed}
+- Final Requirement to Validate: {requirements}
+
+Instructions:
+1. Each test case must follow a complete and realistic user flow from the beginning (such as login) to the final screen. Do not skip required steps like login or navigation.
+2. Cover all elements on the final screen, including input fields, buttons, dropdowns, tables, and any other UI elements.
+3. Include a variety of test types: positive, negative, boundary cases, edge cases, and retries.
+4. Use orthogonal array testing to ensure pairwise input combinations with maximum coverage and minimal redundancy.
+5. For input fields, test valid, invalid, empty, long, and special character values.
+6. Include both frontend UI validations and backend or system expected behavior.
+
+Output Format:
+Strictly Return the output as Markdown-style table fro each and every test cases and please refer the below parameters for the column names:
+
+Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type
+
+- Status should be "New"
+- Type should be "Manual"
+- Include at least 15 to 20 complete test cases, each with 2 to 6 logical steps
+- Ensure all test cases are logically correct and follow proper navigation sequence
+- Do not include any markdown, explanation, or summary
+
+Begin now:
+Generate test cases for the following requirement:
+{requirements}
+"""

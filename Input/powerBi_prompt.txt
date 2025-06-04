@@ -1,4 +1,4 @@
-f"""
+prompt=f"""
     You are a skilled XPath expert.
 
     Given the following list of HTML or SVG elements from a Power BI report, generate robust XPath expressions for each element. Follow these guidelines:

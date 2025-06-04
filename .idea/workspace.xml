@@ -5,12 +5,32 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="b4ee9c5e-1643-4cc1-ac9d-d90eee7a127c" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/Utilities_Xpath.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Input/IRDAN150RP0016V01202021_GEN4019.pdf" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Input/Page_file_prompt_with_action.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Input/Testcase_generate_prompt.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Input/Testcase_generate_promptv1.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/Input/test_script_prompt.txt" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/action_new.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/action_new_xpath.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/output/Action_collection/page_screenshot/cart.html.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/output/Action_collection/page_screenshot/home.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/output/Action_collection/page_screenshot/inventory.html.png" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/utils_action.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/ai-accelerator.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/ai-accelerator.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/accelerator/pages/2__E2E-TestCaseGenerator.py" beforePathEscaped="$PROJECT_DIR$/accelerator/pages/2_🧮_E2E-TestCaseGenerator.py" beforeDir="false" afterPath="$PROJECT_DIR$/accelerator/pages/2__E2E-TestCaseGenerator.py" afterPathEscaped="$PROJECT_DIR$/accelerator/pages/2_🧮_E2E-TestCaseGenerator.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Input/powerBi_prompt.txt" beforeDir="false" afterPath="$PROJECT_DIR$/Input/powerBi_prompt.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Input/web_prompt.txt" beforeDir="false" afterPath="$PROJECT_DIR$/Input/web_prompt.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Output.xlsx" beforeDir="false" afterPath="$PROJECT_DIR$/Output.xlsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Utilities_Xpath.py" beforeDir="false" afterPath="$PROJECT_DIR$/Utilities_Xpath.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/accelerator/Gen-AI-Accelerators.py" beforeDir="false" afterPath="$PROJECT_DIR$/accelerator/Gen-AI-Accelerators.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/accelerator/pages/1__Functional-TestCase-Generator.py" beforePathEscaped="$PROJECT_DIR$/accelerator/pages/1_📝_Functional-TestCase-Generator.py" beforeDir="false" afterPath="$PROJECT_DIR$/accelerator/pages/1__Functional-TestCase-Generator.py" afterPathEscaped="$PROJECT_DIR$/accelerator/pages/1_📝_Functional-TestCase-Generator.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/accelerator/pages/3__Xpath__Page_File_Generator.py" beforePathEscaped="$PROJECT_DIR$/accelerator/pages/3_🔎_Xpath_🧾_Page_File_Generator.py" beforeDir="false" afterPath="$PROJECT_DIR$/accelerator/pages/3__Xpath__Page_File_Generator.py" afterPathEscaped="$PROJECT_DIR$/accelerator/pages/3_🔎_Xpath_🧾_Page_File_Generator.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/accelerator/pages/4__SQL-QueryGenerator.py" beforePathEscaped="$PROJECT_DIR$/accelerator/pages/4_🧱_SQL-QueryGenerator.py" beforeDir="false" afterPath="$PROJECT_DIR$/accelerator/pages/4__SQL-QueryGenerator.py" afterPathEscaped="$PROJECT_DIR$/accelerator/pages/4_🧱_SQL-QueryGenerator.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/output/xpath_generator/xpath_details.xlsx" beforeDir="false" afterPath="$PROJECT_DIR$/output/xpath_generator/xpath_details.xlsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/pyproject.toml" beforeDir="false" afterPath="$PROJECT_DIR$/pyproject.toml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/report.html" beforeDir="false" afterPath="$PROJECT_DIR$/report.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/uv.lock" beforeDir="false" afterPath="$PROJECT_DIR$/uv.lock" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -62,17 +82,20 @@
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
     &quot;SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
+    &quot;deletionFromPopupRequiresConfirmation&quot;: &quot;false&quot;,
     &quot;git-widget-placeholder&quot;: &quot;Ai__Accelerator__satha&quot;,
-    &quot;last_opened_file_path&quot;: &quot;D:/AI accelerator/ai-accelerator/accelerator&quot;,
+    &quot;last_opened_file_path&quot;: &quot;F:/GenAI-Accelerator/ai-accelerator/Input&quot;,
     &quot;settings.editor.selected.configurable&quot;: &quot;com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable&quot;
   }
 }</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="F:\GenAI-Accelerator\ai-accelerator\Input" />
       <recent name="D:\AI accelerator\ai-accelerator\accelerator" />
       <recent name="C:\Project\CoE Demo\TestCase Generator" />
     </key>
     <key name="MoveFile.RECENT_KEYS">
+      <recent name="F:\GenAI-Accelerator\ai-accelerator" />
       <recent name="C:\Users\sathanantham.aru\PycharmProjects\ai-accelerator" />
       <recent name="C:\Project\CoE Demo\TestCase Generator\E2E-Page-Images" />
       <recent name="C:\Project\CoE Demo\TestCase Generator\ai accelerator" />

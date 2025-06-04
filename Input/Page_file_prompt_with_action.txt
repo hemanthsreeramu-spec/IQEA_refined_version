@@ -1,0 +1,19 @@
+prompt = f"""
+Generate a complete {language} Page Object Model (POM) class using Selenium.
+
+Inputs:
+1. Elements (with XPaths):
+{xpaths}
+
+2. Recorded User Actions (to derive methods and behavior):
+{Action_data}
+
+Requirements:
+1. Use @FindBy annotation with How.XPATH to locate elements.
+2. Initialize WebDriver in the constructor and call PageFactory.initElements().
+3. Generate methods based on the recorded actions, using appropriate interaction logic (e.g., sendKeys, click).
+4. Method names should reflect the intent of the action (e.g., enterUsername(), clickLoginButton()).
+5. Use meaningful and consistent naming conventions for the class, methods, and variables.
+6. The class name must be derived from the page name and be a valid {language} class name.
+7. Return only the complete and syntactically correct {language} class code — no explanations, comments, or extra output.
+"""

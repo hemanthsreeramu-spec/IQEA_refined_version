@@ -56,9 +56,9 @@ if st.button("Open Browser"):
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         #service = Service(ChromeDriverManager().install())
-        service = Service(r"C:\Users\sathanantham.aru\PycharmProjects\ai-accelerator\Input\chromedriver.exe")
-        st.session_state.driver = webdriver.Chrome(service=service, options=chrome_options)
-        #st.session_state.driver = webdriver.Chrome(options=chrome_options)
+        # service = Service(r"C:\Users\sathanantham.aru\PycharmProjects\ai-accelerator\Input\chromedriver.exe")
+        # st.session_state.driver = webdriver.Chrome(service=service, options=chrome_options)
+        st.session_state.driver = webdriver.Chrome(options=chrome_options)
         st.session_state.driver.get(page_url)
         st.session_state.driver.maximize_window()
         WebDriverWait(st.session_state.driver, 30).until(utils.is_page_loaded)
@@ -144,8 +144,8 @@ if st.session_state.show_form:
         # Placeholder for your page file generation script
         st.success(f"Page file generated for '{page_name}' in '{language}' language.")
         # Trigger scroll with 'Continue' button
-        if st.button("Continue"):
-            utils.scroll_and_focus()
+        # if st.button("Continue"):
+        #     utils.scroll_and_focus()
 
 
 #Handle the "Find XPath" button logic
@@ -232,6 +232,6 @@ if st.session_state.driver:
                     st.session_state.show_popup = False
                     st.session_state.show_form = False
                     st.success(f"Page file generated for '{page_name}' in '{language}' language.")
-                    # Trigger scroll with 'Continue' button
-                    if st.button("Continue"):
-                        utils.scroll_and_focus()
+                    # # Trigger scroll with 'Continue' button
+                    # if st.button("Continue"):
+                    #     utils.scroll_and_focus()

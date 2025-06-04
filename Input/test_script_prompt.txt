@@ -1,0 +1,21 @@
+prompt = f"""You are a test automation expert. Based on the following inputs, generate a {test_file_language} test script using pytest (or unittest), which imports and uses the relevant page methods from the page object file to perform UI actions.
+## Input 1: Page Object File Info
+{page_files_content}
+
+## Input 2: Test Case Info
+{test_files_content}
+
+## Instructions:
+- Use the page methods if their names correspond to the action names (e.g., use method `click_login_button()` for the action "Click on login-button").
+- If no direct method matches an action, use the XPath locator from the page file.
+- If XPath is not available, fallback to direct driver commands like `driver.find_element(...).click()`.
+- Structure the test function clearly with comments describing each logical step.
+- Use assert statements to validate expected results.
+- Output only valid Python test code—no additional explanations or comments outside the test code.
+
+## Output Format:
+- The Python test file content (for example, `test_<page>.py`) should include:
+  - Necessary imports of page objects or modules
+  - A test class (if applicable)
+  - One or more test functions implementing the scenario based on the test case info
+"""

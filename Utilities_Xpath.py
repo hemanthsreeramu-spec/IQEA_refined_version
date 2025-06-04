@@ -1,9 +1,13 @@
 import os
+from typing import Union, IO
 import yaml
 import random
 import string
 import json
+import ast
 import re
+import pandas
+from io import StringIO
 from langchain_core.messages import HumanMessage
 from selenium import webdriver
 from selenium.common import StaleElementReferenceException, NoSuchElementException
@@ -25,9 +29,11 @@ current_path = os.getcwd()
 output_folder = os.path.join(current_path, "output")
 xpath_generator_folder = os.path.join(output_folder, "xpath_generator")
 Page_file_generator = os.path.join(output_folder, "page_file_generator")
+Test_file_generator = os.path.join(output_folder, "test_file_generator")
 xpath_file = os.path.join(xpath_generator_folder, "xpath_details.xlsx")
 os.makedirs(xpath_generator_folder, exist_ok=True)
 os.makedirs(Page_file_generator, exist_ok=True)
+os.makedirs(Test_file_generator, exist_ok=True)
 
 
 # Check if the Excel file exists
@@ -46,6 +52,12 @@ def load_prompt_from_file(prompt_type):
         prompt_file = os.path.join(config_folder, "powerBi_prompt.txt")
     elif prompt_type== "Page_File":
         prompt_file = os.path.join(config_folder, "Page_file_prompt.txt")
+    elif prompt_type== "Page_File_Action":
+        prompt_file = os.path.join(config_folder, "Page_file_prompt_with_action.txt")
+    elif prompt_type== "Test_File_Action":
+        prompt_file = os.path.join(config_folder, "test_script_prompt.txt")
+    elif prompt_type== "Test_case_generation":
+        prompt_file = os.path.join(config_folder, "Testcase_generate_prompt.txt")
     else:
         raise ValueError(f"Invalid prompt type: {prompt_type}. Expected 'web' or 'powerBi'.")
 
@@ -59,7 +71,12 @@ def load_prompt_from_file(prompt_type):
 def create_java_file(file_name: str, file_extension: str,response):
     # Ensure the file extension is .java
     if not file_extension.startswith("."):
-        file_extension = f".{file_extension}"
+        if file_extension =="java":
+            file_extension = f".{file_extension}"
+        elif file_extension =="python":
+            file_extension = f".py"
+        else:
+            file_extension = f".{file_extension}"
 
     # Full file path with specified directory
     full_file_path = os.path.join(Page_file_generator, f"{file_name}{file_extension}")
@@ -67,7 +84,24 @@ def create_java_file(file_name: str, file_extension: str,response):
     with open(full_file_path, "w") as file:
         file.write(response)
 
-    print(f"✅ Page file script generated: {full_file_path}")
+    st.write(f"✅ page file script generated: {full_file_path}")
+def create_test_file(file_name: str, file_extension: str,response):
+    # Ensure the file extension is .java
+    if not file_extension.startswith("."):
+        if file_extension =="java":
+            file_extension = f".{file_extension}"
+        elif file_extension =="python":
+            file_extension = f".py"
+        else:
+            file_extension = f".{file_extension}"
+
+    # Full file path with specified directory
+    full_file_path = os.path.join(Test_file_generator, f"{file_name}{file_extension}")
+
+    with open(full_file_path, "w") as file:
+        file.write(response)
+
+    st.write(f"✅ Test file script generated: {full_file_path}")
 
 def get_queries_from_ai(prompt, formatted_summary):
     # Access the variables
@@ -110,8 +144,14 @@ def get_queries_from_ai(prompt, formatted_summary):
         return combined_response
     elif prompt == "Web":
         print(formatted_summary)
-        final_prompt = prompt_template.format(formatted_summary=formatted_summary)
-        message = HumanMessage(content=final_prompt)
+        #final_prompt = prompt_template.format(formatted_summary=formatted_summary)
+        prompt = f"""
+From the given list of elements, generate all possible XPath expressions for each element using its tag and attributes only. 
+Return only valid XPath strings as output. Do not include any explanation or description. 
+
+Input: {formatted_summary}
+"""
+        message = HumanMessage(content=prompt)
         output_value = model([message])
         print(output_value)
         return output_value.content
@@ -520,6 +560,45 @@ def clean_xpath(xpath):
     """Extracts only the actual XPath from a given string."""
     match = re.search(r'(//[^\]]+\])', xpath)  # Find everything starting with // until the first ]
     return match.group(1) if match else xpath  # Return extracted XPath or original if not found
+def generate_pom_from_excel_testcases(prompt_type,navigation,image_data,action_data,requirements):
+    prompt_template = load_prompt_from_file(prompt_type)
+    final_prompt = prompt_template.format(navigation=navigation,image_data_processed=image_data,action_data_processed=action_data,requirements=requirements)
+    print(final_prompt)
+    return final_prompt
+def generate_test_script(prompt_type,test_file_language,page_file_conetent,test_file_content):
+    prompt_template = load_prompt_from_file(prompt_type)
+    final_prompt = prompt_template.format(test_file_language=test_file_language,page_files_content=page_file_conetent,test_files_content=test_file_content)
+    print(final_prompt)
+    return final_prompt
+def generate_pom_from_excel_with_action(prompt_type,page_name,language,action_data):
+    prompt_template = load_prompt_from_file(prompt_type)
+    print(prompt_template)
+    # Read Excel file
+    excel_file = xpath_file
+    if not os.path.exists(excel_file):
+        print(f"Excel file not found: {excel_file}")
+        return
+
+
+    df = pd.read_excel(excel_file)
+
+    # Check if required columns exist
+    if not {"Element", "XPath", "Page Name"}.issubset(df.columns):
+        print("Excel file is missing required columns: Element, XPath, Page Name")
+        return
+
+    # Filter XPaths based on Page Name
+    filtered_df = df[df["Page Name"] == page_name]
+
+    if filtered_df.empty:
+        print(f"No elements found for page: {page_name}")
+        return
+
+    # Extract XPaths
+    xpaths = "\n".join(filtered_df["XPath"].apply(clean_xpath).tolist())
+    final_prompt = prompt_template.format(language=language,xpaths=xpaths,Action_data=action_data)
+    print(final_prompt)
+    return final_prompt
 def generate_pom_from_excel(prompt_type,page_name,language):
     prompt_template = load_prompt_from_file(prompt_type)
     print(prompt_template)
@@ -566,3 +645,292 @@ def scroll_and_focus():
         }, 500);
         </script>
     """, unsafe_allow_html=True)
+
+def select_and_read_text_files(folder_path):
+    # Step 1: List all .txt files in the folder
+    txt_files = [f for f in os.listdir(folder_path) if f.endswith('.txt')]
+
+    if not txt_files:
+        st.warning("No .txt files found in the folder.")
+        return {}
+
+    # Step 2: Let the user select multiple files
+    selected_files = st.multiselect("Please select relevent action file ", txt_files)
+
+    # Step 3: Read contents of selected files
+    file_contents = {}
+    for file_name in selected_files:
+        full_path = os.path.join(folder_path, file_name)
+        with open(full_path, 'r', encoding='utf-8') as f:
+            file_contents[file_name] = f.read()
+
+    # Step 4: Return dictionary of filename: content
+    return file_contents
+# def select_and_read_text_files_xpath(type,folder_path):
+#     # Step 1: List all .txt files in the folder
+#     #txt_files = [f for f in os.listdir(folder_path) if f.endswith('.txt')]
+#     txt_files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
+#
+#     if not txt_files:
+#         st.warning("No .txt files found in the folder.")
+#         return {}
+#     selected_files=None
+#     # Step 2: Let the user select multiple files
+#     if type == "feature":
+#         selected_files = st.multiselect("select relevent action file for generating feature file ", txt_files)
+#     if type == "xpath":
+#         selected_files = st.multiselect("select relevent action file ", txt_files)
+#     if type == "page":
+#         selected_files = st.multiselect("select relevent page file ", txt_files)
+#     if type == "page_test":
+#         selected_files = st.multiselect("select relevent page file to generate test script ", txt_files)
+#     if type == "page_git":
+#         selected_files = st.multiselect("select page files to push ", txt_files)
+#     if type == "testcase_test":
+#         selected_files = st.multiselect("select relevent Test case to generate test script ", txt_files)
+#     if type == "test_git":
+#         selected_files = st.multiselect("select test file to push ", txt_files)
+#     # Step 3: Read contents of selected files
+#     combine_type=["xpath","page","feature"]
+#     if type in combine_type:
+#         file_contents = {}
+#         for file_name in selected_files:
+#             full_path = os.path.join(folder_path, file_name)
+#             with open(full_path, 'r', encoding='utf-8') as f:
+#                 file_contents[file_name] = f.read()
+#
+#         # Step 4: Return dictionary of filename: content
+#         return file_contents
+#     else:
+#         file_contents=[]
+#         return file_contents
+def select_and_read_text_files_xpath(type, folder_path):
+    # Step 1: List all files in the folder
+    files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
+
+    if not files:
+        st.warning("No files found in the folder.")
+        return {}
+
+    selected_files = st.multiselect(f"Select relevant file(s) for {type.replace('_', ' ')}", files)
+
+    file_contents = {}
+
+    for file_name in selected_files:
+        full_path = os.path.join(folder_path, file_name)
+
+        try:
+            # Type: For txt-based files
+            if type in ["xpath", "page", "feature"]:
+                with open(full_path, 'r', encoding='utf-8') as f:
+                    file_contents[file_name] = f.read()
+
+            # Type: For Python files - page_test
+            # elif type == "page_test" and file_name.endswith(".py"):
+            #     with open(full_path, 'r', encoding='utf-8') as f:
+            #         content = f.read()
+            #         tree = ast.parse(content)
+            #         functions = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
+            #         file_contents[file_name] = functions
+            elif type == "page_test" and file_name.endswith(".py"):
+                try:
+                    with open(full_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+
+                    # Remove common Markdown wrappers
+                    if content.startswith("```python"):
+                        content = content.split("```python", 1)[1]
+                    if "```" in content:
+                        content = content.split("```", 1)[0]
+
+                    try:
+                        tree = ast.parse(content)
+                        functions = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
+                        file_contents[file_name] = functions
+                    except SyntaxError as syntax_err:
+                        st.error(
+                            f"Syntax error in {file_name}:\nLine {syntax_err.lineno} - {syntax_err.text.strip() if syntax_err.text else ''}")
+                        continue
+
+                except Exception as read_err:
+                    st.error(f"Failed to read {file_name}: {read_err}")
+
+            # Type: For Excel test cases - testcase_test
+            elif type == "testcase_test" and file_name.endswith((".xlsx", ".xls")):
+                df = pd.read_excel(full_path)
+
+                test_case_name = df['Test Case Name'][0]
+                page_name = df['Page'][0] if 'Page' in df.columns else None
+                actions = df['Action'].dropna().tolist() if 'Action' in df.columns else []
+                expected = df['Expected Result'].dropna().tolist() if 'Expected Result' in df.columns else []
+
+                file_contents[file_name] = {
+                    "test_case_name": test_case_name,
+                    "page_name": page_name,
+                    "actions": actions,
+                    "expected_results": expected
+                }
+
+            else:
+                st.warning(f"Unsupported or mismatched file type for {file_name}")
+
+        except Exception as e:
+            st.error(f"Error processing {file_name}: {e}")
+
+    return file_contents
+def get_queries_from_ai_updated(formatted_summary):
+    # Access the variables
+    api_key = os.getenv("AZURE_OPENAI_API_KEY")
+    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+
+    # Set the environment variables explicitly if needed
+    os.environ["AZURE_OPENAI_API_KEY"] = api_key
+    os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
+
+    model = AzureChatOpenAI(
+        openai_api_version="2023-05-15",
+        azure_deployment="qepracticekey",
+    )
+    message = HumanMessage(content=formatted_summary)
+    output_value = model([message])
+    print(output_value)
+    return output_value.content
+def markdown_to_dataframe(markdown_text):
+    # Extract lines that look like markdown rows
+    lines = markdown_text.strip().splitlines()
+    table_lines = [line for line in lines if "|" in line and not line.strip().startswith("---")]
+
+    if len(table_lines) < 2:
+        print("⚠️ No valid markdown table found.")
+        return pd.DataFrame()
+
+    # Clean up each line
+    cleaned_lines = [re.sub(r"^\s*\|\s*|\s*\|\s*$", "", line).strip() for line in table_lines]
+    cleaned_lines = [re.sub(r"\s*\|\s*", ",", line) for line in cleaned_lines]
+
+    csv_data = "\n".join(cleaned_lines)
+
+    print("🔍 Cleaned CSV-like content:\n", csv_data)
+
+    # Use StringIO to load into DataFrame
+    try:
+        df = pd.read_csv(StringIO(csv_data))
+        return df
+    except Exception as e:
+        print(f"❌ Failed to convert markdown to DataFrame: {e}")
+        return pd.DataFrame()
+def covert_response_to_testcases(markdown_text,test_collection):
+    # STEP 1: Strip markdown code fencing (``` or ```markdown)
+    if markdown_text.startswith("```"):
+        markdown_text = "\n".join(
+            line for line in markdown_text.splitlines()
+            if not line.strip().startswith("```")
+        )
+    # STEP 2: Clean and parse markdown table
+    lines = markdown_text.strip().split('\n')
+    cleaned_lines = [line for line in lines if not set(line.strip()).issubset(set('|- '))]
+    cleaned_text = "\n".join(cleaned_lines)
+
+    df = pd.read_csv(StringIO(cleaned_text), sep='|', engine='python')
+    df = df.dropna(axis=1, how='all')
+    df.columns = [col.strip() for col in df.columns]
+    # df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+    for col in df.select_dtypes(include='object').columns:
+        df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+
+    # STEP 3: Fill missing Test Case Names
+    df['Test Case Name'] = df['Test Case Name'].replace('', pd.NA).ffill()
+
+
+    # STEP 5: Write each test case into a separate Excel file
+    for test_case, group in df.groupby("Test Case Name"):
+        file_name = f"{test_case.strip()[:50]}.xlsx"  # Truncate for safety
+        safe_file_name = "".join(c for c in file_name if c.isalnum() or c in "._- ()").rstrip()
+        path = os.path.join(test_collection, safe_file_name)
+        group.to_excel(path, index=False)
+
+    print(f"✅ Created individual Excel files in folder: {output_folder}")
+
+
+def create_testcase_in_Excel(raw_response, test_location):
+    os.makedirs(test_location, exist_ok=True)
+
+    df = markdown_to_dataframe(raw_response)
+
+    if df.empty:
+        print("⚠️ No test cases found in the markdown.")
+        return
+
+    print("✅ Parsed DataFrame:\n", df)
+
+    for name, group in df.groupby("Test Case Name"):
+        safe_name = name.replace(" ", "_").replace("/", "_").strip()
+        file_path = os.path.join(test_location, f"{safe_name}.xlsx")
+        group.to_excel(file_path, index=False)
+
+    print(f"✅ {len(df['Test Case Name'].unique())} test cases saved in: {test_location}")
+
+import io
+def extract_testcase_context_from_excel_file(file_obj):
+    try:
+        # If it's a string (file path), let pandas handle it
+        if isinstance(file_obj, str):
+            df = pd.read_excel(file_obj)
+
+        # If it's a file-like object (e.g., from Streamlit), decode to BytesIO
+        else:
+            file_bytes = file_obj.read()
+            df = pd.read_excel(io.BytesIO(file_bytes))
+
+        test_case_name = df['Test Case Name'][0]
+        page_name = df['Page'][0] if 'Page' in df.columns else None
+        actions = df['Action'].dropna().tolist() if 'Action' in df.columns else []
+        expected = df['Expected Result'].dropna().tolist() if 'Expected Result' in df.columns else []
+
+        return {
+            "test_case_name": test_case_name,
+            "page_name": page_name,
+            "actions": actions,
+            "expected_results": expected
+        }
+
+    except Exception as e:
+        print(f"❌ Error extracting test case context: {e}")
+        return {
+            "test_case_name": "",
+            "page_name": "",
+            "actions": [],
+            "expected_results": []
+        }
+def extract_page_file_info_from_file(file_obj):
+    try:
+        # Read actual content of the file
+        content = file_obj.read().decode('utf-8')  # decode if it's a file-like object from Streamlit
+
+        # Parse the code content, not the file name
+        tree = ast.parse(content)
+
+        methods = []
+        xpaths = []
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                methods.append(node.name)
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name) and isinstance(node.value, ast.Call):
+                        val_str = ast.unparse(node.value)
+                        if "xpath" in val_str.lower():
+                            xpaths.append((target.id, val_str))
+
+        return {
+            "methods": methods,
+            "xpaths": xpaths
+        }
+
+    except Exception as e:
+        print(f"Error parsing file: {e}")
+        return {
+            "methods": [],
+            "xpaths": []
+        }

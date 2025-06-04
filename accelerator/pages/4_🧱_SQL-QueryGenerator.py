@@ -62,7 +62,7 @@ def get_table_header(selected_database):
     tables = {}
     for val1 in val:
         conn = pyodbc.connect('Driver={SQL Server};'
-                              'Server=TIGER03699\MSSQLSERVER2019;'
+                              'Server=qe-vm1;'
                               f'Database={val1};'
                               'Trusted_Connection=yes;')
         print(conn)
@@ -88,8 +88,8 @@ def get_table_dataframes(selected_database):
     tables = get_table_header(selected_database)
     print(tables)
     conn = pyodbc.connect('Driver={SQL Server};'
-                          'Server=TIGER03699\MSSQLSERVER2019;'
-                          f'Database=Raw_data;'
+                          'Server=qe-vm1;'
+                          f'Database=Employee;'
                           'Trusted_Connection=yes;')
     dfs = {}
     for keys in tables:
@@ -234,7 +234,7 @@ def get_queries_from_ai_prompt(prompt,selected_database):
     output_valuenew = extract_values(str(model([message1])))
     print(model([message1]))
     conn = pyodbc.connect('Driver={SQL Server};'
-                          'Server=TIGER03699\MSSQLSERVER2019;'
+                          'Server=qe-vm1;'
                           f'Database=Employee;'
                           'Trusted_Connection=yes;')
     try:
@@ -360,7 +360,7 @@ def QueryValidationAndReport():
 
     # Extract data from database
     conn = pyodbc.connect('Driver={SQL Server};'
-                                  'Server=TIGER03699\MSSQLSERVER2019;'
+                                  'Server=qe-vm1;'
                                   f'Database=Employee;'
                                   'Trusted_Connection=yes;')
     tables={}

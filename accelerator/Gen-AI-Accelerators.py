@@ -5,19 +5,12 @@ import streamlit as st
 
 def load_home_page():
     st.set_page_config(
-        page_title="Tiger QE AI Accelerators",
+        page_title="Tiger QE AI Solutions",
         page_icon="🤖",
     )
 
-    st.write("# Welcome to the Tiger QE AI Accelerator! 🚀 Your Gateway to Smarter Testing!")
+    st.write("# Welcome to the Tiger QE AI Solutions! 🚀 Your Gateway to Smarter Testing!")
     st.sidebar.success("Select an option page above")
-
-    # font_pixel = 14
-    # explain_text1 = f'<span style="font-size: {font_pixel}px;">:  A unified solution that automates the entire data validation process, ensuring accuracy, consistency, and reliability across all datasets.</span>'
-    # explain_text2 = f'<span style="font-size: {font_pixel}px;">:  Enables seamless execution of test scripts to validate data transformations between source and target systems.</span>'
-    # explain_text3 = f'<span style="font-size: {font_pixel}px;">:  Leverages Generative AI or native tools to create optimized SQL scripts for complex queries, reducing manual effort and improving efficiency.</span>'
-    # explain_text4 = f'<span style="font-size: {font_pixel}px;">:  Provides in-depth insights into source or target datasets by analyzing patterns, anomalies, and key metrics.</span>'
-    # explain_text5 = f'<span style="font-size: {font_pixel}px;">:  Automates the validation based on DQ rules that ensure datasets meet quality standards, preventing errors and enhancing trust in data-driven decisions.</span>'
 
     st.markdown(f"""
         <table style="margin-left: auto; margin-right: auto; border-collapse: collapse; border: none;">

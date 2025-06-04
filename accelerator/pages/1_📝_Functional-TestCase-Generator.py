@@ -37,7 +37,7 @@ def main():
         else:
             st.write("Unsupported file format. Please upload a PDF, Word, or Excel document.")
 
-    if st.button("Extract pdf"):
+    if st.button("Extract doc and Generate"):
         if uploaded_file is not None:
             var = get_queries_from_ai_prompt(uploaded_file)
             st.write(var)
