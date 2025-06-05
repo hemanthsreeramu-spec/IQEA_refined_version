@@ -21,9 +21,6 @@ IF EXIST %REQUIREMENTS% (
     echo No requirements.txt found, skipping installation.
 )
 
-REM Install Playwright dependencies
-CALL playwright install
-
 REM Run the Python script
 IF EXIST %PYTHON_FILE% (
     echo Running %PYTHON_FILE%...

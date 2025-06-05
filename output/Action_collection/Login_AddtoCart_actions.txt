@@ -1,0 +1,18 @@
+Page: [https://www.saucedemo.com/]
+- Click on "Username"
+- Enter "" in the "Username" field
+- Click on "login_credentials"
+- Change the value in "Username"
+- Click on "Password for all users:
+secret_sauce"
+- Click on "Password"
+- Enter "" in the "Password" field
+- Change the value in "Password"
+- Click on "login-button"
+
+Page: [https://www.saucedemo.com/inventory.html]
+- Click on "add-to-cart-sauce-labs-bike-light"
+- Click on "add-to-cart-sauce-labs-backpack"
+
+Page: [https://www.saucedemo.com/cart.html]
+- Click on "2"

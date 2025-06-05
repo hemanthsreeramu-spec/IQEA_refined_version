@@ -1,4 +1,3 @@
-prompt = f"""
 You are an expert QA Test Case Generator.
 
 Your task is to generate a comprehensive set of realistic, end-to-end functional test cases to validate a target page or feature using the following inputs:
@@ -31,4 +30,3 @@ Output Format:
 Begin now:
 Generate test cases for the following requirement:
 {requirements}
-"""

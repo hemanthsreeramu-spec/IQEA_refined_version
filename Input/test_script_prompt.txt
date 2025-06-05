@@ -1,4 +1,4 @@
-prompt = f"""You are a test automation expert. Based on the following inputs, generate a {test_file_language} test script using pytest (or unittest), which imports and uses the relevant page methods from the page object file to perform UI actions.
+You are a test automation expert. Based on the following inputs, generate a {test_file_language} test script using pytest (or unittest), which imports and uses the relevant page methods from the page object file to perform UI actions.
 ## Input 1: Page Object File Info
 {page_files_content}
 
@@ -18,4 +18,3 @@ prompt = f"""You are a test automation expert. Based on the following inputs, ge
   - Necessary imports of page objects or modules
   - A test class (if applicable)
   - One or more test functions implementing the scenario based on the test case info
-"""

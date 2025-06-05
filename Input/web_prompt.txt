@@ -1,6 +1,4 @@
-prompt= f"""
 From the given list of elements, generate all possible XPath expressions for each element using its tag and attributes only.
 Return only valid XPath strings as output. Do not include any explanation or description.
 
 Input: {formatted_summary}
-"""

@@ -1,4 +1,3 @@
-prompt = f"""
 Generate a complete {language} Page Object Model (POM) class using Selenium.
 
 Inputs:
@@ -16,4 +15,3 @@ Requirements:
 5. Use meaningful and consistent naming conventions for the class, methods, and variables.
 6. The class name must be derived from the page name and be a valid {language} class name.
 7. Return only the complete and syntactically correct {language} class code — no explanations, comments, or extra output.
-"""
