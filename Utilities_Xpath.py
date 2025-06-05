@@ -666,44 +666,8 @@ def select_and_read_text_files(folder_path):
 
     # Step 4: Return dictionary of filename: content
     return file_contents
-# def select_and_read_text_files_xpath(type,folder_path):
-#     # Step 1: List all .txt files in the folder
-#     #txt_files = [f for f in os.listdir(folder_path) if f.endswith('.txt')]
-#     txt_files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
-#
-#     if not txt_files:
-#         st.warning("No .txt files found in the folder.")
-#         return {}
-#     selected_files=None
-#     # Step 2: Let the user select multiple files
-#     if type == "feature":
-#         selected_files = st.multiselect("select relevent action file for generating feature file ", txt_files)
-#     if type == "xpath":
-#         selected_files = st.multiselect("select relevent action file ", txt_files)
-#     if type == "page":
-#         selected_files = st.multiselect("select relevent page file ", txt_files)
-#     if type == "page_test":
-#         selected_files = st.multiselect("select relevent page file to generate test script ", txt_files)
-#     if type == "page_git":
-#         selected_files = st.multiselect("select page files to push ", txt_files)
-#     if type == "testcase_test":
-#         selected_files = st.multiselect("select relevent Test case to generate test script ", txt_files)
-#     if type == "test_git":
-#         selected_files = st.multiselect("select test file to push ", txt_files)
-#     # Step 3: Read contents of selected files
-#     combine_type=["xpath","page","feature"]
-#     if type in combine_type:
-#         file_contents = {}
-#         for file_name in selected_files:
-#             full_path = os.path.join(folder_path, file_name)
-#             with open(full_path, 'r', encoding='utf-8') as f:
-#                 file_contents[file_name] = f.read()
-#
-#         # Step 4: Return dictionary of filename: content
-#         return file_contents
-#     else:
-#         file_contents=[]
-#         return file_contents
+
+
 def select_and_read_text_files_xpath(type, folder_path):
     # Step 1: List all files in the folder
     files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
@@ -725,13 +689,7 @@ def select_and_read_text_files_xpath(type, folder_path):
                 with open(full_path, 'r', encoding='utf-8') as f:
                     file_contents[file_name] = f.read()
 
-            # Type: For Python files - page_test
-            # elif type == "page_test" and file_name.endswith(".py"):
-            #     with open(full_path, 'r', encoding='utf-8') as f:
-            #         content = f.read()
-            #         tree = ast.parse(content)
-            #         functions = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
-            #         file_contents[file_name] = functions
+
             elif type == "page_test" and file_name.endswith(".py"):
                 try:
                     with open(full_path, 'r', encoding='utf-8') as f:
@@ -778,6 +736,8 @@ def select_and_read_text_files_xpath(type, folder_path):
             st.error(f"Error processing {file_name}: {e}")
 
     return file_contents
+
+
 def get_queries_from_ai_updated(formatted_summary):
     # Access the variables
     api_key = os.getenv("AZURE_OPENAI_API_KEY")

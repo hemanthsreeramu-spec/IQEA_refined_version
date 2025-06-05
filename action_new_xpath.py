@@ -19,7 +19,7 @@ current_path = os.getcwd()
 input_folder = os.path.join(current_path, "Input")
 output_folder = os.path.join(current_path, "output")
 Action_collection = os.path.join(output_folder, "Action_collection")
-Page_collection = os.path.join(output_folder, "Page_file_generator")
+Page_collection = os.path.join(output_folder, "page_file_generator")
 Test_case_collection = os.path.join(output_folder, "Test_Cases_collection")
 feature_file_collection = os.path.join(output_folder, "Feature_file_generator")
 os.makedirs(Page_collection, exist_ok=True)
@@ -502,45 +502,45 @@ if st.session_state.checkbox5_state:
             utils.create_test_file(test_file_name, test_file_language, test_script_response)
 
 if st.session_state.checkbox6_state:
-    with st.expander("⚙️ GitHub 📡 CICD Execution Bridge"):
-        st.title("Push code to Repo and execute via CICD Pipeline")
-        Action_data = utils.select_and_read_text_files_xpath("page_git", Action_collection)
-        repo_name = st.text_input("Enter folder name in repo:", value="test_web/src/pom/pages")
+    with st.expander("⚙️ GitHub 📡 Automation Bridge"):
+        st.title("Upload code to Repository")
+        pytest_files = utils.select_and_read_text_files_xpath("page_test", utils.Test_file_generator)
+        repo_pytest_name = st.text_input("Enter folder name in repo:", value="test_web/tests/test_cases")
+        pom_files = utils.select_and_read_text_files_xpath("page", utils.Page_file_generator)
+        repo_pom_name = st.text_input("Enter folder name in repo:", value="test_web/src/pom/pages")
         if st.button("Push to Repo"):
-            if repo_name:
-                g = Github(os.getenv("GITHUB_ACCESS_TOKEN"))
-                repo = g.get_repo(os.getenv("GITHUB_REPO_NAME"))
-                branch = os.getenv("GITHUB_BRANCH_NAME", "main")
 
-                # Read local file
-                with open(Action_data, "rb") as file:
-                    content = file.read()
+            g = Github(os.getenv("GITHUB_ACCESS_TOKEN"))
+            repo = g.get_repo(os.getenv("GITHUB_REPO_NAME"))
+            branch = os.getenv("GITHUB_BRANCH_NAME", "main")
 
-                # Define destination path
-                from os.path import basename
-                dest_path = f"{repo_name}/{basename(Action_data)}"
+            if repo_pom_name and repo_pytest_name:
+
+                pom_file_key = next(iter(pom_files))
+                pom_dest_path = f"{repo_pom_name}/{pom_file_key}"
+                pytest_file_key = next(iter(pytest_files))
+                pytest_dest_path = f"{repo_pytest_name}/{pytest_file_key}"
 
                 # Check if file exists
                 try:
-                    existing_file = repo.get_contents(dest_path, ref=branch)
+                    existing_pom_file = repo.get_contents(pom_dest_path, ref=branch)
+                    existing_pytest_file = repo.get_contents(pytest_dest_path, ref=branch)
                     # Update if it exists
-                    repo.update_file(dest_path, f"Update {dest_path}", content, 
-                                     existing_file.sha, branch=branch)
-                    print("File updated successfully.")
+                    repo.update_file(pom_dest_path, f"Update {pom_dest_path}", str(pom_files[pom_file_key]), 
+                                     existing_pom_file.sha, branch=branch)
+                    repo.update_file(pytest_dest_path, f"Update {pytest_dest_path}", str(pytest_files[pytest_file_key]),
+                                     existing_pytest_file.sha, branch=branch)
+                    print("Files updated successfully Github.")
                 except:
                     # Create new file if it does not exist
-                    repo.create_file(dest_path, f"Upload {dest_path}", content, branch=branch)
-                st.success(f"Files pushed successfully to {repo_name} in Github.")
+                    repo.create_file(pom_dest_path, f"Upload {pom_dest_path}", 
+                                     str(pom_files[pom_file_key]), branch=branch)
+                    repo.create_file(pytest_dest_path, f"Upload {pytest_dest_path}", 
+                                     str(pytest_files[pytest_file_key]), branch=branch)
+                st.success(f"Files pushed successfully Github.")
             else:
                 st.warning("Please enter a folder name in the repo.")
-        
-        pipeline_name = st.text_input("Enter Pipeline Name:")
-        if st.button("Trigger Pipeline"):
-            if pipeline_name:
-                # Here you would add the logic to trigger the pipeline
-                st.success(f"Pipeline '{pipeline_name}' triggered successfully in Jenkins.")
-            else:
-                st.warning("Please enter pipeline name.")
+
 
 st.markdown("""    
     ### Contact Us
