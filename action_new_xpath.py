@@ -48,17 +48,10 @@ def select_and_read_text_files(folder_path):
 
 
 def get_queries_from_ai_updated(formatted_summary):
-    # Access the variables
-    api_key = os.getenv("AZURE_OPENAI_API_KEY")
-    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-
-    # Set the environment variables explicitly if needed
-    os.environ["AZURE_OPENAI_API_KEY"] = api_key
-    os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
 
     model = AzureChatOpenAI(
-        openai_api_version="2023-05-15",
-        azure_deployment="qepracticekey",
+        openai_api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+        azure_deployment=os.getenv("AZURE_DEPLOYMENT_NAME"),
     )
     message = HumanMessage(content=formatted_summary)
     output_value = model([message])

@@ -27,7 +27,7 @@ def main():
 
     st.write("Select the image flows related to a user story")
     # Image folder path
-    IMAGE_FOLDER = "./E2E-Page-Images"  # Change this to your image folder
+    IMAGE_FOLDER = "./data/images"  # Change this to your image folder
 
     if "selected_images" not in st.session_state:
         st.session_state.selected_images = []
