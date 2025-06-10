@@ -13,7 +13,7 @@ from Utilities import *
 import pytesseract
 from langchain_core.messages import HumanMessage
 from langchain_openai import AzureChatOpenAI
-
+from dotenv import load_dotenv
 # Setup output folder
 current_path = os.getcwd()
 input_folder = os.path.join(current_path, "Input")
@@ -34,58 +34,6 @@ st.set_page_config(
     page_icon="🤖",
     layout="centered"
 )
-
-def select_and_read_text_files(folder_path):
-    # Step 1: List all .txt files in the folder
-    txt_files = [f for f in os.listdir(folder_path) if f.endswith('.txt')]
-
-    if not txt_files:
-        st.warning("No .txt files found in the folder.")
-        return {}
-
-    # Step 2: Let the user select multiple files
-    selected_files = st.multiselect("Please select relevent action file ", txt_files)
-
-    # Step 3: Read contents of selected files
-    file_contents = {}
-    for file_name in selected_files:
-        full_path = os.path.join(folder_path, file_name)
-        with open(full_path, 'r', encoding='utf-8') as f:
-            file_contents[file_name] = f.read()
-
-    # Step 4: Return dictionary of filename: content
-    return file_contents
-
-
-def get_queries_from_ai_updated(formatted_summary):
-
-    model = AzureChatOpenAI(
-        openai_api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
-        azure_deployment=os.getenv("AZURE_DEPLOYMENT_NAME"),
-    )
-    message = HumanMessage(content=formatted_summary)
-    output_value = model([message])
-    print(output_value)
-    return output_value.content
-    # Split the JSON list if its length exceeds 15
-
-
-# Function to check file extension
-def allowed_file(filename, allowed_extensions):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
-
-def monitor_url_changes(driver, screenshot_folder, stop_flag):
-    last_url = ""
-    while not stop_flag["stop"]:
-        try:
-            current_url = driver.current_url
-            if current_url != last_url:
-                last_url = current_url
-                filepath = action_utils.take_screenshot(driver, screenshot_folder)
-                print(f"📸 Screenshot taken for: {current_url} => {filepath}")
-        except Exception as e:
-            print("Error during URL monitoring:", e)
-        time.sleep(1)  # check every second
 
 # Session state setup
 if "page_url" not in st.session_state:
@@ -137,36 +85,36 @@ if "checkbox6_state" not in st.session_state:
     st.session_state.checkbox6_state = True
 
 st.title(" 🤖 TigerQE 'One-Stop' AI Solution")
+# 1. Open the browser
+page_url = st.text_input("Enter the URL of the page:")
+st.session_state.page_url = page_url
+if st.button("Open Browser"):
+    if page_url:
+        chrome_options = Options()
+        chrome_options.add_argument("--remote-debugging-port=9222")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        st.session_state.driver = webdriver.Chrome(options=chrome_options)
+        st.session_state.driver.get(page_url)
+        st.session_state.driver.maximize_window()
+        WebDriverWait(st.session_state.driver, 30).until(utils.is_page_loaded)
+        st.success("✅ Browser opened and ready.")
 
 # Display sections based on checkboxes
 if st.session_state.checkbox1_state:
     with st.expander("🔴 User Workflow Recorder"):
-        # 1. Open the browser
-        page_url = st.text_input("Enter the URL of the page:")
-        st.session_state.page_url=page_url
-        if st.button("Open Browser"):
-            if page_url:
-                chrome_options = Options()
-                chrome_options.add_argument("--remote-debugging-port=9222")
-                chrome_options.add_argument("--no-sandbox")
-                chrome_options.add_argument("--disable-dev-shm-usage")
-                st.session_state.driver = webdriver.Chrome(options=chrome_options)
-                st.session_state.driver.get(page_url)
-                st.session_state.driver.maximize_window()
-                WebDriverWait(st.session_state.driver, 30).until(utils.is_page_loaded)
-                st.success("✅ Browser opened and ready.")
-        
         # 2. Start Recording
         st.subheader("Record User Actions & Capture Screenshots of User Navigation")
         if not st.session_state.recording_started and st.button("🎥 Start Recording"):
             if st.session_state.driver:
+                st.session_state.actions = [] # reset if previously recorded
                 action_utils.start_recording(st.session_state.driver)
                 st.session_state.recording_started = True
-                st.session_state.actions = []  # reset if previously recorded
+
                 # Start thread to monitor URL and take screenshots
                 st.session_state.stop_monitor = {"stop": False}
                 st.session_state.monitor_thread = threading.Thread(
-                    target=monitor_url_changes,
+                    target=utils.monitor_url_changes,
                     args=(st.session_state.driver, page_screenshot_folder, st.session_state.stop_monitor),
                     daemon=True
                 )
@@ -175,14 +123,15 @@ if st.session_state.checkbox1_state:
 
         # 3. Stop Recording
         if st.session_state.recording_started and st.button("🛑 Stop Recording"):
-            actions = action_utils.get_recorded_actions(st.session_state.driver)
+            st.session_state.actions = action_utils.get_recorded_actions(st.session_state.driver)
             st.session_state.recording_started = False
-            st.session_state.actions = actions
+            #st.session_state.actions = actions
             # Stop the monitoring thread
             st.session_state.stop_monitor["stop"] = True
             if st.session_state.monitor_thread:
                 st.session_state.monitor_thread.join()
-            st.success(f"Recording stopped. {len(actions)} actions captured.")
+            st.success(f"Recording stopped. {len(st.session_state.actions)} actions captured.")
+            actions=[]
 
         # 4. Show and Save Actions
         if st.session_state.actions:
@@ -212,11 +161,11 @@ if st.session_state.checkbox2_state:
             action_prompt_filename = os.path.join(input_folder, "featureaction_prompt.txt")
             with open(action_prompt_filename, "r") as file:
                 action_prompt = file.read().strip() + Action_data
-            action_data_processed = get_queries_from_ai_updated(action_prompt)
+            action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
             feature_prompt_filename = os.path.join(input_folder, "featurefile_prompt.txt")
             with open(feature_prompt_filename, "r") as file:
                 feature_prompt = file.read().strip() + action_data_processed
-            feature_response=get_queries_from_ai_updated(feature_prompt)
+            feature_response=utils.get_queries_from_ai_updated(feature_prompt)
             st.write(feature_response)
 
             save_feature_file = os.path.join(feature_file_collection, "saucedemo_purchase_flow.feature")
@@ -254,7 +203,7 @@ if st.session_state.checkbox3_state:
         # A prompt text box
         prompt = st.text_area('Enter the prompt Functional Test Case', '')
         # Action_data_folder = r"C:\Users\sathanantham.aru\PycharmProjects\PythonProject\output\Action_collection"
-        Action_data = select_and_read_text_files(Action_collection)
+        Action_data = utils.select_and_read_text_files(Action_collection)
         if st.button("Generate Functional Test Cases"):
             # st.write(Action_data)
 
@@ -285,13 +234,13 @@ if st.session_state.checkbox3_state:
                         st.error(f"Image not found: {image_name}")
                 image_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {image_data} """
                 print(image_prompt)
-                image_data_processed = get_queries_from_ai_updated(image_prompt)
+                image_data_processed = utils.get_queries_from_ai_updated(image_prompt)
                 print(image_data_processed)
                 action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
-                action_data_processed = get_queries_from_ai_updated(action_prompt)
+                action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
                 print(action_data_processed)
                 constructedprompt=utils.generate_pom_from_excel_testcases("Test_case_generation",navigation,image_data_processed,action_data_processed,prompt)
-                prompt_response = get_queries_from_ai_updated(constructedprompt)
+                prompt_response = utils.get_queries_from_ai_updated(constructedprompt)
                 st.code(prompt_response)
                 utils.covert_response_to_testcases(prompt_response, Test_case_collection)
 
@@ -397,8 +346,8 @@ if st.session_state.checkbox4_state:
                 # Placeholder for your page file generation script
                 st.success(f"Page file generated for '{page_name}' in '{language}' language.")
                 # Trigger scroll with 'Continue' button
-                if st.button("Continue"):
-                    utils.scroll_and_focus()
+                # if st.button("Continue"):
+                #     utils.scroll_and_focus()
 
         # Handle the "Find XPath" button logic
         if st.session_state.driver:
@@ -485,8 +434,8 @@ if st.session_state.checkbox4_state:
                                 st.session_state.show_form = False
                                 st.success(f"Page file generated for '{page_name}' in '{language}' language.")
                                 # Trigger scroll with 'Continue' button
-                                if st.button("Continue"):
-                                    utils.scroll_and_focus()
+                                # if st.button("Continue"):
+                                #     utils.scroll_and_focus()
 
 if st.session_state.checkbox5_state:
     with st.expander("🧾 Test Automation Script Generator"):
@@ -497,7 +446,7 @@ if st.session_state.checkbox5_state:
         test_files_content = utils.select_and_read_text_files_xpath("testcase_test",Test_case_collection)
         if st.button("Generate_Test_Script"):
             Prompt = utils.generate_test_script("Test_File_Action", test_file_language, page_files_content,test_files_content)
-            test_script_response= get_queries_from_ai_updated(Prompt)
+            test_script_response= utils.get_queries_from_ai_updated(Prompt)
             #st.write(test_script_response)
             utils.create_test_file(test_file_name, test_file_language, test_script_response)
 

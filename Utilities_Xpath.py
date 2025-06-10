@@ -2,6 +2,8 @@ import os
 from typing import Union, IO
 import yaml
 import random
+import utils_action as action_utils
+import time
 import string
 import json
 import ast
@@ -667,7 +669,18 @@ def select_and_read_text_files(folder_path):
     # Step 4: Return dictionary of filename: content
     return file_contents
 
-
+def monitor_url_changes(driver, screenshot_folder, stop_flag):
+    last_url = ""
+    while not stop_flag["stop"]:
+        try:
+            current_url = driver.current_url
+            if current_url != last_url:
+                last_url = current_url
+                filepath = action_utils.take_screenshot(driver, screenshot_folder)
+                print(f"📸 Screenshot taken for: {current_url} => {filepath}")
+        except Exception as e:
+            print("Error during URL monitoring:", e)
+        time.sleep(1)  # check every second
 def select_and_read_text_files_xpath(type, folder_path):
     # Step 1: List all files in the folder
     files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
