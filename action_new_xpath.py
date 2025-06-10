@@ -155,24 +155,18 @@ if st.session_state.checkbox1_state:
 if st.session_state.checkbox2_state:
     with st.expander("🧾 BDD Feature File Generator"):
         st.title("Feature file Generator using recorded actions")
-
+        Feature_file_name = st.text_input("Enter feature file Name")
         Action_data = utils.select_and_read_text_files_xpath("feature",Action_collection)
+        action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
+        action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
+        feature_prompt = utils.generate_pom_from_excel_feature("featurefile", action_data_processed)
         if st.button("Generate_feature_File"):
-            action_prompt_filename = os.path.join(input_folder, "featureaction_prompt.txt")
-            with open(action_prompt_filename, "r") as file:
-                action_prompt = file.read().strip() + Action_data
-            action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
-            feature_prompt_filename = os.path.join(input_folder, "featurefile_prompt.txt")
-            with open(feature_prompt_filename, "r") as file:
-                feature_prompt = file.read().strip() + action_data_processed
             feature_response=utils.get_queries_from_ai_updated(feature_prompt)
-            st.write(feature_response)
-
-            save_feature_file = os.path.join(feature_file_collection, "saucedemo_purchase_flow.feature")
+            save_feature_file = os.path.join(feature_file_collection, f"{Feature_file_name}.feature")
             with open(save_feature_file, "w") as file:
                 file.write(feature_response.strip())
 
-            print(f"Feature file saved here: {save_feature_file}")
+            st.write(f"Feature file saved here: {save_feature_file}")
 
 if st.session_state.checkbox3_state:
     with st.expander("🧮 E2E Test Case Generator"):

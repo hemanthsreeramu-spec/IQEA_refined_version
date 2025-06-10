@@ -10,3 +10,4 @@ Use readable and testable language for automation.
 Do not include any explanations, summaries, or additional comments—only the feature file content.
 
 Recorded User Actions: 
+{recorded_action}

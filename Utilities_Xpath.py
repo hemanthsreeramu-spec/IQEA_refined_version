@@ -60,6 +60,10 @@ def load_prompt_from_file(prompt_type):
         prompt_file = os.path.join(config_folder, "test_script_prompt.txt")
     elif prompt_type== "Test_case_generation":
         prompt_file = os.path.join(config_folder, "Testcase_generate_prompt.txt")
+    elif prompt_type == "featureaction":
+        prompt_file = os.path.join(config_folder, "featureaction_prompt.txt")
+    elif prompt_type == "featurefile":
+        prompt_file = os.path.join(config_folder, "featurefile_prompt.txt")
     else:
         raise ValueError(f"Invalid prompt type: {prompt_type}. Expected 'web' or 'powerBi'.")
 
@@ -565,6 +569,11 @@ def clean_xpath(xpath):
 def generate_pom_from_excel_testcases(prompt_type,navigation,image_data,action_data,requirements):
     prompt_template = load_prompt_from_file(prompt_type)
     final_prompt = prompt_template.format(navigation=navigation,image_data_processed=image_data,action_data_processed=action_data,requirements=requirements)
+    print(final_prompt)
+    return final_prompt
+def generate_pom_from_excel_feature(prompt_type,Recorded_Action):
+    prompt_template = load_prompt_from_file(prompt_type)
+    final_prompt = prompt_template.format(recorded_action=Recorded_Action)
     print(final_prompt)
     return final_prompt
 def generate_test_script(prompt_type,test_file_language,page_file_conetent,test_file_content):
