@@ -1,6 +1,7 @@
 import os
 from typing import Union, IO
 import yaml
+import PyPDF2
 import random
 import utils_action as action_utils
 import time
@@ -60,6 +61,10 @@ def load_prompt_from_file(prompt_type):
         prompt_file = os.path.join(config_folder, "test_script_prompt.txt")
     elif prompt_type== "Test_case_generation":
         prompt_file = os.path.join(config_folder, "Testcase_generate_prompt.txt")
+    elif prompt_type== "Test_case_generation_document":
+        prompt_file = os.path.join(config_folder, "Testcase_generate_prompt_with_document.txt")
+    elif prompt_type== "Test_case_generation_withaction":
+        prompt_file = os.path.join(config_folder, "Testcase_generate_prompt_with_action.txt")
     elif prompt_type == "featureaction":
         prompt_file = os.path.join(config_folder, "featureaction_prompt.txt")
     elif prompt_type == "featurefile":
@@ -566,9 +571,20 @@ def clean_xpath(xpath):
     """Extracts only the actual XPath from a given string."""
     match = re.search(r'(//[^\]]+\])', xpath)  # Find everything starting with // until the first ]
     return match.group(1) if match else xpath  # Return extracted XPath or original if not found
-def generate_pom_from_excel_testcases(prompt_type,navigation,image_data,action_data,requirements):
+def generate_excel_testcases_with_document(prompt_type,extracted_data):
     prompt_template = load_prompt_from_file(prompt_type)
-    final_prompt = prompt_template.format(navigation=navigation,image_data_processed=image_data,action_data_processed=action_data,requirements=requirements)
+    # Conditionally inject Action Data section or leave it blank
+    final_prompt = prompt_template.format(requirements=extracted_data)
+    print(final_prompt)
+    return final_prompt
+def generate_pom_from_excel_testcases(prompt_type,navigation,image_data,action_data=None,requirements=""):
+    prompt_template = load_prompt_from_file(prompt_type)
+    # Conditionally inject Action Data section or leave it blank
+    if action_data:
+        action_section = f"- User Interaction Elements (Action Data): {action_data}"
+    else:
+        action_section = ""
+    final_prompt = prompt_template.format(navigation=navigation,image_data_processed=image_data,action_data_processed=action_section,requirements=requirements)
     print(final_prompt)
     return final_prompt
 def generate_pom_from_excel_feature(prompt_type,Recorded_Action):
@@ -884,6 +900,59 @@ def extract_testcase_context_from_excel_file(file_obj):
             "actions": [],
             "expected_results": []
         }
+def allowed_file(filename, allowed_extensions):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
+def extract_text_from_pdf(uploaded_pdf):
+    text = ""
+    pdf_reader = PyPDF2.PdfReader(uploaded_pdf)
+    num_pages = len(pdf_reader.pages)
+    for page_number in range(num_pages):
+        page = pdf_reader.pages[page_number]
+        # Extract text and remove non-alphanumeric characters
+        text += re.sub(r'\W+', ' ', page.extract_text())
+    print("text extracted"+text)
+    return text
+
+
+def get_queries_from_ai_file_extract(uploaded_pdf):
+    os.environ["AZURE_OPENAI_API_KEY"] = "4fed2bedb59744a99b0424622f6d9d1b"
+    os.environ["AZURE_OPENAI_ENDPOINT"] = "https://qepracticekey.openai.azure.com/"
+    extracted_text = extract_text_from_pdf(uploaded_pdf)
+
+    val2 = """
+Act as Functional Test Case Generator. Based on a given Requirement, create detailed and comprehensive test cases using the Orthogonal Array technique. Each test case should have multiple steps, covering a sequence of actions to verify functionality. Use the following columns in the output Excel sheet: 
+- Test Case Name
+- Step Number
+- Test Step Description
+- Test Step Expected Result
+- Status (set as 'New')
+- Type (set as 'Manual') 
+
+Ensure that each test case contains:
+- Multiple detailed steps with clear descriptions of actions to perform.
+- Expected results for each step, specifying the criteria for a successful outcome.
+- Coverage of both Positive and Negative scenarios, highlighting edge cases and valid/invalid inputs.
+- Sequential numbering of steps, ensuring clarity in the flow of operations.
+- The final test cases should verify all combinations of parameters from the Orthogonal Array, ensuring exhaustive coverage of pairwise interactions.
+
+Format:
+-Table
+
+Include examples where applicable.
+Create the test cases in the similar format with the following requirement:
+""" + extracted_text[:8000]
+
+    model = AzureChatOpenAI(
+        openai_api_version="2023-05-15",
+        azure_deployment="qepracticekey",
+    )
+    message = HumanMessage(
+        content=val2
+    )
+    output_value = model([message])
+    return (output_value.content)
+
+
 def extract_page_file_info_from_file(file_obj):
     try:
         # Read actual content of the file

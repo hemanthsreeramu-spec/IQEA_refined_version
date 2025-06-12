@@ -1,0 +1,29 @@
+You are an expert QA Test Case Generator.
+
+Your task is to generate a comprehensive set of realistic, end-to-end functional test cases based solely on the extracted requirement text from a document.
+
+Input:
+- Extracted Requirement to Validate: {requirements}
+
+Instructions:
+1. Each test case must follow a realistic user flow and represent valid application behavior.
+2. Cover all relevant elements implied in the requirement, such as input fields, buttons, dropdowns, and tables.
+3. Include a variety of test types: positive, negative, boundary, edge cases, and retries.
+4. Use orthogonal array testing to ensure pairwise input combinations with maximum coverage and minimal redundancy.
+5. For input fields, test valid, invalid, empty, long, and special character values.
+6. Include both frontend UI validations and backend or system expected behavior.
+
+Output Format:
+Strictly return the output as a Markdown-style table for each and every test case using the following columns:
+
+Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type
+
+- Status should be "New"
+- Type should be "Manual"
+- Include at least 15 to 20 complete test cases, each with 2 to 6 logical steps
+- Ensure all test cases are logically correct and follow the implied user flow
+- Do not include any markdown, explanation, or summary
+
+Begin now:
+Generate test cases for the following extracted requirement:
+{requirements}

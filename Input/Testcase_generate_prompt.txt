@@ -5,7 +5,7 @@ Your task is to generate a comprehensive set of realistic, end-to-end functional
 Inputs:
 - Navigation Flow: {navigation}
 - UI Layout (Image Context): {image_data_processed}
-- User Interaction Elements (Action Data): {action_data_processed}
+{action_data_processed}
 - Final Requirement to Validate: {requirements}
 
 Instructions:

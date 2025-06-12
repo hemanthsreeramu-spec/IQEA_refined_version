@@ -198,6 +198,28 @@ if st.session_state.checkbox3_state:
         prompt = st.text_area('Enter the prompt Functional Test Case', '')
         # Action_data_folder = r"C:\Users\sathanantham.aru\PycharmProjects\PythonProject\output\Action_collection"
         Action_data = utils.select_and_read_text_files(Action_collection)
+        extracted_data=""
+        st.write("Upload a PDF, Word, or Excel document:")
+
+        # Uploading a PDF/DOC/EXCEL file code
+        uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'docx', 'xlsx'])
+
+        if uploaded_file is not None:
+            if utils.allowed_file(uploaded_file.name, ['pdf']):
+                st.write("PDF file uploaded successfully!")
+                # You can process PDF file here
+            elif utils.allowed_file(uploaded_file.name, ['docx']):
+                st.write("Word file uploaded successfully!")
+                # You can process Word file here
+            elif utils.allowed_file(uploaded_file.name, ['xlsx']):
+                st.write("Excel file uploaded successfully!")
+                # You can process Excel file here
+            else:
+                st.write("Unsupported file format. Please upload a PDF, Word, or Excel document.")
+
+            #st.write(extracted_data)
+
+
         if st.button("Generate Functional Test Cases"):
             # st.write(Action_data)
 
@@ -233,11 +255,19 @@ if st.session_state.checkbox3_state:
                 action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
                 action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
                 print(action_data_processed)
+                if not action_data_processed:
+                    action_data_processed=None
                 constructedprompt=utils.generate_pom_from_excel_testcases("Test_case_generation",navigation,image_data_processed,action_data_processed,prompt)
                 prompt_response = utils.get_queries_from_ai_updated(constructedprompt)
                 st.code(prompt_response)
                 utils.covert_response_to_testcases(prompt_response, Test_case_collection)
-
+            else:
+                if uploaded_file is not None:
+                    extracted_data = utils.extract_text_from_pdf(uploaded_file)
+                    constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document", extracted_data)
+                    prompt_response=utils.get_queries_from_ai_updated(constructedprompt)
+                    st.code(prompt_response)
+                    utils.covert_response_to_testcases(prompt_response, Test_case_collection)
 if st.session_state.checkbox4_state:
     with st.expander("🔎 Xpath 🧾 Page File Generator"):
         st.title("XPath Generator for Visible Elements")
