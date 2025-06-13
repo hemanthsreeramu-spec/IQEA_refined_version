@@ -1,0 +1,33 @@
+Page: [https://www.saucedemo.com/]
+- Click on "login_credentials"
+- Click on "Username"
+- Enter "" in the "Username" field
+- Change the value in "Username"
+- Click on "Password for all users:
+secret_sauce"
+- Click on "Password"
+- Enter "" in the "Password" field
+- Change the value in "Password"
+- Click on "login-button"
+
+Page: [https://www.saucedemo.com/inventory.html]
+- Click on "Sauce Labs Backpack
+carry.allTheThings() with the sleek, streamlined Sly Pack that melds uncompromising style with unequaled laptop and tablet protection.
+$29.99
+Add to cart"
+- Click on "add-to-cart-sauce-labs-backpack"
+- Click on "add-to-cart-sauce-labs-bike-light"
+
+Page: [https://www.saucedemo.com/cart.html]
+- Click on "2"
+
+Page: [https://www.saucedemo.com/checkout-step-one.html]
+- Click on "checkout"
+- Click on "First Name"
+- Enter "" in the "First Name" field
+- Change the value in "First Name"
+- Enter "" in the "Last Name" field
+- Change the value in "Last Name"
+- Enter "" in the "Zip/Postal Code" field
+- Change the value in "Zip/Postal Code"
+- Click on "continue"

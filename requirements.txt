@@ -28,7 +28,6 @@ httpcore
 httpx
 idna
 iniconfig
-ipykernel
 ipython
 ipython-pygments-lexers
 jedi
@@ -38,8 +37,6 @@ jsonpatch
 jsonpointer
 jsonschema
 jsonschema-specifications
-jupyter-client
-jupyter-core
 langchain-core
 langchain-openai
 langsmith
@@ -74,7 +71,6 @@ pyopenssl
 pypdf2
 pyperclip
 pytesseract
-pytest
 python-dateutil
 python-dotenv
 pytz
