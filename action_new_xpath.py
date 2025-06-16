@@ -170,102 +170,107 @@ if st.session_state.checkbox2_state:
 
 if st.session_state.checkbox3_state:
     with st.expander("🧮 E2E Test Case Generator"):
-        
+
         st.title("E2E Test Case Generation")
-        st.subheader("Click on the images button to add them in order. Click 'Deselect' to remove:")
-        
-        image_files = [f for f in os.listdir(page_screenshot_folder) if
-                    f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif'))]
-        cols = st.columns(5)
-        for idx, image_file in enumerate(image_files):
-            with cols[idx % 5]:
-                st.image(os.path.join(page_screenshot_folder, image_file), width=100)
-                if image_file not in st.session_state.selected_images:
-                    if st.button(f"{image_file}", key=f"{image_file}"):
-                        st.session_state.selected_images.append(image_file)
+
+        option = st.radio(
+            "Choose your Flow with:",
+            ('Documents', 'Recorded_details')
+        )
+
+        if option == 'Recorded_details':
+            # Show image selection and prompt box
+            st.markdown("**Select Images (Mandatory)** <span style='color:red;'>*</span>", unsafe_allow_html=True)
+            image_files = [f for f in os.listdir(page_screenshot_folder) if
+                           f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif'))]
+            cols = st.columns(5)
+            for idx, image_file in enumerate(image_files):
+                with cols[idx % 5]:
+                    st.image(os.path.join(page_screenshot_folder, image_file), width=100)
+                    if image_file not in st.session_state.selected_images:
+                        if st.button(f"{image_file}", key=f"{image_file}"):
+                            st.session_state.selected_images.append(image_file)
+                    else:
+                        if st.button(f"Deselect {image_file}", key=f"deselect_{image_file}"):
+                            st.session_state.selected_images.remove(image_file)
+
+            if st.session_state.selected_images:
+                st.write("### Selected images in order:")
+                for i, img_name in enumerate(st.session_state.selected_images, 1):
+                    st.write(f"{i}. {img_name}")
+
+            if st.button("Clear All Selection"):
+                st.session_state.selected_images = []
+            st.markdown("**Enter the prompt Functional Test Case** <span style='color:red;'>*</span>",
+                        unsafe_allow_html=True)
+            prompt = st.text_area('', '')
+            st.markdown("**Please select relevent action file(Optional)**", unsafe_allow_html=True)
+            Action_data = utils.select_and_read_text_files(Action_collection)
+
+        elif option == 'Documents':
+            # Show only document upload section
+            # st.write("Upload a PDF, Word, or Excel document:")
+            st.markdown("**Upload a PDF, Word, or Excel document** <span style='color:red;'>*</span>",
+                        unsafe_allow_html=True)
+            uploaded_file = st.file_uploader("", type=['pdf', 'docx', 'xlsx'])
+
+            if uploaded_file is not None:
+                if utils.allowed_file(uploaded_file.name, ['pdf']):
+                    st.success("PDF file uploaded successfully!")
+                elif utils.allowed_file(uploaded_file.name, ['docx']):
+                    st.success("Word file uploaded successfully!")
+                elif utils.allowed_file(uploaded_file.name, ['xlsx']):
+                    st.success("Excel file uploaded successfully!")
                 else:
-                    if st.button(f"Deselect {image_file}", key=f"deselect_{image_file}"):
-                        st.session_state.selected_images.remove(image_file)
-
-        if st.session_state.selected_images:
-            st.write("### Selected images in order:")
-            for i, img_name in enumerate(st.session_state.selected_images, 1):
-                st.write(f"{i}. {img_name}")
-
-        if st.button("Clear All Selection"):
-            st.session_state.selected_images = []
-        # A prompt text box
-        prompt = st.text_area('Enter the prompt Functional Test Case', '')
-        # Action_data_folder = r"C:\Users\sathanantham.aru\PycharmProjects\PythonProject\output\Action_collection"
-        Action_data = utils.select_and_read_text_files(Action_collection)
-        extracted_data=""
-        st.write("Upload a PDF, Word, or Excel document:")
-
-        # Uploading a PDF/DOC/EXCEL file code
-        uploaded_file = st.file_uploader("Choose a file", type=['pdf', 'docx', 'xlsx'])
-
-        if uploaded_file is not None:
-            if utils.allowed_file(uploaded_file.name, ['pdf']):
-                st.write("PDF file uploaded successfully!")
-                # You can process PDF file here
-            elif utils.allowed_file(uploaded_file.name, ['docx']):
-                st.write("Word file uploaded successfully!")
-                # You can process Word file here
-            elif utils.allowed_file(uploaded_file.name, ['xlsx']):
-                st.write("Excel file uploaded successfully!")
-                # You can process Excel file here
-            else:
-                st.write("Unsupported file format. Please upload a PDF, Word, or Excel document.")
-
-            #st.write(extracted_data)
-
-
+                    st.error("Unsupported file format.")
         if st.button("Generate Functional Test Cases"):
             # st.write(Action_data)
+            if option == 'Recorded_details':
+                if st.session_state.selected_images and prompt:
+                    # Construct navigation as a comma-separated string
+                    navigation = ', '.join(st.session_state.selected_images)
+                    # st.write(navigation)
 
-            if st.session_state.selected_images and prompt:
-                # Construct navigation as a comma-separated string
-                navigation = ', '.join(st.session_state.selected_images)
-                # st.write(navigation)
+                    # Finding images in the pages folder and extracting text using pytesseract
+                    image_data = ""
+                    for image_name in st.session_state.selected_images:
+                        image_path = os.path.join(page_screenshot_folder, image_name)
+                        if os.path.exists(image_path):
+                            # Display the uploaded image
+                            image = Image.open(image_path)
+                            st.image(image, caption=image_name, use_container_width=True)
 
-                # Finding images in the pages folder and extracting text using pytesseract
-                image_data = ""
-                for image_name in st.session_state.selected_images:
-                    image_path = os.path.join(page_screenshot_folder, image_name)
-                    if os.path.exists(image_path):
-                        # Display the uploaded image
-                        image = Image.open(image_path)
-                        st.image(image, caption=image_name, use_container_width=True)
-
-                        # Extract text from the image using pytesseract
-                        try:
-                            extracted_text = pytesseract.image_to_string(image)
-                            if extracted_text:
-                                image_data += f"\nImage: {image_name}\nExtracted Text: {extracted_text}\n"
-                            else:
-                                image_data += f"\nImage: {image_name}\nExtracted Text: No text found\n"
-                        except Exception as e:
-                            st.error(f"Error extracting text from {image_name}: {e}")
-                    else:
-                        st.error(f"Image not found: {image_name}")
-                image_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {image_data} """
-                print(image_prompt)
-                image_data_processed = utils.get_queries_from_ai_updated(image_prompt)
-                print(image_data_processed)
-                action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
-                action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
-                print(action_data_processed)
-                if not action_data_processed:
-                    action_data_processed=None
-                constructedprompt=utils.generate_pom_from_excel_testcases("Test_case_generation",navigation,image_data_processed,action_data_processed,prompt)
-                prompt_response = utils.get_queries_from_ai_updated(constructedprompt)
-                st.code(prompt_response)
-                utils.covert_response_to_testcases(prompt_response, Test_case_collection)
-            else:
-                if uploaded_file is not None:
+                            # Extract text from the image using pytesseract
+                            try:
+                                extracted_text = pytesseract.image_to_string(image)
+                                if extracted_text:
+                                    image_data += f"\nImage: {image_name}\nExtracted Text: {extracted_text}\n"
+                                else:
+                                    image_data += f"\nImage: {image_name}\nExtracted Text: No text found\n"
+                            except Exception as e:
+                                st.error(f"Error extracting text from {image_name}: {e}")
+                        else:
+                            st.error(f"Image not found: {image_name}")
+                    image_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {image_data} """
+                    print(image_prompt)
+                    image_data_processed = utils.get_queries_from_ai_updated(image_prompt)
+                    print(image_data_processed)
+                    action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
+                    action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
+                    print(action_data_processed)
+                    if not action_data_processed:
+                        action_data_processed = None
+                    constructedprompt = utils.generate_pom_from_excel_testcases("Test_case_generation", navigation,
+                                                                                image_data_processed, action_data_processed,
+                                                                                prompt)
+                    prompt_response = utils.get_queries_from_ai_updated(constructedprompt)
+                    st.code(prompt_response)
+                    utils.covert_response_to_testcases(prompt_response, Test_case_collection)
+            elif option == 'Documents' and uploaded_file is not None:
                     extracted_data = utils.extract_text_from_pdf(uploaded_file)
-                    constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document", extracted_data)
-                    prompt_response=utils.get_queries_from_ai_updated(constructedprompt)
+                    constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document",
+                                                                                     extracted_data)
+                    prompt_response = utils.get_queries_from_ai_updated(constructedprompt)
                     st.code(prompt_response)
                     utils.covert_response_to_testcases(prompt_response, Test_case_collection)
 if st.session_state.checkbox4_state:

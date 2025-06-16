@@ -7,7 +7,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 import os
 import threading
 import time
-import Utilities_Xpath as utils
+import Utilities_Xpath_Latest as utils
 import utils_action as action_utils
 from PIL import Image
 from Utilities import *
@@ -219,14 +219,13 @@ if st.session_state.checkbox1_state:
                 #elements_collected = data["collected_elements"]
                 raw_prompt = utils.get_queries_from_ai("Actionxpath", st.session_state.xpath_collection)
                 xpath_dict = utils.filter_duplicate_xpaths(utils.selecting_xpath(raw_prompt))
-                st.session_state.selected_xpaths = utils.adding_xapth_user_view(xpath_dict)
-                if st.button("Add Selected XPaths to Excel"):
-                    print("going inside add excel")
-                    print(st.session_state.selected_xpaths)
-                    if st.session_state.selected_xpaths:
-                        print("going inside add excel")
-                        utils.adding_selected_xapth_excel(page_name)
-                        st.success("🧾 XPath data saved for all visited pages.")
+                st.session_state.selected_xpath=utils.adding_xapth_user_view(xpath_dict)
+        if st.session_state.selected_xpaths :
+            if st.button("Add Selected XPaths to Excel"):
+                print("going inside add excel")
+                print(st.session_state.selected_xpaths)
+                utils.adding_selected_xapth_excel(page_name)
+                st.success("🧾 XPath data saved for all visited pages.")
 
 
 # Create 6 columns

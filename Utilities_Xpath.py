@@ -682,7 +682,7 @@ def select_and_read_text_files(folder_path):
         return {}
 
     # Step 2: Let the user select multiple files
-    selected_files = st.multiselect("Please select relevent action file ", txt_files)
+    selected_files = st.multiselect("", txt_files)
 
     # Step 3: Read contents of selected files
     file_contents = {}
