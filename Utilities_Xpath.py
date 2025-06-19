@@ -1,5 +1,6 @@
 import os
 from typing import Union, IO
+from github import Github, GithubException
 import yaml
 import PyPDF2
 import random
@@ -96,7 +97,7 @@ def create_java_file(file_name: str, file_extension: str,response):
         file.write(response)
 
     st.write(f"✅ page file script generated: {full_file_path}")
-def create_test_file(file_name: str, file_extension: str,response):
+def create_test_file(Test_file_location,file_name: str, file_extension: str,response):
     # Ensure the file extension is .java
     if not file_extension.startswith("."):
         if file_extension =="java":
@@ -107,7 +108,7 @@ def create_test_file(file_name: str, file_extension: str,response):
             file_extension = f".{file_extension}"
 
     # Full file path with specified directory
-    full_file_path = os.path.join(Test_file_generator, f"{file_name}{file_extension}")
+    full_file_path = os.path.join(Test_file_location, f"{file_name}{file_extension}")
 
     with open(full_file_path, "w") as file:
         file.write(response)
@@ -727,26 +728,47 @@ def select_and_read_text_files_xpath(type, folder_path):
                 with open(full_path, 'r', encoding='utf-8') as f:
                     file_contents[file_name] = f.read()
 
-
-            elif type == "page_test" and file_name.endswith(".py"):
+            elif type in ("page_test", "pom_file","test_file") and file_name.endswith((".py", ".java", ".cs", ".js")):
                 try:
                     with open(full_path, 'r', encoding='utf-8') as f:
                         content = f.read()
 
                     # Remove common Markdown wrappers
-                    if content.startswith("```python"):
-                        content = content.split("```python", 1)[1]
+                    for lang in ["python", "java", "csharp", "javascript"]:
+                        if content.startswith(f"```{lang}"):
+                            content = content.split(f"```{lang}", 1)[1]
+                            break  # remove only one matching wrapper
                     if "```" in content:
                         content = content.split("```", 1)[0]
 
-                    try:
-                        tree = ast.parse(content)
-                        functions = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
-                        file_contents[file_name] = functions
-                    except SyntaxError as syntax_err:
-                        st.error(
-                            f"Syntax error in {file_name}:\nLine {syntax_err.lineno} - {syntax_err.text.strip() if syntax_err.text else ''}")
-                        continue
+                    file_extension = os.path.splitext(file_name)[1].lower()
+
+                    # Process based on file type
+                    if file_extension == ".py":
+                        try:
+                            tree = ast.parse(content)
+                            functions = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
+                            file_contents[file_name] = functions
+                        except SyntaxError as syntax_err:
+                            st.error(
+                                f"Syntax error in {file_name}:\nLine {syntax_err.lineno} - {syntax_err.text.strip() if syntax_err.text else ''}")
+                            continue
+
+                    else:
+                        # For Java, C#, JS – just collect method/function-like definitions as lines (basic version)
+                        lines = content.splitlines()
+                        func_like_lines = []
+                        for line in lines:
+                            line_strip = line.strip()
+                            # crude method detection for other languages
+                            if file_extension == ".java" and (" void " in line_strip or line_strip.endswith(");")):
+                                func_like_lines.append(line_strip)
+                            elif file_extension == ".cs" and (
+                                    " void " in line_strip or "public" in line_strip or "private" in line_strip):
+                                func_like_lines.append(line_strip)
+                            elif file_extension == ".js" and ("function " in line_strip or "=>" in line_strip):
+                                func_like_lines.append(line_strip)
+                        file_contents[file_name] = func_like_lines
 
                 except Exception as read_err:
                     st.error(f"Failed to read {file_name}: {read_err}")
@@ -985,3 +1007,28 @@ def extract_page_file_info_from_file(file_obj):
             "methods": [],
             "xpaths": []
         }
+
+
+def push_file_to_github(file_path, file_content, repo, branch):
+    try:
+        existing = repo.get_contents(file_path, ref=branch)
+        repo.update_file(
+            path=file_path,
+            message=f"Update {file_path}",
+            content=str(file_content),
+            sha=existing.sha,
+            branch=branch
+        )
+        st.success(f"✅ Updated: `{file_path}`")
+    except GithubException as e:
+        if e.status == 404:
+            # File doesn't exist – create it
+            repo.create_file(
+                path=file_path,
+                message=f"Upload {file_path}",
+                content=str(file_content),
+                branch=branch
+            )
+            st.success(f"🆕 Created: `{file_path}`")
+        else:
+            st.error(f"❌ Error for `{file_path}`: {e.data['message']}")

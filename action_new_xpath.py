@@ -21,6 +21,7 @@ output_folder = os.path.join(current_path, "output")
 Action_collection = os.path.join(output_folder, "Action_collection")
 Page_collection = os.path.join(output_folder, "page_file_generator")
 Test_case_collection = os.path.join(output_folder, "Test_Cases_collection")
+Test_file_generator = os.path.join(output_folder, "test_file_generator")
 feature_file_collection = os.path.join(output_folder, "Feature_file_generator")
 os.makedirs(Page_collection, exist_ok=True)
 os.makedirs(Test_case_collection, exist_ok=True)
@@ -28,6 +29,7 @@ os.makedirs(Action_collection, exist_ok=True)
 os.makedirs(feature_file_collection, exist_ok=True)
 page_screenshot_folder = os.path.join(Action_collection, "page_screenshot")
 os.makedirs(page_screenshot_folder, exist_ok=True)
+os.makedirs(Test_file_generator, exist_ok=True)
 
 st.set_page_config(
     page_title="TigerQE One Stop AI Solution",
@@ -466,26 +468,31 @@ if st.session_state.checkbox4_state:
                                 # if st.button("Continue"):
                                 #     utils.scroll_and_focus()
 
-if st.session_state.checkbox5_state:
-    with st.expander("🧾 Test Automation Script Generator"):
-        st.title("Automation Script Generator using page file and test cases")
-        test_file_name=st.text_input("Enter the test File Name")
-        test_file_language = st.selectbox("Select Language for test file", ["java", "python", "c#", "javascript"])
-        page_files_content = utils.select_and_read_text_files_xpath("page_test", Page_collection)
-        test_files_content = utils.select_and_read_text_files_xpath("testcase_test",Test_case_collection)
-        if st.button("Generate_Test_Script"):
-            Prompt = utils.generate_test_script("Test_File_Action", test_file_language, page_files_content,test_files_content)
-            test_script_response= utils.get_queries_from_ai_updated(Prompt)
-            #st.write(test_script_response)
-            utils.create_test_file(test_file_name, test_file_language, test_script_response)
+    if st.session_state.checkbox5_state:
+        with st.expander("🧾 Test Automation Script Generator"):
+            st.title("Automation Script Generator using page file and test cases")
+            test_file_name=st.text_input("Enter the test File Name")
+            test_file_language = st.selectbox("Select Language for test file", ["java", "python", "c#", "javascript"])
+            page_files_content = utils.select_and_read_text_files_xpath("page_test", Page_collection)
+            test_files_content = utils.select_and_read_text_files_xpath("testcase_test",Test_case_collection)
+            if st.button("Generate_Test_Script"):
+                Prompt = utils.generate_test_script("Test_File_Action", test_file_language, page_files_content,test_files_content)
+                test_script_response= utils.get_queries_from_ai_updated(Prompt)
+                #st.write(test_script_response)
+                utils.create_test_file(Test_file_generator,test_file_name, test_file_language, test_script_response)
 
 if st.session_state.checkbox6_state:
+    from github import Github, GithubException  # Make sure GithubException is imported
+
     with st.expander("⚙️ GitHub 📡 Automation Bridge"):
         st.title("Upload code to Repository")
-        pytest_files = utils.select_and_read_text_files_xpath("page_test", utils.Test_file_generator)
+
+        pytest_files = utils.select_and_read_text_files_xpath("pom_file", utils.Test_file_generator)
         repo_pytest_name = st.text_input("Enter folder name in repo:", value="test_web/tests/test_cases")
-        pom_files = utils.select_and_read_text_files_xpath("page", utils.Page_file_generator)
+
+        pom_files = utils.select_and_read_text_files_xpath("test_file", utils.Page_file_generator)
         repo_pom_name = st.text_input("Enter folder name in repo:", value="test_web/src/pom/pages")
+
         if st.button("Push to Repo"):
 
             g = Github(os.getenv("GITHUB_ACCESS_TOKEN"))
@@ -494,31 +501,18 @@ if st.session_state.checkbox6_state:
 
             if repo_pom_name and repo_pytest_name:
 
-                pom_file_key = next(iter(pom_files))
-                pom_dest_path = f"{repo_pom_name}/{pom_file_key}"
-                pytest_file_key = next(iter(pytest_files))
-                pytest_dest_path = f"{repo_pytest_name}/{pytest_file_key}"
+                # Push all POM files
+                for file_name, content in pom_files.items():
+                    pom_dest_path = f"{repo_pom_name.strip('/')}/{file_name}"
+                    utils.push_file_to_github(pom_dest_path, content, repo, branch)
 
-                # Check if file exists
-                try:
-                    existing_pom_file = repo.get_contents(pom_dest_path, ref=branch)
-                    existing_pytest_file = repo.get_contents(pytest_dest_path, ref=branch)
-                    # Update if it exists
-                    repo.update_file(pom_dest_path, f"Update {pom_dest_path}", str(pom_files[pom_file_key]), 
-                                     existing_pom_file.sha, branch=branch)
-                    repo.update_file(pytest_dest_path, f"Update {pytest_dest_path}", str(pytest_files[pytest_file_key]),
-                                     existing_pytest_file.sha, branch=branch)
-                    print("Files updated successfully Github.")
-                except:
-                    # Create new file if it does not exist
-                    repo.create_file(pom_dest_path, f"Upload {pom_dest_path}", 
-                                     str(pom_files[pom_file_key]), branch=branch)
-                    repo.create_file(pytest_dest_path, f"Upload {pytest_dest_path}", 
-                                     str(pytest_files[pytest_file_key]), branch=branch)
-                st.success(f"Files pushed successfully Github.")
+                # Push all pytest files
+                for file_name, content in pytest_files.items():
+                    pytest_dest_path = f"{repo_pytest_name.strip('/')}/{file_name}"
+                    utils.push_file_to_github(pytest_dest_path, content, repo, branch)
+
             else:
-                st.warning("Please enter a folder name in the repo.")
-
+                st.warning("⚠️ Please enter both folder names in the repo.")
 
 st.markdown("""    
     ### Contact Us
