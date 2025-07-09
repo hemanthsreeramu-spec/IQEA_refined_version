@@ -4,8 +4,63 @@ import re
 import os
 from collections import defaultdict
 from urllib.parse import urlparse
+JS_EVENT_LISTENER="""(function () {
+    if (!window.recordedActions) {
+        window.recordedActions = [];
+    }
 
-JS_EVENT_LISTENER = """(function() {
+    function getXPath(el) {
+        const getPos = e => {
+            let pos = 1;
+            while (e.previousElementSibling) {
+                e = e.previousElementSibling;
+                pos++;
+            }
+            return pos;
+        };
+
+        const parts = [];
+        while (el && el.nodeType === Node.ELEMENT_NODE) {
+            let index = getPos(el);
+            let tag = el.nodeName.toLowerCase();
+            parts.unshift(`${tag}[${index}]`);
+            el = el.parentNode;
+        }
+        return '/' + parts.join('/');
+    }
+
+    function recordAction(type, target) {
+        const xpath = getXPath(target);
+        const label = target.getAttribute("aria-label") || target.name || target.id || target.innerText || target.placeholder || target.value || target.type;
+        const value = (type === "input" || type === "change") ? target.value || "" : "";
+        const url = window.location.href;
+
+        // Prevent duplicates
+        const exists = window.recordedActions.some(action => action.xpath === xpath && action.action === type);
+        if (!exists) {
+            window.recordedActions.push({ action: type, xpath, label: label?.trim(), value, url });
+        }
+    }
+
+    document.addEventListener('click', e => {
+        recordAction('click', e.target);
+    });
+
+    document.addEventListener('change', e => {
+        recordAction('change', e.target);
+    });
+
+    // On blur, capture final input value
+    document.addEventListener('blur', e => {
+        if (e.target.tagName.toLowerCase() === 'input' || e.target.tagName.toLowerCase() === 'textarea') {
+            recordAction('input', e.target);
+        }
+    }, true);  // useCapture = true to catch blur bubbling up
+
+    console.log("Recording actions...");
+})();
+"""
+JS_EVENT_LISTENER_1 = """(function() {
     if (!window.recordedActions) {
         window.recordedActions = [];
     }

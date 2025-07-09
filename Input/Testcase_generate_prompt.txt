@@ -1,32 +1,32 @@
 You are an expert QA Test Case Generator.
 
-Your task is to generate a comprehensive set of realistic, end-to-end functional test cases to validate a target page or feature using the following inputs:
+Your task is to generate a comprehensive, logically ordered, end-to-end set of functional test cases using the following inputs:
 
 Inputs:
 - Navigation Flow: {navigation}
-- UI Layout (Image Context): {image_data_processed}
+- UI Layout from Screen Images: {image_data_processed}
 {action_data_processed}
-- Final Requirement to Validate: {requirements}
+
+Requirements:
+{requirements}
 
 Instructions:
-1. Each test case must follow a complete and realistic user flow from the beginning (such as login) to the final screen. Do not skip required steps like login or navigation.
-2. Cover all elements on the final screen, including input fields, buttons, dropdowns, tables, and any other UI elements.
-3. Include a variety of test types: positive, negative, boundary cases, edge cases, and retries.
-4. Use orthogonal array testing to ensure pairwise input combinations with maximum coverage and minimal redundancy.
-5. For input fields, test valid, invalid, empty, long, and special character values.
-6. Include both frontend UI validations and backend or system expected behavior.
+1. Create complete user journeys as test cases, **starting from login or the initial screen and ending at the final screen (e.g., confirmation, success, or summary)**.
+2. **At least one test case must represent a full end-to-end flow across all screens.**
+3. If recorded user actions (`action_data_processed`) are available, use them to guide step-by-step flows. Otherwise, infer the realistic order from `navigation` and `image_data_processed`.
+4. Do not skip any necessary steps like login, intermediate forms, or navigation transitions.
+5. Ensure that test cases collectively cover all key UI elements like buttons, fields, dropdowns, tables, popups, etc.
+6. Include a diverse mix of test types: positive, negative, edge cases, retries, invalid inputs, and boundary scenarios.
+7. Use orthogonal pairwise input coverage to minimize redundancy but ensure coverage.
+8. Cover both frontend behavior (validations, messages) and backend/system outcomes (data saved, redirection, etc.)
 
 Output Format:
-Strictly Return the output as Markdown-style table fro each and every test cases and please refer the below parameters for the column names:
-
-Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type
-
-- Status should be "New"
-- Type should be "Manual"
-- Include at least 15 to 20 complete test cases, each with 2 to 6 logical steps
-- Ensure all test cases are logically correct and follow proper navigation sequence
-- Do not include any markdown, explanation, or summary
+- Return the test cases strictly as Markdown-style tables using these columns:
+  `Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type`
+- Status should be `"New"` and Type should be `"Manual"`
+- Include **15–20 test cases total**, each with **2–6 steps**
+- Ensure **at least one test case spans the full end-to-end flow**
+- Do not include any explanations, markdown headings, or summaries—**only return the tables**
 
 Begin now:
-Generate test cases for the following requirement:
-{requirements}
+Generate test cases based on the above inputs.

@@ -1,7 +1,11 @@
+import subprocess
+
 from github import Github
+from selenium.webdriver.chrome.service import Service
 import streamlit as st
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.wait import WebDriverWait
 import os
 import threading
@@ -92,11 +96,16 @@ page_url = st.text_input("Enter the URL of the page:")
 st.session_state.page_url = page_url
 if st.button("Open Browser"):
     if page_url:
+        chromedriver_path = os.path.join(input_folder, "chromedriver.exe")
         chrome_options = Options()
         chrome_options.add_argument("--remote-debugging-port=9222")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
+        #chrome_options.binary_location = chromedriver_path
+        #service = Service(executable_path=chromedriver_path)
+        #service = Service(ChromeDriverManager().install())
         st.session_state.driver = webdriver.Chrome(options=chrome_options)
+        #st.session_state.driver = webdriver.Chrome(service=service, options=chrome_options)
         st.session_state.driver.get(page_url)
         st.session_state.driver.maximize_window()
         WebDriverWait(st.session_state.driver, 30).until(utils.is_page_loaded)
@@ -107,6 +116,7 @@ if st.session_state.checkbox1_state:
     with st.expander("🔴 User Workflow Recorder"):
         # 2. Start Recording
         st.subheader("Record User Actions & Capture Screenshots of User Navigation")
+
         if not st.session_state.recording_started and st.button("🎥 Start Recording"):
             if st.session_state.driver:
                 st.session_state.actions = [] # reset if previously recorded
@@ -132,7 +142,7 @@ if st.session_state.checkbox1_state:
             st.session_state.stop_monitor["stop"] = True
             if st.session_state.monitor_thread:
                 st.session_state.monitor_thread.join()
-            st.success(f"Recording stopped. {len(st.session_state.actions)} actions captured.")
+            st.success(f"Recording stopped. performed actions are captured.")
             actions=[]
 
         # 4. Show and Save Actions
@@ -141,6 +151,60 @@ if st.session_state.checkbox1_state:
             page_name = st.text_input("Enter Page Name for Saving the Workflow:")
             if st.button("💾 Save Workflow"):
                 workflow_text = action_utils.generate_workflow(st.session_state.actions)
+                #Extract element metadata
+                all_elements = [action.get("element") for action in st.session_state.actions if action.get("element")]
+                #Deduplicate
+                unique_elements = utils.deduplicate_element_records(all_elements)
+                prompt = f"""
+                You are an expert in generating reliable and unique XPath expressions.
+
+                Please generate the most accurate and robust XPath for each of the following HTML elements:
+
+                {unique_elements}
+
+                📝 Notes:
+                - Only return the XPath expressions — no explanations or additional text.
+                - You may use XPath axes (e.g., `following`, `preceding`, `ancestor`, `sibling`, etc.) to enhance precision and reliability.
+                - Ensure each XPath is unique and directly targets the intended element.
+
+                Respond with only one XPath per element, in plain text.
+                """
+                selected_action_xpath=utils.get_queries_from_ai_updated(prompt)
+                test_script_prompt=prompt = f"""
+You are a professional QA Automation Engineer.
+
+I have two inputs:
+1. A list of user actions recorded as a human-readable workflow.
+2. A corresponding list of unique and robust XPath expressions for each UI element.
+
+Your task is to generate a fully executable Python test script using Selenium WebDriver that performs all the actions in sequence.
+
+🧩 Inputs:
+- Workflow Steps:
+{workflow_text}
+
+- XPath Mapping:
+{selected_action_xpath}
+
+📌 Instructions:
+- Use Python 3 with Selenium WebDriver.
+- Import only required standard libraries (`time`, `unittest`, etc.) and `selenium` modules.
+- Start with browser setup and URL navigation (use a placeholder like `https://example.com`).
+- Use `webdriver.Chrome()` and proper waits (`WebDriverWait` or `time.sleep()` where needed).
+- For each workflow step, use the mapped XPath to perform the action (`send_keys`, `click`, etc.).
+- Structure the script inside a `unittest.TestCase` class with a `setUp`, `test_workflow`, and `tearDown`.
+- Ensure the script is directly runnable: if I copy this into a `.py` file and execute it in a Selenium environment, it should work.
+
+🚫 DO NOT include markdown backticks (like ```python or ```) around the output.
+✅ Just return raw Python code.
+
+Now generate the Python Selenium test script.
+"""
+
+
+                Workflow_test_file=utils.get_queries_from_ai_updated(test_script_prompt)
+                utils.create_java_file(page_name, "python", Workflow_test_file)
+                
                 if page_name:
                     filename = os.path.join(Action_collection, f"{page_name}_actions.txt")
                     with open(filename, "w") as f:
@@ -153,7 +217,15 @@ if st.session_state.checkbox1_state:
                     st.session_state.show_form = False  # Reset form visibility
                 else:
                     st.warning("⚠ Please enter a name for the workflow.")
-
+                if st.button("▶️ Run Test"):
+                    test_file_path = os.path.join(Page_collection, "newworkflow_saucedemo.py")
+                    try:
+                            result = subprocess.run(["python", test_file_path], capture_output=True, text=True)
+                            st.code(result.stdout)  # shows output in Streamlit
+                            if result.stderr:
+                                st.error("Errors:\n" + result.stderr)
+                    except Exception as e:
+                        st.error(f"⚠️ Failed to run script: {e}")
 if st.session_state.checkbox2_state:
     with st.expander("🧾 BDD Feature File Generator"):
         st.title("Feature file Generator using recorded actions")

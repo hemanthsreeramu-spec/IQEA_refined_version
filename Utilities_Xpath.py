@@ -96,7 +96,7 @@ def create_java_file(file_name: str, file_extension: str,response):
     with open(full_file_path, "w") as file:
         file.write(response)
 
-    st.write(f"✅ page file script generated: {full_file_path}")
+    st.write(f"✅ script generated: {full_file_path}")
 def create_test_file(Test_file_location,file_name: str, file_extension: str,response):
     # Ensure the file extension is .java
     if not file_extension.startswith("."):
@@ -839,39 +839,137 @@ def markdown_to_dataframe(markdown_text):
     except Exception as e:
         print(f"❌ Failed to convert markdown to DataFrame: {e}")
         return pd.DataFrame()
-def covert_response_to_testcases(markdown_text,test_collection):
-    # STEP 1: Strip markdown code fencing (``` or ```markdown)
+# def covert_response_to_testcases(markdown_text,test_collection):
+#     # STEP 1: Strip markdown code fencing (``` or ```markdown)
+#     if markdown_text.startswith("```"):
+#         markdown_text = "\n".join(
+#             line for line in markdown_text.splitlines()
+#             if not line.strip().startswith("```")
+#         )
+#     # STEP 2: Clean and parse markdown table
+#     lines = markdown_text.strip().split('\n')
+#     cleaned_lines = [line for line in lines if not set(line.strip()).issubset(set('|- '))]
+#     cleaned_text = "\n".join(cleaned_lines)
+#
+#     df = pd.read_csv(StringIO(cleaned_text), sep='|', engine='python')
+#     df = df.dropna(axis=1, how='all')
+#     df.columns = [col.strip() for col in df.columns]
+#     # df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+#     for col in df.select_dtypes(include='object').columns:
+#         df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+#
+#     # STEP 3: Fill missing Test Case Names
+#     df['Test Case Name'] = df['Test Case Name'].replace('', pd.NA).ffill()
+#
+#
+#     # STEP 5: Write each test case into a separate Excel file
+#     for test_case, group in df.groupby("Test Case Name"):
+#         file_name = f"{test_case.strip()[:50]}.xlsx"  # Truncate for safety
+#         safe_file_name = "".join(c for c in file_name if c.isalnum() or c in "._- ()").rstrip()
+#         path = os.path.join(test_collection, safe_file_name)
+#         group.to_excel(path, index=False)
+#
+#     print(f"✅ Created individual Excel files in folder: {output_folder}")
+
+def covert_response_to_testcases(markdown_text, test_collection):
+    print("\n🚀 Starting test case parsing...")
+
+    # Ensure output directory exists
+    if not os.path.exists(test_collection):
+        os.makedirs(test_collection)
+        print(f"📁 Created output directory: {test_collection}")
+
+    # Remove markdown code fences
     if markdown_text.startswith("```"):
         markdown_text = "\n".join(
             line for line in markdown_text.splitlines()
             if not line.strip().startswith("```")
         )
-    # STEP 2: Clean and parse markdown table
-    lines = markdown_text.strip().split('\n')
-    cleaned_lines = [line for line in lines if not set(line.strip()).issubset(set('|- '))]
-    cleaned_text = "\n".join(cleaned_lines)
 
-    df = pd.read_csv(StringIO(cleaned_text), sep='|', engine='python')
-    df = df.dropna(axis=1, how='all')
-    df.columns = [col.strip() for col in df.columns]
-    # df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
-    for col in df.select_dtypes(include='object').columns:
-        df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+    # STEP 1: Try to detect if it's a big single table
+    table_lines = []
+    for line in markdown_text.strip().splitlines():
+        line = line.strip()
+        if "|" in line and not set(line).issubset(set("|- ")):
+            table_lines.append(line)
 
-    # STEP 3: Fill missing Test Case Names
-    df['Test Case Name'] = df['Test Case Name'].replace('', pd.NA).ffill()
+    if len(table_lines) >= 2 and "Test Case Name" in table_lines[0]:
+        # Likely a single big table
+        table_text = "\n".join(table_lines)
+        try:
+            df = pd.read_csv(StringIO(table_text), sep='|', engine='python')
+            df = df.dropna(axis=1, how='all')
+            df.columns = [col.strip() for col in df.columns]
+            for col in df.select_dtypes(include='object').columns:
+                df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
 
+            # Validate 'Test Case Name'
+            if 'Test Case Name' not in df.columns:
+                raise ValueError("'Test Case Name' column missing.")
 
-    # STEP 5: Write each test case into a separate Excel file
-    for test_case, group in df.groupby("Test Case Name"):
-        file_name = f"{test_case.strip()[:50]}.xlsx"  # Truncate for safety
-        safe_file_name = "".join(c for c in file_name if c.isalnum() or c in "._- ()").rstrip()
-        path = os.path.join(test_collection, safe_file_name)
-        group.to_excel(path, index=False)
+            df['Test Case Name'] = df['Test Case Name'].replace('', pd.NA).ffill()
 
-    print(f"✅ Created individual Excel files in folder: {output_folder}")
+            # Group by 'Test Case Name'
+            for test_case, group in df.groupby('Test Case Name'):
+                file_name = f"{test_case.strip()[:50]}.xlsx"
+                safe_file_name = "".join(c for c in file_name if c.isalnum() or c in "._- ()").rstrip()
+                path = os.path.join(test_collection, safe_file_name)
+                group.to_excel(path, index=False)
+                print(f"✅ Saved: {safe_file_name}")
 
+            print(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test case files.")
+            return
 
+        except Exception as e:
+            print(f"❌ Failed to parse single-table format: {e}")
+            print("🔁 Attempting markdown section fallback...")
+
+    # STEP 2: Fallback to splitting by markdown sections (#### **Test Case Name**)
+    test_cases = re.split(r'####\s+\*\*(.*?)\*\*', markdown_text)
+    if len(test_cases) < 3:
+        print("❌ No valid markdown headings found either. Exiting.")
+        return
+
+    for i in range(1, len(test_cases), 2):
+        test_case_name = test_cases[i].strip()
+        test_case_body = test_cases[i + 1]
+
+        lines = []
+        for line in test_case_body.strip().splitlines():
+            line = line.strip()
+            if "|" in line and not set(line).issubset(set("|- ")):
+                lines.append(line)
+
+        if not lines:
+            print(f"⚠️ No valid table in: {test_case_name}")
+            continue
+
+        table_text = "\n".join(lines)
+
+        try:
+            df = pd.read_csv(StringIO(table_text), sep='|', engine='python')
+            df = df.dropna(axis=1, how='all')
+            df.columns = [col.strip() for col in df.columns]
+
+            for col in df.select_dtypes(include='object').columns:
+                df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+
+            if 'Test Case Name' not in df.columns:
+                df.insert(0, 'Test Case Name', test_case_name)
+            else:
+                df['Test Case Name'] = df['Test Case Name'].replace('', pd.NA).ffill()
+
+            file_name = f"{test_case_name.strip()[:50]}.xlsx"
+            safe_file_name = "".join(c for c in file_name if c.isalnum() or c in "._- ()").rstrip()
+            path = os.path.join(test_collection, safe_file_name)
+            df.to_excel(path, index=False)
+            print(f"✅ Saved: {safe_file_name}")
+
+        except Exception as e:
+            print(f"❌ Failed to parse section: {test_case_name}")
+            print(f"   Error: {e}")
+
+    print(f"\n✅ Completed saving all test cases to: {test_collection}")
 def create_testcase_in_Excel(raw_response, test_location):
     os.makedirs(test_location, exist_ok=True)
 
@@ -1032,3 +1130,13 @@ def push_file_to_github(file_path, file_content, repo, branch):
             st.success(f"🆕 Created: `{file_path}`")
         else:
             st.error(f"❌ Error for `{file_path}`: {e.data['message']}")
+def deduplicate_element_records(elements):
+    seen = set()
+    deduped = []
+    for el in elements:
+        # Pick a unique identifier
+        unique_key = el.get("id") or el.get("name") or el.get("attributes", {}).get("data-test") or el.get("attributes", {}).get("placeholder")
+        if unique_key and unique_key not in seen:
+            deduped.append(el)
+            seen.add(unique_key)
+    return deduped
