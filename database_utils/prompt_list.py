@@ -156,21 +156,29 @@ Inputs:
 Requirements:
 {requirements}
 
-Instructions:
-1. Start each case from login or the first screen and end at a success/confirmation screen.
-2. At least one full end-to-end case is required.
-3. Use recorded actions if available, otherwise infer from inputs.
-4. Include forms, navigation, validations, edge cases, etc.
-5. Use pairwise test coverage.
-6. Cover frontend and backend outcomes.
+Instructions(strict):
+1. Login step is mandatory as Step 1 in every test case, regardless of whether it's mentioned in the navigation flow or actions.
+
+2. Logout step is mandatory as the last step in every test case (unless the flow ends in error, timeout, or system crash).
+
+3. Even if no user actions are provided, you must infer and include all critical steps, especially login and logout.
+
+4. At least one full end-to-end scenario is required.
+
+5. Include validations, navigation, edge cases, form inputs, and negative tests.
+
+6. Use pairwise test coverage for field combinations.
+
+7. Cover both frontend and backend outcomes (e.g., UI response + DB/API triggers).
 
 Output Format:
 - Markdown tables using:
   Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type
 - Status = "New", Type = "Manual"
 - 15–20 test cases, each with 2–6 steps
-- No explanations, just raw tables.""",
-        "description": "Prompt for generate test cases"
+- No explanations, just raw tables."""
+
+
     },
     {
         "prompt_name": "testcasegeneratewithdoc_prompt",
@@ -181,47 +189,38 @@ Your task is to generate a comprehensive set of realistic, end-to-end functional
 Input:
 - Extracted Requirement to Validate: {requirements}
 
-Instructions:
-1. Follow realistic user flow.
-2. Test all fields, buttons, dropdowns, and outputs.
-3. Include positive, negative, boundary, edge, retry tests.
-4. Use pairwise input combination techniques.
+Instructions(strict):
+1. Login step is mandatory as Step 1 in every test case, regardless of whether it's mentioned in the navigation flow or actions.
+
+2. Logout step is mandatory as the last step in every test case (unless the flow ends in error, timeout, or system crash).
+
+3. Even if no user actions are provided, you must infer and include all critical steps, especially login and logout.
+
+4. At least one full end-to-end scenario is required.
+
+5. Include validations, navigation, edge cases, form inputs, and negative tests.
+
+6. Use pairwise test coverage for field combinations.
+
+7. Cover both frontend and backend outcomes (e.g., UI response + DB/API triggers).
+
+
 
 Output Format:
-- Markdown table with columns:
-  Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type
-- Status = "New"
-- Type = "Manual"
-- 15–20 test cases, each 2–6 steps
-- No extra output or explanation.""",
-        "description": "Prompt to generate test cases with uploaded documents"
-    },
-    {
-        "prompt_name": "testcageneartev2_prompt",
-        "prompt_text": """You are an expert QA Test Case Generator.
+Strictly return the output as a Markdown-style table for each and every test case using the following columns:
 
-Your task is to generate a comprehensive set of realistic, end-to-end functional test cases to validate a target page or feature using the following inputs:
+Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type
 
-Inputs:
-- Navigation Flow: {navigation}
-- UI Layout (Image Context): {image_data_processed}
-- User Interaction Elements (Action Data): {action_data_processed}
-- Final Requirement to Validate: {requirements}
+- Status should be "New"
+- Type should be "Manual"
+- Include at least 15 to 20 complete test cases, each with 2 to 6 logical steps
+- Ensure all test cases are logically correct and follow the implied user flow
+- Do not include any markdown, explanation, or summary
 
-Instructions:
-1. Each test case must follow a complete and realistic user flow from the beginning (such as login) to the final screen.
-2. Cover all UI elements: inputs, buttons, dropdowns, etc.
-3. Include a variety of test types: positive, negative, boundary, edge, retry.
-4. Use orthogonal array/pairwise testing for coverage.
-
-Output Format:
-- Markdown table:
-  | Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type |
-- Status = "New", Type = "Manual"
-- Each case has 2–6 steps
-- 15–20 full test cases
-- No summaries or extra text""",
-        "description": "Prompt used to generate the test cases with new version"
+Begin now:
+Generate test cases for the following extracted requirement:
+{requirements}
+"""
     }
 ]
 
