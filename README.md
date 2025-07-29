@@ -41,7 +41,13 @@ After running the above command, the Streamlit application will be available at:
 ```
 http://localhost:8501
 ```
-
+## Db Integeration
+ Please run database_utils/init_db.py - to create db session and create required table
+ run database_utils/Prompt_list.py - to add the prompts to the table 
+ Open the config/setting.ini file and chnage the source to 'database' from 'file'
+ Now run the action_new_xpath.py'
+```
+http://localhost:8501
 ## Troubleshooting
 
 * Ensure that the virtual environment is activated before running the Streamlit command.
