@@ -8,6 +8,7 @@ from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.wait import WebDriverWait
 import os
+import shutil
 import threading
 import time
 import Utilities_Xpath as utils
@@ -15,9 +16,25 @@ import utils_action as action_utils
 from PIL import Image
 from Utilities import *
 import pytesseract
+import io
 from langchain_core.messages import HumanMessage
 from langchain_openai import AzureChatOpenAI
 from dotenv import load_dotenv
+load_dotenv()
+import urllib3
+import database_utils.handler as db_handler
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+###Db
+
+#setting details - source
+from config.settings_reader import get_source
+
+source = get_source()
+
+#setting details - source
+from config.settings_reader import get_source
+
+source = get_source()
 # Setup output folder
 current_path = os.getcwd()
 input_folder = os.path.join(current_path, "Input")
@@ -89,7 +106,8 @@ if "checkbox5_state" not in st.session_state:
     st.session_state.checkbox5_state = True
 if "checkbox6_state" not in st.session_state:
     st.session_state.checkbox6_state = True
-
+if "failed_files" not in st.session_state:
+    st.session_state.failed_files = []
 st.title(" 🤖 TigerQE 'One-Stop' AI Solution")
 # 1. Open the browser
 page_url = st.text_input("Enter the URL of the page:")
@@ -155,92 +173,119 @@ if st.session_state.checkbox1_state:
                 all_elements = [action.get("element") for action in st.session_state.actions if action.get("element")]
                 #Deduplicate
                 unique_elements = utils.deduplicate_element_records(all_elements)
-                prompt = f"""
-                You are an expert in generating reliable and unique XPath expressions.
-
-                Please generate the most accurate and robust XPath for each of the following HTML elements:
-
-                {unique_elements}
-
-                📝 Notes:
-                - Only return the XPath expressions — no explanations or additional text.
-                - You may use XPath axes (e.g., `following`, `preceding`, `ancestor`, `sibling`, etc.) to enhance precision and reliability.
-                - Ensure each XPath is unique and directly targets the intended element.
-
-                Respond with only one XPath per element, in plain text.
-                """
-                selected_action_xpath=utils.get_queries_from_ai_updated(prompt)
-                test_script_prompt=prompt = f"""
-You are a professional QA Automation Engineer.
-
-I have two inputs:
-1. A list of user actions recorded as a human-readable workflow.
-2. A corresponding list of unique and robust XPath expressions for each UI element.
-
-Your task is to generate a fully executable Python test script using Selenium WebDriver that performs all the actions in sequence.
-
-🧩 Inputs:
-- Workflow Steps:
-{workflow_text}
-
-- XPath Mapping:
-{selected_action_xpath}
-
-📌 Instructions:
-- Use Python 3 with Selenium WebDriver.
-- Import only required standard libraries (`time`, `unittest`, etc.) and `selenium` modules.
-- Start with browser setup and URL navigation (use a placeholder like `https://example.com`).
-- Use `webdriver.Chrome()` and proper waits (`WebDriverWait` or `time.sleep()` where needed).
-- For each workflow step, use the mapped XPath to perform the action (`send_keys`, `click`, etc.).
-- Structure the script inside a `unittest.TestCase` class with a `setUp`, `test_workflow`, and `tearDown`.
-- Ensure the script is directly runnable: if I copy this into a `.py` file and execute it in a Selenium environment, it should work.
-
-🚫 DO NOT include markdown backticks (like ```python or ```) around the output.
-✅ Just return raw Python code.
-
-Now generate the Python Selenium test script.
-"""
-
-
-                Workflow_test_file=utils.get_queries_from_ai_updated(test_script_prompt)
-                utils.create_java_file(page_name, "python", Workflow_test_file)
+#                 prompt = f"""
+#                 You are an expert in generating reliable and unique XPath expressions.
+#
+#                 Please generate the most accurate and robust XPath for each of the following HTML elements:
+#
+#                 {unique_elements}
+#
+#                 📝 Notes:
+#                 - Only return the XPath expressions — no explanations or additional text.
+#                 - You may use XPath axes (e.g., `following`, `preceding`, `ancestor`, `sibling`, etc.) to enhance precision and reliability.
+#                 - Ensure each XPath is unique and directly targets the intended element.
+#
+#                 Respond with only one XPath per element, in plain text.
+#                 """
+#                 selected_action_xpath=utils.get_queries_from_ai_updated(prompt)
+#                 test_script_prompt=prompt = f"""
+# You are a professional QA Automation Engineer.
+#
+# I have two inputs:
+# 1. A list of user actions recorded as a human-readable workflow.
+# 2. A corresponding list of unique and robust XPath expressions for each UI element.
+#
+# Your task is to generate a fully executable Python test script using Selenium WebDriver that performs all the actions in sequence.
+#
+# 🧩 Inputs:
+# - Workflow Steps:
+# {workflow_text}
+#
+# - XPath Mapping:
+# {selected_action_xpath}
+#
+# 📌 Instructions:
+# - Use Python 3 with Selenium WebDriver.
+# - Import only required standard libraries (`time`, `unittest`, etc.) and `selenium` modules.
+# - Start with browser setup and URL navigation (use a placeholder like `https://example.com`).
+# - Use `webdriver.Chrome()` and proper waits (`WebDriverWait` or `time.sleep()` where needed).
+# - For each workflow step, use the mapped XPath to perform the action (`send_keys`, `click`, etc.).
+# - Structure the script inside a `unittest.TestCase` class with a `setUp`, `test_workflow`, and `tearDown`.
+# - Ensure the script is directly runnable: if I copy this into a `.py` file and execute it in a Selenium environment, it should work.
+#
+# 🚫 DO NOT include markdown backticks (like ```python or ```) around the output.
+# ✅ Just return raw Python code.
+#
+# Now generate the Python Selenium test script.
+# """
+#
+#
+#                 Workflow_test_file=utils.get_queries_from_ai_updated(test_script_prompt)
+#                 utils.create_java_file(page_name, "python", Workflow_test_file)
                 
                 if page_name:
-                    filename = os.path.join(Action_collection, f"{page_name}_actions.txt")
-                    with open(filename, "w") as f:
-                        f.write("\n".join(workflow_text))  # ✅ FIXED
-                    st.success(f"✅ Workflow saved: {filename}")
-                    st.download_button("⬇ Download Workflow", data="\n".join(workflow_text),
-                                    file_name=f"{page_name}_actions.txt")
-                    st.session_state.actions = []  # clear after save
-                    st.session_state.show_popup = True
-                    st.session_state.show_form = False  # Reset form visibility
-                else:
-                    st.warning("⚠ Please enter a name for the workflow.")
-                if st.button("▶️ Run Test"):
-                    test_file_path = os.path.join(Page_collection, "newworkflow_saucedemo.py")
-                    try:
-                            result = subprocess.run(["python", test_file_path], capture_output=True, text=True)
-                            st.code(result.stdout)  # shows output in Streamlit
-                            if result.stderr:
-                                st.error("Errors:\n" + result.stderr)
-                    except Exception as e:
-                        st.error(f"⚠️ Failed to run script: {e}")
+                    if source == "database":
+                        action_id = db_handler.save_action_to_db(page_name, workflow_text, "sathanantham")
+                        st.success(f"✅ Action saved to database (ID: {action_id})")
+                        #st.write(db_handler.get_action_file_by_name(page_name))
+                    elif source == "file":
+                        filename = os.path.join(Action_collection, f"{page_name}_actions.txt")
+                        with open(filename, "w") as f:
+                            f.write("\n".join(workflow_text))  # ✅ FIXED
+                        st.success(f"✅ Workflow saved: {filename}")
+                        st.download_button("⬇ Download Workflow", data="\n".join(workflow_text),
+                                        file_name=f"{page_name}_actions.txt")
+                        st.session_state.actions = []  # clear after save
+                        st.session_state.show_popup = True
+                        st.session_state.show_form = False  # Reset form visibility
+                    else:
+                        st.warning("⚠ Please enter a name for the workflow.")
+                # if st.button("▶️ Run Test"):
+                #     test_file_path = os.path.join(Page_collection, "newworkflow_saucedemo.py")
+                #     try:
+                #             result = subprocess.run(["python", test_file_path], capture_output=True, text=True)
+                #             st.code(result.stdout)  # shows output in Streamlit
+                #             if result.stderr:
+                #                 st.error("Errors:\n" + result.stderr)
+                #     except Exception as e:
+                #         st.error(f"⚠️ Failed to run script: {e}")
 if st.session_state.checkbox2_state:
     with st.expander("🧾 BDD Feature File Generator"):
         st.title("Feature file Generator using recorded actions")
         Feature_file_name = st.text_input("Enter feature file Name")
-        Action_data = utils.select_and_read_text_files_xpath("feature",Action_collection)
+        Action_data = ""
+        if source == "file":
+            Action_data = utils.select_and_read_text_files(Action_collection)
+        elif source == "database":
+            all_files = db_handler.get_all_action_names()
+            selected_files = st.multiselect("Feature - Select saved action files from database", all_files)
+
+            if selected_files:
+                merged_content = ""
+
+                for file in selected_files:
+                    content = db_handler.get_action_content_by_name(file, "action")
+                    if content:
+                        merged_content += f"\n### {file} ###\n{content}\n"
+                    else:
+                        st.warning(f"⚠️ Could not load content for: {file}")
+                Action_data = merged_content
+        # if source =="file":
+        # Action_data = utils.select_and_read_text_files_xpath("feature",Action_collection)
         action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
         action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
         feature_prompt = utils.generate_pom_from_excel_feature("featurefile", action_data_processed)
         if st.button("Generate_feature_File"):
             feature_response=utils.get_queries_from_ai_updated(feature_prompt)
-            save_feature_file = os.path.join(feature_file_collection, f"{Feature_file_name}.feature")
-            with open(save_feature_file, "w") as file:
-                file.write(feature_response.strip())
+            if source == "file":
+                save_feature_file = os.path.join(feature_file_collection, f"{Feature_file_name}.feature")
+                with open(save_feature_file, "w") as file:
+                    file.write(feature_response.strip())
 
-            st.write(f"Feature file saved here: {save_feature_file}")
+                st.write(f"Feature file saved here: {save_feature_file}")
+            if source == "database":
+                db_handler.save_featurefile_to_db(Feature_file_name, feature_response, "sathanantham")
+                st.success(f"feature file save in database for '{Feature_file_name}'")
 
 if st.session_state.checkbox3_state:
     with st.expander("🧮 E2E Test Case Generator"):
@@ -254,24 +299,55 @@ if st.session_state.checkbox3_state:
 
         if option == 'Recorded_details':
             # Show image selection and prompt box
-            st.markdown("**Select Images (Mandatory)** <span style='color:red;'>*</span>", unsafe_allow_html=True)
-            image_files = [f for f in os.listdir(page_screenshot_folder) if
-                           f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif'))]
-            cols = st.columns(5)
-            for idx, image_file in enumerate(image_files):
-                with cols[idx % 5]:
-                    st.image(os.path.join(page_screenshot_folder, image_file), width=100)
-                    if image_file not in st.session_state.selected_images:
-                        if st.button(f"{image_file}", key=f"{image_file}"):
-                            st.session_state.selected_images.append(image_file)
-                    else:
-                        if st.button(f"Deselect {image_file}", key=f"deselect_{image_file}"):
-                            st.session_state.selected_images.remove(image_file)
+            if source == "file":
+                st.markdown("**Select Images (Mandatory)** <span style='color:red;'>*</span>", unsafe_allow_html=True)
+                image_files = [f for f in os.listdir(page_screenshot_folder) if
+                               f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif'))]
+                cols = st.columns(5)
+                for idx, image_file in enumerate(image_files):
+                    with cols[idx % 5]:
+                        st.image(os.path.join(page_screenshot_folder, image_file), width=100)
+                        if image_file not in st.session_state.selected_images:
+                            if st.button(f"{image_file}", key=f"{image_file}"):
+                                st.session_state.selected_images.append(image_file)
+                        else:
+                            if st.button(f"Deselect {image_file}", key=f"deselect_{image_file}"):
+                                st.session_state.selected_images.remove(image_file)
+            if source == "database":
+                st.markdown("**Select Images from database (Mandatory)** <span style='color:red;'>*</span>",
+                            unsafe_allow_html=True)
+
+                screenshots = db_handler.get_all_screenshots()  # session from SQLAlchemy
+
+                if not screenshots:
+                    st.warning("⚠️ No images found in the database.")
+                else:
+                    cols = st.columns(5)
+
+                    for idx, screenshot in enumerate(screenshots):
+                        with cols[idx % 5]:
+                            image = Image.open(io.BytesIO(screenshot.image_data))
+
+                            # Optional: Resize to thumbnail
+                            max_width = 100
+                            aspect_ratio = image.height / image.width
+                            resized_image = image.resize((max_width, int(max_width * aspect_ratio)))
+
+                            st.image(resized_image, use_container_width=False)
+
+                            label = f"{screenshot.page_name}_{screenshot.id}"
+
+                            if label not in st.session_state.selected_images:
+                                if st.button(f"{label}", key=f"{label}"):
+                                    st.session_state.selected_images.append(label)
+                            else:
+                                if st.button(f"Deselect {label}", key=f"deselect_{label}"):
+                                    st.session_state.selected_images.remove(label)
 
             if st.session_state.selected_images:
-                st.write("### Selected images in order:")
-                for i, img_name in enumerate(st.session_state.selected_images, 1):
-                    st.write(f"{i}. {img_name}")
+                    st.write("### Selected images in order:")
+                    for i, img_name in enumerate(st.session_state.selected_images, 1):
+                        st.write(f"{i}. {img_name}")
 
             if st.button("Clear All Selection"):
                 st.session_state.selected_images = []
@@ -279,8 +355,23 @@ if st.session_state.checkbox3_state:
                         unsafe_allow_html=True)
             prompt = st.text_area('', '')
             st.markdown("**Please select relevent action file(Optional)**", unsafe_allow_html=True)
-            Action_data = utils.select_and_read_text_files(Action_collection)
+            Action_data = ""
+            if source == "file":
+                Action_data = utils.select_and_read_text_files(Action_collection)
+            elif source == "database":
+                all_files=db_handler.get_all_action_names()
+                selected_files = st.multiselect("Select saved action files from database", all_files)
 
+                if selected_files:
+                    merged_content = ""
+
+                    for file in selected_files:
+                        content = db_handler.get_action_content_by_name(file,"action")
+                        if content:
+                            merged_content += f"\n### {file} ###\n{content}\n"
+                        else:
+                            st.warning(f"⚠️ Could not load content for: {file}")
+                    Action_data = merged_content
         elif option == 'Documents':
             # Show only document upload section
             # st.write("Upload a PDF, Word, or Excel document:")
@@ -307,24 +398,63 @@ if st.session_state.checkbox3_state:
 
                     # Finding images in the pages folder and extracting text using pytesseract
                     image_data = ""
-                    for image_name in st.session_state.selected_images:
-                        image_path = os.path.join(page_screenshot_folder, image_name)
-                        if os.path.exists(image_path):
-                            # Display the uploaded image
-                            image = Image.open(image_path)
-                            st.image(image, caption=image_name, use_container_width=True)
+                    if source == "file":
+                        for image_name in st.session_state.selected_images:
+                            image_path = os.path.join(page_screenshot_folder, image_name)
+                            if os.path.exists(image_path):
+                                image = Image.open(image_path)
+                                st.image(image, caption=image_name, use_container_width=True)
 
-                            # Extract text from the image using pytesseract
-                            try:
-                                extracted_text = pytesseract.image_to_string(image)
-                                if extracted_text:
-                                    image_data += f"\nImage: {image_name}\nExtracted Text: {extracted_text}\n"
-                                else:
-                                    image_data += f"\nImage: {image_name}\nExtracted Text: No text found\n"
-                            except Exception as e:
-                                st.error(f"Error extracting text from {image_name}: {e}")
-                        else:
-                            st.error(f"Image not found: {image_name}")
+                                try:
+                                    extracted_text = pytesseract.image_to_string(image)
+                                    if extracted_text:
+                                        image_data += f"\nImage: {image_name}\nExtracted Text: {extracted_text}\n"
+                                    else:
+                                        image_data += f"\nImage: {image_name}\nExtracted Text: No text found\n"
+                                except Exception as e:
+                                    st.error(f"Error extracting text from {image_name}: {e}")
+                            else:
+                                st.error(f"Image not found: {image_name}")
+
+                    elif source == "database":
+                        screenshots = db_handler.get_all_screenshots()
+
+                        # Use a lookup dictionary for faster access
+                        db_image_map = {f"{s.page_name}_{s.id}": s.image_data for s in screenshots}
+
+                        for image_key in st.session_state.selected_images:
+                            if image_key in db_image_map:
+                                try:
+                                    image = Image.open(io.BytesIO(db_image_map[image_key]))
+                                    st.image(image, caption=image_key, use_container_width=True)
+
+                                    extracted_text = pytesseract.image_to_string(image)
+                                    if extracted_text:
+                                        image_data += f"\nImage: {image_key}\nExtracted Text: {extracted_text}\n"
+                                    else:
+                                        image_data += f"\nImage: {image_key}\nExtracted Text: No text found\n"
+                                except Exception as e:
+                                    st.error(f"Error extracting text from {image_key}: {e}")
+                            else:
+                                st.error(f"Image not found in database: {image_key}")
+                    # for image_name in st.session_state.selected_images:
+                    #     image_path = os.path.join(page_screenshot_folder, image_name)
+                    #     if os.path.exists(image_path):
+                    #         # Display the uploaded image
+                    #         image = Image.open(image_path)
+                    #         st.image(image, caption=image_name, use_container_width=True)
+                    #
+                    #         # Extract text from the image using pytesseract
+                    #         try:
+                    #             extracted_text = pytesseract.image_to_string(image)
+                    #             if extracted_text:
+                    #                 image_data += f"\nImage: {image_name}\nExtracted Text: {extracted_text}\n"
+                    #             else:
+                    #                 image_data += f"\nImage: {image_name}\nExtracted Text: No text found\n"
+                    #         except Exception as e:
+                    #             st.error(f"Error extracting text from {image_name}: {e}")
+                    #     else:
+                    #         st.error(f"Image not found: {image_name}")
                     image_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {image_data} """
                     print(image_prompt)
                     image_data_processed = utils.get_queries_from_ai_updated(image_prompt)
@@ -341,7 +471,7 @@ if st.session_state.checkbox3_state:
                     st.code(prompt_response)
                     utils.covert_response_to_testcases(prompt_response, Test_case_collection)
             elif option == 'Documents' and uploaded_file is not None:
-                    extracted_data = utils.extract_text_from_pdf(uploaded_file)
+                    extracted_data = utils.extract_text_from_document(uploaded_file,uploaded_file.name)
                     constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document",
                                                                                      extracted_data)
                     prompt_response = utils.get_queries_from_ai_updated(constructedprompt)
@@ -432,7 +562,23 @@ if st.session_state.checkbox4_state:
             st.write("Generating Page File")
             page_name = st.text_input("Enter Page Name", value=page_name)
             language = st.selectbox("Select Language", ["java", "python", "c#", "javascript"])
-            Action_data = utils.select_and_read_text_files_xpath("xpath",Action_collection)
+            Action_data = ""
+            if source == "file":
+                Action_data = utils.select_and_read_text_files_xpath("xpath", Action_collection)
+            elif source == "database":
+                all_files = db_handler.get_all_action_names()
+                selected_files = st.multiselect("Select saved action files from database for pagefile", all_files)
+
+                if selected_files:
+                    merged_content = ""
+
+                    for file in selected_files:
+                        content = db_handler.get_action_content_by_name(file,"action")
+                        if content:
+                            merged_content += f"\n### {file} ###\n{content}\n"
+                        else:
+                            st.warning(f"⚠️ Could not load content for: {file}")
+                    Action_data = merged_content
             action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
             action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
 
@@ -441,16 +587,13 @@ if st.session_state.checkbox4_state:
                 Prompt = utils.generate_pom_from_excel_with_action("Page_File_Action", page_name, language, action_data_processed)
                 st.session_state.prompt_response_page_file = utils.get_queries_from_ai("Page_File", Prompt)
                 st.subheader("Generated Page Class")
-                utils.create_java_file(page_name, language, st.session_state.prompt_response_page_file)
-                # with open("GeneratedTest.java", "w") as file:
-                #     file.write(st.session_state.prompt_response)
-                # print("✅ Java test script generated: GeneratedTest.java")
-                # st.code(st.session_state.prompt_response)
-                # Placeholder for your page file generation script
-                st.success(f"Page file generated for '{page_name}' in '{language}' language.")
-                # Trigger scroll with 'Continue' button
-                # if st.button("Continue"):
-                #     utils.scroll_and_focus()
+                if source == "file":
+                    utils.create_java_file(page_name, language, st.session_state.prompt_response_page_file)
+                    st.success(f"Page file generated for '{page_name}' in '{language}' language.")
+                elif source == "database":
+                    db_handler.save_pagefile_to_db(page_name,st.session_state.prompt_response_page_file,"sathanantham",language)
+                    st.success(f"Page file save in database for '{page_name}' in '{language}' language.")
+
 
         # Handle the "Find XPath" button logic
         if st.session_state.driver:
@@ -526,63 +669,176 @@ if st.session_state.checkbox4_state:
                             st.write("Generating Page File")
                             page_name = st.text_input("Enter Page Name", value=page_name)
                             language = st.selectbox("Select Language", ["java", "python", "c#", "javascript"])
-                            Action_data = utils.select_and_read_text_files_xpath("xpath", Action_collection)
+                            Action_data=""
+                            if source == "file":
+                                Action_data = utils.select_and_read_text_files_xpath("xpath", Action_collection)
+                            elif source == "database":
+                                all_files = db_handler.get_all_action_names()
+                                selected_files = st.multiselect("Select saved action files from database", all_files)
+
+                                if selected_files:
+                                    merged_content = ""
+
+                                    for file in selected_files:
+                                        content = db_handler.get_action_file_by_name(file)
+                                        if content:
+                                            merged_content += f"\n### {file} ###\n{content}\n"
+                                        else:
+                                            st.warning(f"⚠️ Could not load content for: {file}")
+                                    Action_data = merged_content
                             if st.button("Generate Page File"):
                                 st.session_state.prompt_response_page_file = ""
                                 Prompt = utils.generate_pom_from_excel_with_action("Page_File_Action", page_name, language,Action_data)
                                 st.session_state.prompt_response_page_file = utils.get_queries_from_ai("Page_File", Prompt)
                                 st.subheader("Generated Page Class")
-                                utils.create_java_file(page_name, language, st.session_state.prompt_response_page_file)
+                                if source == "file":
+                                    utils.create_java_file(page_name, language,
+                                                           st.session_state.prompt_response_page_file)
+                                    st.success(f"Page file generated for '{page_name}' in '{language}' language.")
+                                elif source == "database":
+                                    db_handler.save_pagefile_to_db(page_name,
+                                                                   st.session_state.prompt_response_page_file,
+                                                                   "sathanantham", language)
+                                    st.success(
+                                        f"Page file save in database for '{page_name}' in '{language}' language.")
                                 st.session_state.show_popup = False
                                 st.session_state.show_form = False
                                 st.success(f"Page file generated for '{page_name}' in '{language}' language.")
-                                # Trigger scroll with 'Continue' button
-                                # if st.button("Continue"):
-                                #     utils.scroll_and_focus()
+
 
     if st.session_state.checkbox5_state:
+        st.session_state.failed_files = []
         with st.expander("🧾 Test Automation Script Generator"):
             st.title("Automation Script Generator using page file and test cases")
             test_file_name=st.text_input("Enter the test File Name")
             test_file_language = st.selectbox("Select Language for test file", ["java", "python", "c#", "javascript"])
-            page_files_content = utils.select_and_read_text_files_xpath("page_test", Page_collection)
-            test_files_content = utils.select_and_read_text_files_xpath("testcase_test",Test_case_collection)
+            page_files_content=""
+            test_files_content=""
+            if source == "file":
+                page_files_content = utils.select_and_read_text_files_xpath("page_test", Page_collection)
+                test_files_content = utils.select_and_read_text_files_xpath("testcase_test",Test_case_collection)
+            elif source == "database":
+                all_page_files = db_handler.get_all_pagefile_names()
+                all_testcase_files=db_handler.get_all_testcasefile_names()
+                selected_page_files = st.multiselect("Select saved page files from database", all_page_files)
+                selected_testcase_files = st.multiselect("Select saved testcase files from database", all_testcase_files)
+                if selected_page_files:
+                    merged_page_content = ""
+
+                    for file in selected_page_files:
+                        content = db_handler.get_action_content_by_name(file,"page")
+                        if content:
+                            merged_page_content += f"\n### {file} ###\n{content}\n"
+                        else:
+                            # st.warning(f"⚠️ Could not load content for: {file}")
+                            st.session_state.failed_files.append(file)
+                        if st.session_state.failed_files:
+                            st.warning("⚠️ Could not load content for the following files:\n- " + "\n- ".join(
+                                st.session_state.failed_files))
+                    page_files_content = merged_page_content
+                if selected_testcase_files:
+                    merged_testcase_content = ""
+
+                    for file in selected_testcase_files:
+                        content = db_handler.get_action_content_by_name(file,"testcase")
+                        if content:
+                            merged_testcase_content += f"\n### {file} ###\n{content}\n"
+                        else:
+                            # st.warning(f"⚠️ Could not load content for: {file}")
+                            st.session_state.failed_files.append(file)
+
+                    test_files_content = merged_testcase_content
+                    if st.session_state.failed_files:
+                        st.warning("⚠️ Could not load content for the following files:\n- " + "\n- ".join(
+                            st.session_state.failed_files))
             if st.button("Generate_Test_Script"):
                 Prompt = utils.generate_test_script("Test_File_Action", test_file_language, page_files_content,test_files_content)
                 test_script_response= utils.get_queries_from_ai_updated(Prompt)
                 #st.write(test_script_response)
-                utils.create_test_file(Test_file_generator,test_file_name, test_file_language, test_script_response)
-
+                if source == "file":
+                    utils.create_test_file(Test_file_generator,test_file_name, test_file_language, test_script_response)
+                elif source == "database":
+                    db_handler.save_testfile_to_db(test_file_name,test_script_response,"sathanantham",test_file_language)
 if st.session_state.checkbox6_state:
     from github import Github, GithubException  # Make sure GithubException is imported
-
+    from gitlab import Gitlab
     with st.expander("⚙️ GitHub 📡 Automation Bridge"):
         st.title("Upload code to Repository")
-
-        pytest_files = utils.select_and_read_text_files_xpath("pom_file", utils.Test_file_generator)
-        repo_pytest_name = st.text_input("Enter folder name in repo:", value="test_web/tests/test_cases")
-
-        pom_files = utils.select_and_read_text_files_xpath("test_file", utils.Page_file_generator)
+        if source == "file":
+            pytest_files = utils.select_and_read_text_files_xpath("pom_file", utils.Test_file_generator)
+            pom_files = utils.select_and_read_text_files_xpath("test_file", utils.Page_file_generator)
+        elif source == "database":
+            all_page_files = db_handler.get_all_pagefile_names()
+            all_test_files = db_handler.get_all_testfile_names()
+            selected_page_files = st.multiselect("Select saved page files from database to push", all_page_files)
+            selected_test_files = st.multiselect("Select saved testcase files from database to push", all_test_files)
+            temp_dir_page=db_handler.prepare_selected_files_for_github(selected_page_files,"sathanantham")
+            temp_dir_test = db_handler.prepare_selected_files_for_github(selected_test_files, "sathanantham")
         repo_pom_name = st.text_input("Enter folder name in repo:", value="test_web/src/pom/pages")
+        repo_pytest_name = st.text_input("Enter folder name in repo:", value="test_web/tests/test_cases")
 
         if st.button("Push to Repo"):
 
-            g = Github(os.getenv("GITHUB_ACCESS_TOKEN"))
-            repo = g.get_repo(os.getenv("GITHUB_REPO_NAME"))
-            branch = os.getenv("GITHUB_BRANCH_NAME", "main")
+            # g = Github(os.getenv("GITlAB_ACCESS_TOKEN"))
+            # repo = g.get_repo(os.getenv("GITLAB_REPO_NAME"))
+            # branch = os.getenv("GITLAB_BRANCH_NAME", "main")
+            # try:
+            #     g = Gitlab('https://git.tigeranalytics.com/', private_token=os.getenv("GITLAB_ACCESS_TOKEN"),ssl_verify=False)
+            #     repo = g.projects.get(os.getenv("GITLAB_REPO_NAME"))
+            # except Exception as e:
+            #     print("-------------exception-----------------")
+            #     print(e)
+            token = os.getenv("GITLAB_ACCESS_TOKEN")
+            print(f"TOKEN: {token!r}")
+
+            if token:
+                try:
+                    g = Gitlab("https://git.tigeranalytics.com/", private_token=token, ssl_verify=False)
+                    g.auth()
+                    print("✅ Authentication successful!")
+                except Exception as e:
+                    print("❌ Auth failed:", e)
+            else:
+                print("❌ Token not found in environment.")
+            repo = g.projects.get(os.getenv("GITLAB_REPO_NAME"))
+            print(repo)
+            branch = os.getenv("GITLAB_BRANCH_NAME", "main")
 
             if repo_pom_name and repo_pytest_name:
+                if source == "file":
+                    # Push all POM files
+                    for file_name, content in pom_files.items():
+                        pom_dest_path = f"{repo_pom_name.strip('/')}/{file_name}"
+                        utils.push_file_to_gitlab(pom_dest_path, content, repo, branch)
 
-                # Push all POM files
-                for file_name, content in pom_files.items():
-                    pom_dest_path = f"{repo_pom_name.strip('/')}/{file_name}"
-                    utils.push_file_to_github(pom_dest_path, content, repo, branch)
+                    # Push all pytest files
+                    for file_name, content in pytest_files.items():
+                        pytest_dest_path = f"{repo_pytest_name.strip('/')}/{file_name}"
+                        utils.push_file_to_gitlab(pytest_dest_path, content, repo, branch)
+                elif source == "database":
+                    # Push all selected page files
+                    if temp_dir_page and os.path.isdir(temp_dir_page):
+                        for file_name in os.listdir(temp_dir_page):
+                            file_path = os.path.join(temp_dir_page, file_name)
+                            with open(file_path, "r", encoding="utf-8") as f:
+                                content = f.read()
+                            pom_dest_path = f"{repo_pom_name.strip('/')}/{file_name}"
+                            utils.push_file_to_gitlab(pom_dest_path, content, repo, branch)
 
-                # Push all pytest files
-                for file_name, content in pytest_files.items():
-                    pytest_dest_path = f"{repo_pytest_name.strip('/')}/{file_name}"
-                    utils.push_file_to_github(pytest_dest_path, content, repo, branch)
+                    # Push all selected test files
+                    if temp_dir_test and os.path.isdir(temp_dir_test):
+                        for file_name in os.listdir(temp_dir_test):
+                            file_path = os.path.join(temp_dir_test, file_name)
+                            with open(file_path, "r", encoding="utf-8") as f:
+                                content = f.read()
+                            pytest_dest_path = f"{repo_pytest_name.strip('/')}/{file_name}"
+                            utils.push_file_to_gitlab(pytest_dest_path, content, repo, branch)
 
+                    # Clean up the temp directories
+                    shutil.rmtree(temp_dir_page, ignore_errors=True)
+                    shutil.rmtree(temp_dir_test, ignore_errors=True)
+
+                    st.success("✅ Selected database files pushed to GitHub and temp files deleted.")
             else:
                 st.warning("⚠️ Please enter both folder names in the repo.")
 

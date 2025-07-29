@@ -4,6 +4,7 @@ import re
 import os
 from collections import defaultdict
 from urllib.parse import urlparse
+from database_utils.models import Screenshot
 JS_EVENT_LISTENER="""(function () {
     if (!window.recordedActions) {
         window.recordedActions = [];
@@ -155,6 +156,7 @@ def generate_workflow(actions):
     return workflow_lines
 def sanitize_filename(name):
     return re.sub(r'[\\/*?:"<>|]', "_", name)
+
 
 def take_screenshot(driver, folder):
     url = driver.current_url

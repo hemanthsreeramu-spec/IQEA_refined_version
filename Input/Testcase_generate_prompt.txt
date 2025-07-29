@@ -10,23 +10,24 @@ Inputs:
 Requirements:
 {requirements}
 
-Instructions:
-1. Create complete user journeys as test cases, **starting from login or the initial screen and ending at the final screen (e.g., confirmation, success, or summary)**.
-2. **At least one test case must represent a full end-to-end flow across all screens.**
-3. If recorded user actions (`action_data_processed`) are available, use them to guide step-by-step flows. Otherwise, infer the realistic order from `navigation` and `image_data_processed`.
-4. Do not skip any necessary steps like login, intermediate forms, or navigation transitions.
-5. Ensure that test cases collectively cover all key UI elements like buttons, fields, dropdowns, tables, popups, etc.
-6. Include a diverse mix of test types: positive, negative, edge cases, retries, invalid inputs, and boundary scenarios.
-7. Use orthogonal pairwise input coverage to minimize redundancy but ensure coverage.
-8. Cover both frontend behavior (validations, messages) and backend/system outcomes (data saved, redirection, etc.)
+Instructions(strict):
+1. Login step is mandatory as Step 1 in every test case, regardless of whether it's mentioned in the navigation flow or actions.
+
+2. Logout step is mandatory as the last step in every test case (unless the flow ends in error, timeout, or system crash).
+
+3. Even if no user actions are provided, you must infer and include all critical steps, especially login and logout.
+
+4. At least one full end-to-end scenario is required.
+
+5. Include validations, navigation, edge cases, form inputs, and negative tests.
+
+6. Use pairwise test coverage for field combinations.
+
+7. Cover both frontend and backend outcomes (e.g., UI response + DB/API triggers).
 
 Output Format:
-- Return the test cases strictly as Markdown-style tables using these columns:
-  `Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type`
-- Status should be `"New"` and Type should be `"Manual"`
-- Include **15–20 test cases total**, each with **2–6 steps**
-- Ensure **at least one test case spans the full end-to-end flow**
-- Do not include any explanations, markdown headings, or summaries—**only return the tables**
-
-Begin now:
-Generate test cases based on the above inputs.
+- Markdown tables using:
+  Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type
+- Status = "New", Type = "Manual"
+- 15–20 test cases, each with 2–6 steps
+- No explanations, just raw tables.
