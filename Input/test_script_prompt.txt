@@ -1,31 +1,33 @@
 You are a test automation expert.
 
-Your task is to generate a {test_file_language} test script using pytest (or unittest) based on the following inputs. The script should automate all test case steps by utilizing methods from the page object file(s) and ensuring complete execution of the test flow.
+Your task is to generate a valid and production-ready {test_file_language} test script using pytest based on the inputs below.
 
-## Input 1: Page Object File(s)
+Inputs:
+1. Page Object File(s):
 {page_files_content}
 
-## Input 2: Test Case Definitions
+2. Test Case Definitions:
 {test_files_content}
 
-## Instructions:
-1. Each test case must be **fully implemented**, step by step, from start to end—**no step should be skipped**.
-2. For each step:
-   - First, check if a matching page method exists (e.g., `click_login_button()` for “Click on login button”) and use it.
-   - If no direct method exists, check for a matching **XPath locator** in the page object and use it with `driver.find_element(...).click()` or `.send_keys()`.
-   - If no method or XPath is available, fall back to writing a direct Selenium command using visible text or label.
-3. Include **assert statements** to verify expected outcomes as per each step’s “Expected Result”.
-4. Maintain **logical order of steps exactly as defined** in the test case.
-5. If multiple test cases refer to a shared flow (e.g., login), create reusable helper methods within the test class.
-6. Use appropriate `pytest` structure (`setup`, `teardown`, fixtures, etc. as needed).
-7. Include **clear inline comments** describing the action being performed for every step (based on test case description).
-8. If any part is ambiguous or not found in the page object, intelligently infer the best approach using XPath or visible text matching.
-9. Ensure the script is syntactically valid, complete, and ready to run.
+3. (Optional) Recorded User Actions:
+{recorded_actions}
 
-## Output Format:
-- Return only valid Python test code (no markdown, explanations, or extra commentary).
-- Include:
-  - Required imports
-  - Test class (if needed)
-  - One function per test case
-  - Use of methods/XPath/raw Selenium calls as needed to complete the flow
+Instructions:
+1. Fully implement each test case from start to end — no step should be skipped.
+2. For each step:
+   - First, check if a matching method exists in the page object file and use it.
+   - If no method exists, check for a matching XPath locator and use `driver.find_element(...)`.
+   - If neither exists, use a direct Selenium command based on visible text or inferred intent.
+   - If `Recorded User Actions` is provided, align actions with the test case flow to improve accuracy or fill in any missing interactions.
+3. Include assert statements to validate expected outcomes as per each step.
+4. Follow the step order exactly as defined in the test case.
+5. Extract reusable flows (e.g., login) as helper methods inside the test file.
+6. Use pytest structure: imports, fixtures, and one test function per test case.
+7. Add inline comments that clearly describe the purpose of each step (based on the test case or recorded actions).
+8. Output only valid Python test code — no explanations, no markdown formatting, and no extra content.
+
+Do not wrap the output in triple backticks or add any non-code text — return the raw script only.
+
+With this version, the model will only return the raw code — no ```python or any other wrapper.
+Note: The Page Object file(s) are located in the following path and should be imported accordingly:
+output/page_file_generator/

@@ -83,8 +83,15 @@ def load_prompt_from_file(prompt_type):
             prompt_file = os.path.join(config_folder, "Testcase_generate_prompt_with_action.txt")
         elif prompt_type == "featureaction":
             prompt_file = os.path.join(config_folder, "featureaction_prompt.txt")
-        elif prompt_type == "featurefile":
+        elif prompt_type == "Feature_file":
             prompt_file = os.path.join(config_folder, "featurefile_prompt.txt")
+        elif prompt_type== "Test_case_accuracy":
+            prompt_file = os.path.join(config_folder, "Testcase_Accuracy_matrix.txt")
+        elif prompt_type == "Test_case_regeneration_accuracy":
+            prompt_file = os.path.join(config_folder, "Testcase_regeneration_accuracy.txt")
+        elif prompt_type == "Test_case_regeneration_accuracy_doc":
+            prompt_file = os.path.join(config_folder, "Testcase_regeneration_accuracy_doc.txt")
+
         else:
             raise ValueError(f"Invalid prompt type: {prompt_type}. Expected 'web' or 'powerBi'.")
 
@@ -599,6 +606,12 @@ def generate_excel_testcases_with_document(prompt_type,extracted_data):
     final_prompt = prompt_template.format(requirements=extracted_data)
     print(final_prompt)
     return final_prompt
+def generate_testcase_accuracy_matrix(prompt_type,requirements,testcase):
+    prompt_template = load_prompt_from_file(prompt_type)
+    # Conditionally inject Action Data section or leave it blank
+    final_prompt = prompt_template.format(requirement_text=requirements,test_case_text=testcase)
+    print(final_prompt)
+    return final_prompt
 def generate_pom_from_excel_testcases(prompt_type,navigation,image_data,action_data=None,requirements=""):
     prompt_template = load_prompt_from_file(prompt_type)
     # Conditionally inject Action Data section or leave it blank
@@ -609,14 +622,46 @@ def generate_pom_from_excel_testcases(prompt_type,navigation,image_data,action_d
     final_prompt = prompt_template.format(navigation=navigation,image_data_processed=image_data,action_data_processed=action_section,requirements=requirements)
     print(final_prompt)
     return final_prompt
+def generate_testcases_regeneration(prompt_type,navigation,image_data,action_data=None,requirements="",existing_prompt_response=None,accuracy_matrix=None):
+    prompt_template = load_prompt_from_file(prompt_type)
+    # Conditionally inject Action Data section or leave it blank
+    if action_data:
+        action_section = f"- User Interaction Elements (Action Data): {action_data}"
+    else:
+        action_section = ""
+    final_prompt = prompt_template.format(navigation=navigation,image_data_processed=image_data,action_data_processed=action_section,requirements=requirements,accuracy_Details=accuracy_matrix,existing_prompt_response=existing_prompt_response)
+    print(final_prompt)
+    return final_prompt
+def generate_testcases_regeneration_doc(prompt_type,requirements="",existing_prompt_response=None,accuracy_matrix=None,):
+    prompt_template = load_prompt_from_file(prompt_type)
+    # Conditionally inject Action Data section or leave it blank
+    final_prompt = prompt_template.format(requirements=requirements,accuracy_Details=accuracy_matrix,existing_prompt_response=existing_prompt_response)
+    print(final_prompt)
+    return final_prompt
 def generate_pom_from_excel_feature(prompt_type,Recorded_Action):
     prompt_template = load_prompt_from_file(prompt_type)
     final_prompt = prompt_template.format(recorded_action=Recorded_Action)
     print(final_prompt)
     return final_prompt
-def generate_test_script(prompt_type,test_file_language,page_file_conetent,test_file_content):
+def generate_test_script(prompt_type,test_file_language,page_file_conetent,test_file_content,action_data=None):
     prompt_template = load_prompt_from_file(prompt_type)
-    final_prompt = prompt_template.format(test_file_language=test_file_language,page_files_content=page_file_conetent,test_files_content=test_file_content)
+    if action_data:
+        final_prompt = prompt_template.format(
+            test_file_language=test_file_language,
+            page_files_content=page_file_conetent,
+            test_files_content=test_file_content,
+            recorded_actions=action_data
+        )
+    else:
+        # Remove the optional section related to recorded_actions
+        prompt_template = prompt_template.replace("3. (Optional) Recorded User Actions:\n{recorded_actions}\n\n", "")
+        final_prompt = prompt_template.format(
+            test_file_language=test_file_language,
+            page_files_content=page_file_conetent,
+            test_files_content=test_file_content,
+            recorded_actions=""
+        )
+
     print(final_prompt)
     return final_prompt
 def generate_pom_from_excel_with_action(prompt_type,page_name,language,action_data):
@@ -750,7 +795,7 @@ def select_and_read_text_files_xpath(type, folder_path):
 
         try:
             # Type: For txt-based files
-            if type in ["xpath", "page", "feature"]:
+            if type in ["xpath","recorded action (Optional)", "page", "feature"]:
                 with open(full_path, 'r', encoding='utf-8') as f:
                     file_contents[file_name] = f.read()
 
@@ -944,11 +989,13 @@ def covert_response_to_testcases(markdown_text, test_collection):
                     group.to_excel(path, index=False)
                     print(f"✅ Saved to file: {safe_file_name}")
                 elif source == "database":
-                    content_str = group.to_csv(index=False)
-                    db_handler.save_testcases_to_db(safe_file_name[:50], content_str, "sathanantham")
+                    #content_str = group.to_csv(index=False)
+                    db_handler.save_testcases_to_db(safe_file_name, group, "sathanantham")
+                    #db_handler.save_testcases_to_db(safe_file_name[:50], content_str, "sathanantham")
                     print(f"✅ Saved to DB: {safe_file_name}")
 
             print(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test case files.")
+            st.write(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test case files.")
             return
 
         except Exception as e:
@@ -997,8 +1044,9 @@ def covert_response_to_testcases(markdown_text, test_collection):
                     group.to_excel(path, index=False)
                     print(f"✅ Saved to file: {safe_file_name}")
                 elif source == "database":
-                    content_str = group.to_csv(index=False)
-                    db_handler.save_testcases_to_db(safe_file_name, content_str, "sathanantham")
+                    #content_str = group.to_csv(index=False)
+                    db_handler.save_testcases_to_db(safe_file_name, group, "sathanantham")
+                    #db_handler.save_testcases_to_db(safe_file_name, content_str, "sathanantham")
                     print(f"✅ Saved to DB: {safe_file_name}")
 
         except Exception as e:
@@ -1007,8 +1055,10 @@ def covert_response_to_testcases(markdown_text, test_collection):
 
     if source == "file":
         print(f"\n✅ Completed saving all test cases to folder: {test_collection}")
+        st.write(f"\n✅ Completed saving all test cases to folder: {test_collection}")
     elif source == "database":
         print(f"\n✅ Completed saving all test cases to the database.")
+        st.write(f"\n✅ Completed saving all test cases to the database.")
 
 def covert_response_to_testcases_1(markdown_text, test_collection):
     print("\n🚀 Starting test case parsing...")

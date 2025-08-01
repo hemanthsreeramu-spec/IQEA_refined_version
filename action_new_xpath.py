@@ -1,5 +1,6 @@
 import subprocess
-
+from github import Github, GithubException  # Make sure GithubException is imported
+from gitlab import Gitlab
 from github import Github
 from selenium.webdriver.chrome.service import Service
 import streamlit as st
@@ -8,6 +9,7 @@ from selenium.webdriver.chrome.options import Options
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.wait import WebDriverWait
 import os
+import json
 import shutil
 import threading
 import time
@@ -91,6 +93,16 @@ if 'selected_tags' not in st.session_state:
         st.session_state.selected_tags = []
 if 'selected_app' not in st.session_state:
     st.session_state.selected_app = []
+if 'requirements_details' not in st.session_state:
+    st.session_state.requirements_details = None
+if 'accuracy_response' not in st.session_state:
+    st.session_state.accuracy_response = None
+if 'testcase_response' not in st.session_state:
+    st.session_state.testcase_response = None
+if 'testcase_regeneration' not in st.session_state:
+    st.session_state.testcase_regeneration = None
+if 'overall_accuracy' not in st.session_state:
+    st.session_state.overall_accuracy = None
 # Unique key for session state
 if "scroll_to_top" not in st.session_state:
     st.session_state.scroll_to_top = False
@@ -106,8 +118,16 @@ if "checkbox5_state" not in st.session_state:
     st.session_state.checkbox5_state = True
 if "checkbox6_state" not in st.session_state:
     st.session_state.checkbox6_state = True
+if "checkbox7_state" not in st.session_state:
+    st.session_state.checkbox7_state = True
 if "failed_files" not in st.session_state:
     st.session_state.failed_files = []
+if "regenerate_clicked" not in st.session_state:
+    st.session_state.regenerate_clicked = False
+if "save_testcases" not in st.session_state:
+    st.session_state.save_testcases = False
+if "save_regenerated_testcases" not in st.session_state:
+    st.session_state.save_regenerated_testcases = False
 st.title(" 🤖 TigerQE 'One-Stop' AI Solution")
 # 1. Open the browser
 page_url = st.text_input("Enter the URL of the page:")
@@ -169,60 +189,6 @@ if st.session_state.checkbox1_state:
             page_name = st.text_input("Enter Page Name for Saving the Workflow:")
             if st.button("💾 Save Workflow"):
                 workflow_text = action_utils.generate_workflow(st.session_state.actions)
-                #Extract element metadata
-                all_elements = [action.get("element") for action in st.session_state.actions if action.get("element")]
-                #Deduplicate
-                unique_elements = utils.deduplicate_element_records(all_elements)
-#                 prompt = f"""
-#                 You are an expert in generating reliable and unique XPath expressions.
-#
-#                 Please generate the most accurate and robust XPath for each of the following HTML elements:
-#
-#                 {unique_elements}
-#
-#                 📝 Notes:
-#                 - Only return the XPath expressions — no explanations or additional text.
-#                 - You may use XPath axes (e.g., `following`, `preceding`, `ancestor`, `sibling`, etc.) to enhance precision and reliability.
-#                 - Ensure each XPath is unique and directly targets the intended element.
-#
-#                 Respond with only one XPath per element, in plain text.
-#                 """
-#                 selected_action_xpath=utils.get_queries_from_ai_updated(prompt)
-#                 test_script_prompt=prompt = f"""
-# You are a professional QA Automation Engineer.
-#
-# I have two inputs:
-# 1. A list of user actions recorded as a human-readable workflow.
-# 2. A corresponding list of unique and robust XPath expressions for each UI element.
-#
-# Your task is to generate a fully executable Python test script using Selenium WebDriver that performs all the actions in sequence.
-#
-# 🧩 Inputs:
-# - Workflow Steps:
-# {workflow_text}
-#
-# - XPath Mapping:
-# {selected_action_xpath}
-#
-# 📌 Instructions:
-# - Use Python 3 with Selenium WebDriver.
-# - Import only required standard libraries (`time`, `unittest`, etc.) and `selenium` modules.
-# - Start with browser setup and URL navigation (use a placeholder like `https://example.com`).
-# - Use `webdriver.Chrome()` and proper waits (`WebDriverWait` or `time.sleep()` where needed).
-# - For each workflow step, use the mapped XPath to perform the action (`send_keys`, `click`, etc.).
-# - Structure the script inside a `unittest.TestCase` class with a `setUp`, `test_workflow`, and `tearDown`.
-# - Ensure the script is directly runnable: if I copy this into a `.py` file and execute it in a Selenium environment, it should work.
-#
-# 🚫 DO NOT include markdown backticks (like ```python or ```) around the output.
-# ✅ Just return raw Python code.
-#
-# Now generate the Python Selenium test script.
-# """
-#
-#
-#                 Workflow_test_file=utils.get_queries_from_ai_updated(test_script_prompt)
-#                 utils.create_java_file(page_name, "python", Workflow_test_file)
-                
                 if page_name:
                     if source == "database":
                         action_id = db_handler.save_action_to_db(page_name, workflow_text, "sathanantham")
@@ -240,15 +206,6 @@ if st.session_state.checkbox1_state:
                         st.session_state.show_form = False  # Reset form visibility
                     else:
                         st.warning("⚠ Please enter a name for the workflow.")
-                # if st.button("▶️ Run Test"):
-                #     test_file_path = os.path.join(Page_collection, "newworkflow_saucedemo.py")
-                #     try:
-                #             result = subprocess.run(["python", test_file_path], capture_output=True, text=True)
-                #             st.code(result.stdout)  # shows output in Streamlit
-                #             if result.stderr:
-                #                 st.error("Errors:\n" + result.stderr)
-                #     except Exception as e:
-                #         st.error(f"⚠️ Failed to run script: {e}")
 if st.session_state.checkbox2_state:
     with st.expander("🧾 BDD Feature File Generator"):
         st.title("Feature file Generator using recorded actions")
@@ -274,7 +231,7 @@ if st.session_state.checkbox2_state:
         # Action_data = utils.select_and_read_text_files_xpath("feature",Action_collection)
         action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
         action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
-        feature_prompt = utils.generate_pom_from_excel_feature("featurefile", action_data_processed)
+        feature_prompt = utils.generate_pom_from_excel_feature("Feature_file", action_data_processed)
         if st.button("Generate_feature_File"):
             feature_response=utils.get_queries_from_ai_updated(feature_prompt)
             if source == "file":
@@ -389,6 +346,12 @@ if st.session_state.checkbox3_state:
                 else:
                     st.error("Unsupported file format.")
         if st.button("Generate Functional Test Cases"):
+            st.session_state.testcase_response = None
+            st.session_state.overall_accuracy = None
+            st.session_state.testcase_regeneration = None
+            st.session_state.save_testcases = False
+            st.session_state.regenerate_clicked = False
+            st.session_state.save_regenerated_testcases = False
             # st.write(Action_data)
             if option == 'Recorded_details':
                 if st.session_state.selected_images and prompt:
@@ -437,24 +400,6 @@ if st.session_state.checkbox3_state:
                                     st.error(f"Error extracting text from {image_key}: {e}")
                             else:
                                 st.error(f"Image not found in database: {image_key}")
-                    # for image_name in st.session_state.selected_images:
-                    #     image_path = os.path.join(page_screenshot_folder, image_name)
-                    #     if os.path.exists(image_path):
-                    #         # Display the uploaded image
-                    #         image = Image.open(image_path)
-                    #         st.image(image, caption=image_name, use_container_width=True)
-                    #
-                    #         # Extract text from the image using pytesseract
-                    #         try:
-                    #             extracted_text = pytesseract.image_to_string(image)
-                    #             if extracted_text:
-                    #                 image_data += f"\nImage: {image_name}\nExtracted Text: {extracted_text}\n"
-                    #             else:
-                    #                 image_data += f"\nImage: {image_name}\nExtracted Text: No text found\n"
-                    #         except Exception as e:
-                    #             st.error(f"Error extracting text from {image_name}: {e}")
-                    #     else:
-                    #         st.error(f"Image not found: {image_name}")
                     image_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {image_data} """
                     print(image_prompt)
                     image_data_processed = utils.get_queries_from_ai_updated(image_prompt)
@@ -467,16 +412,107 @@ if st.session_state.checkbox3_state:
                     constructedprompt = utils.generate_pom_from_excel_testcases("Test_case_generation", navigation,
                                                                                 image_data_processed, action_data_processed,
                                                                                 prompt)
-                    prompt_response = utils.get_queries_from_ai_updated(constructedprompt)
-                    st.code(prompt_response)
-                    utils.covert_response_to_testcases(prompt_response, Test_case_collection)
+                    st.session_state.testcase_response = utils.get_queries_from_ai_updated(constructedprompt)
+                    #st.code(prompt_response)
+                    #utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
+                    #if st.button ("Calculate_Testcase_Accuracy"):
+                    st.write("🧠 Calculating Test Case Accuracy Matrix...")
+
+                    # Initialize progress bar
+                    progress_bar = st.progress(0)
+                    progress_text = st.empty()
+
+                    # Step 1: Collect requirement details
+                    progress_text.text("🔍 Preparing Requirement Details...")
+                    st.session_state.requirements_details = navigation + image_data_processed + action_data_processed + prompt
+                    progress_bar.progress(25)
+
+                    # Step 2: Generate Accuracy Matrix using AI
+                    progress_text.text("🤖 Calling AI Model for Accuracy Matrix Evaluation...")
+                    accuracy_prompt = utils.generate_testcase_accuracy_matrix(
+                        "Test_case_accuracy",
+                        st.session_state.requirements_details,
+                        st.session_state.testcase_response
+                    )
+                    st.session_state.accuracy_response = utils.get_queries_from_ai_updated(accuracy_prompt)
+                    progress_bar.progress(90)
+
+                    # Step 3: Finalizing
+                    progress_text.text("✅ Finalizing Output...")
+                    progress_bar.progress(100)
+                    st.write(st.session_state.accuracy_response)
             elif option == 'Documents' and uploaded_file is not None:
-                    extracted_data = utils.extract_text_from_document(uploaded_file,uploaded_file.name)
-                    constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document",
-                                                                                     extracted_data)
-                    prompt_response = utils.get_queries_from_ai_updated(constructedprompt)
-                    st.code(prompt_response)
-                    utils.covert_response_to_testcases(prompt_response, Test_case_collection)
+                extracted_data = utils.extract_text_from_document(uploaded_file,uploaded_file.name)
+                constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document",
+                                                                                 extracted_data)
+                st.session_state.testcase_response = utils.get_queries_from_ai_updated(constructedprompt)
+                #st.code(prompt_response)
+                #utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
+                #if st.button ("Calculate_Testcase_Accuracy"):
+                # Show message
+                st.write("🧠 Calculating Test Case Accuracy Matrix...")
+
+                # Initialize progress bar
+                progress_bar = st.progress(0)
+                progress_text = st.empty()
+
+                # Step 1: Collect requirement details
+                progress_text.text("🔍 Preparing Requirement Details...")
+                st.session_state.requirements_details = extracted_data
+                progress_bar.progress(25)
+
+                # Step 2: Generate Accuracy Matrix using AI
+                progress_text.text("🤖 Calling AI Model for Accuracy Matrix Evaluation...")
+                accuracy_prompt = utils.generate_testcase_accuracy_matrix(
+                    "Test_case_accuracy",
+                    st.session_state.requirements_details,
+                    st.session_state.testcase_response
+                )
+                st.session_state.accuracy_response=utils.get_queries_from_ai_updated(accuracy_prompt)
+                progress_bar.progress(90)
+
+                # Step 3: Finalizing
+                progress_text.text("✅ Finalizing Output...")
+                progress_bar.progress(100)
+                st.code(st.session_state.accuracy_response)
+                # Convert JSON string to dict (only if it's a string)
+        if st.session_state.accuracy_response:
+            if isinstance(st.session_state.accuracy_response, str):
+                accuracy_response = json.loads(st.session_state.accuracy_response)
+
+            # Now it's safe to call .get()
+            st.session_state.overall_accuracy = accuracy_response.get("overall_accuracy", 0)
+        if st.session_state.testcase_response:
+            st.session_state.save_testcases = True
+        if st.session_state.save_testcases and st.button("Save test cases"):
+            utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
+        if st.session_state.overall_accuracy is not None and st.session_state.overall_accuracy < 90:
+            st.session_state.regenerate_clicked = True
+        if st.session_state.regenerate_clicked and st.button("Regenerate the test cases"):
+                st.session_state.accuracy_response=None
+                st.markdown("### 🔄 Regenerating test cases...")
+                regeneration_prompt = utils.generate_testcases_regeneration_doc(
+                    "Test_case_regeneration_accuracy_doc",
+                    st.session_state.requirements_details,
+                    st.session_state.testcase_response,
+                    st.session_state.accuracy_response
+                )
+                st.session_state.testcase_regeneration = utils.get_queries_from_ai_updated(
+                    regeneration_prompt)
+                #st.write(st.session_state.testcase_regeneration)
+
+                # ✅ Re-evaluate accuracy again
+                accuracy_prompt = utils.generate_testcase_accuracy_matrix(
+                    "Test_case_accuracy",
+                    st.session_state.requirements_details,
+                    st.session_state.testcase_regeneration
+                )
+                st.session_state.accuracy_response = utils.get_queries_from_ai_updated(accuracy_prompt)
+                st.write(st.session_state.accuracy_response)
+        if st.session_state.testcase_regeneration:
+            st.session_state.save_regenerated_testcases = True
+        if st.session_state.save_regenerated_testcases and st.button("Save regenerated test case"):
+            utils.covert_response_to_testcases(st.session_state.testcase_regeneration, Test_case_collection)
 if st.session_state.checkbox4_state:
     with st.expander("🔎 Xpath 🧾 Page File Generator"):
         st.title("XPath Generator for Visible Elements")
@@ -714,9 +750,11 @@ if st.session_state.checkbox4_state:
             test_file_language = st.selectbox("Select Language for test file", ["java", "python", "c#", "javascript"])
             page_files_content=""
             test_files_content=""
+            Action_data=""
             if source == "file":
                 page_files_content = utils.select_and_read_text_files_xpath("page_test", Page_collection)
                 test_files_content = utils.select_and_read_text_files_xpath("testcase_test",Test_case_collection)
+                Action_data = utils.select_and_read_text_files_xpath("recorded action (Optional)", Action_collection)
             elif source == "database":
                 all_page_files = db_handler.get_all_pagefile_names()
                 all_testcase_files=db_handler.get_all_testcasefile_names()
@@ -751,8 +789,23 @@ if st.session_state.checkbox4_state:
                     if st.session_state.failed_files:
                         st.warning("⚠️ Could not load content for the following files:\n- " + "\n- ".join(
                             st.session_state.failed_files))
+                all_files = db_handler.get_all_action_names()
+                selected_files = st.multiselect("Select saved action files from database for Testscript (optional)", all_files)
+
+                if selected_files:
+                    merged_content = ""
+
+                    for file in selected_files:
+                        content = db_handler.get_action_content_by_name(file, "action")
+                        if content:
+                            merged_content += f"\n### {file} ###\n{content}\n"
+                        else:
+                            st.warning(f"⚠️ Could not load content for: {file}")
+                    Action_data = merged_content
+            action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
+            action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
             if st.button("Generate_Test_Script"):
-                Prompt = utils.generate_test_script("Test_File_Action", test_file_language, page_files_content,test_files_content)
+                Prompt = utils.generate_test_script("Test_File_Action", test_file_language, page_files_content,test_files_content,action_data_processed)
                 test_script_response= utils.get_queries_from_ai_updated(Prompt)
                 #st.write(test_script_response)
                 if source == "file":
@@ -760,8 +813,6 @@ if st.session_state.checkbox4_state:
                 elif source == "database":
                     db_handler.save_testfile_to_db(test_file_name,test_script_response,"sathanantham",test_file_language)
 if st.session_state.checkbox6_state:
-    from github import Github, GithubException  # Make sure GithubException is imported
-    from gitlab import Gitlab
     with st.expander("⚙️ GitHub 📡 Automation Bridge"):
         st.title("Upload code to Repository")
         if source == "file":
@@ -772,8 +823,8 @@ if st.session_state.checkbox6_state:
             all_test_files = db_handler.get_all_testfile_names()
             selected_page_files = st.multiselect("Select saved page files from database to push", all_page_files)
             selected_test_files = st.multiselect("Select saved testcase files from database to push", all_test_files)
-            temp_dir_page=db_handler.prepare_selected_files_for_github(selected_page_files,"sathanantham")
-            temp_dir_test = db_handler.prepare_selected_files_for_github(selected_test_files, "sathanantham")
+            temp_dir_page=db_handler.prepare_selected_files_for_github(selected_page_files)
+            temp_dir_test = db_handler.prepare_selected_files_for_github(selected_test_files)
         repo_pom_name = st.text_input("Enter folder name in repo:", value="test_web/src/pom/pages")
         repo_pytest_name = st.text_input("Enter folder name in repo:", value="test_web/tests/test_cases")
 
@@ -842,9 +893,48 @@ if st.session_state.checkbox6_state:
             else:
                 st.warning("⚠️ Please enter both folder names in the repo.")
 
-st.markdown("""    
-    ### Contact Us
-    - Reach us at [QE Core Team](mailto:QE@tigeranalytics.com)
+
+if st.session_state.checkbox7_state:
+    if source == "database":
+        with st.expander("📥 Download Artifacts"):
+            st.title("Download Artifacts from Database")
+            file_type = st.selectbox("Select FileType",
+                                     ["Recorded_Action_file", "Page_file", "Test_file", "Testcase_file"])
+
+            selected_files = []
+
+            if file_type == "Recorded_Action_file":
+                files = db_handler.get_all_action_names()
+                selected_files = st.multiselect("Select Actions", files)
+            elif file_type == "Page_file":
+                files = db_handler.get_all_pagefile_names()
+                selected_files = st.multiselect("Select Page Files", files)
+            elif file_type == "Test_file":
+                files = db_handler.get_all_testfile_names()
+                selected_files = st.multiselect("Select Test Files", files)
+            elif file_type == "Testcase_file":
+                files = db_handler.get_all_testcasefile_names()
+                selected_files = st.multiselect("Select Testcase Files", files)
+
+            if st.button("📦 Download Files"):
+                if selected_files:
+                    zip_bytes = db_handler.download_files_from_database(selected_files, file_type)
+                    if zip_bytes:
+                        st.download_button(
+                            label="⬇️ Download ZIP",
+                            data=zip_bytes,
+                            file_name="artifacts.zip",
+                            mime="application/zip"
+                        )
+                        st.success(f"✅ Prepared {len(selected_files)} files for download.")
+                    else:
+                        st.warning("⚠️ Could not prepare the ZIP.")
+                else:
+                    st.warning("⚠️ Please select at least one file.")
+
+    st.markdown("""    
+        ### Contact Us
+        - Reach us at [QE Core Team](mailto:QE@tigeranalytics.com)
 
 
     ### Want to learn more?
@@ -852,8 +942,8 @@ st.markdown("""
 
 """)
 
-# Create 6 columns
-col0, col1, col2, col3, col4, col5, col6 = st.columns(7)
+# Create 7 columns
+col0, col1, col2, col3, col4, col5, col6, col7 = st.columns(8)
 
 with col0:
     st.write("Choose display")
@@ -886,4 +976,10 @@ with col6:
     checkbox6 = st.checkbox("(6)", value=st.session_state.checkbox6_state)
     if st.session_state.checkbox6_state != checkbox6:
         st.session_state.checkbox6_state = checkbox6  # Update session state
+        st.rerun()
+
+with col7:
+    checkbox7= st.checkbox("(7)", value=st.session_state.checkbox7_state)
+    if st.session_state.checkbox7_state != checkbox7:
+        st.session_state.checkbox7_state = checkbox7  # Update session state
         st.rerun()

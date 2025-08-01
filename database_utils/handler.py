@@ -1,5 +1,8 @@
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
+from io import BytesIO
+import csv
+import zipfile
 from database_utils.models import Prompt,Action,Pagefile,Testfile,Testcasefile,Fetaurefile,Screenshot
 from config.db_config import DB_URL
 import os
@@ -11,7 +14,7 @@ from datetime import datetime
 from urllib.parse import urlparse
 import re
 from sqlalchemy.exc import SQLAlchemyError
-
+import shutil
 engine = create_engine(DB_URL)
 Session = sessionmaker(bind=engine)
 session = Session()
@@ -74,32 +77,6 @@ def get_prompt_by_name(prompt_name):
     else:
         print(f"⚠️ Prompt '{prompt_name}' not found.")
         return None
-
-
-# def save_action_to_db(action_name, content, created_by):
-#     file_name = f"{action_name}.txt"
-#
-#     # 🛠️ Convert list to string (if content is a list)
-#     if isinstance(content, list):
-#         content = "\n".join(content)  # or use another separator if needed
-#
-#     # Write content to file
-#     with open(file_name, "w", encoding="utf-8") as f:
-#         f.write(content)
-#
-#     # Read as binary to store in DB
-#     with open(file_name, "rb") as f:
-#         file_binary = f.read()
-#
-#     action = Action(
-#         action_name=file_name,  # action name becomes file name
-#         file_data=file_binary,
-#         created_by=created_by
-#     )
-#
-#     session.add(action)
-#     session.commit()
-#     return action.id
 def save_action_to_db(action_name, content, created_by):
     if isinstance(content, list):
         content = "\n".join(content)
@@ -115,38 +92,7 @@ def save_action_to_db(action_name, content, created_by):
     session.add(action)
     session.commit()
     return action.id
-# def save_testfile_to_db(test_name, content, created_by,language):
-#     file_name=""
-#     if language =="java":
-#         file_name = f"{test_name}.java"
-#     elif language == "python":
-#         file_name = f"{test_name}.py"
-#
-#     # 🛠️ Convert list to string (if content is a list)
-#     print("---------------content fromai------------")
-#     print(content)
-#     if isinstance(content, list):
-#         content = "\n".join(content)  # or use another separator if needed
-#
-#     # Write content to file
-#     with open(file_name, "w", encoding="utf-8") as f:
-#         f.write(content)
-#
-#     # Read as binary to store in DB
-#     with open(file_name, "rb") as f:
-#         file_binary = f.read()
-#         print("-------------file_binary------------")
-#         print(file_binary)
-#     testfile = Testfile(
-#         testfile_name=file_name,  # action name becomes file name
-#         file_data=file_binary,
-#         created_by=created_by
-#     )
-#
-#     session.add(testfile)
-#     session.commit()
-#     st.write(f"✅ Test file script generated and save in Db")
-#     return testfile.id
+
 def save_testfile_to_db(test_name, content, created_by, language):
     ext = "java" if language == "java" else "py"
     file_name = f"{test_name}.{ext}"
@@ -167,34 +113,6 @@ def save_testfile_to_db(test_name, content, created_by, language):
     st.write("✅ Test file script generated and saved in DB")
     return testfile.id
 
-# def save_pagefile_to_db(page_name, content, created_by,language):
-#     file_name=""
-#     if language =="java":
-#         file_name = f"{page_name}.java"
-#     elif language == "python":
-#         file_name = f"{page_name}.py"
-#
-#     # 🛠️ Convert list to string (if content is a list)
-#     if isinstance(content, list):
-#         content = "\n".join(content)  # or use another separator if needed
-#
-#     # Write content to file
-#     with open(file_name, "w", encoding="utf-8") as f:
-#         f.write(content)
-#
-#     # Read as binary to store in DB
-#     with open(file_name, "rb") as f:
-#         file_binary = f.read()
-#
-#     pagefile = Pagefile(
-#         pagefile_name=file_name,  # action name becomes file name
-#         file_data=file_binary,
-#         created_by=created_by
-#     )
-#
-#     session.add(pagefile)
-#     session.commit()
-#     return pagefile.id
 def save_pagefile_to_db(page_name, content, created_by, language):
     ext = "java" if language == "java" else "py"
     file_name = f"{page_name}.{ext}"
@@ -214,30 +132,7 @@ def save_pagefile_to_db(page_name, content, created_by, language):
     session.commit()
     return pagefile.id
 
-# def save_featurefile_to_db(page_name, content, created_by):
-#     file_name = f"{page_name}.feature"
-#
-#     # 🛠️ Convert list to string (if content is a list)
-#     if isinstance(content, list):
-#         content = "\n".join(content)  # or use another separator if needed
-#
-#     # Write content to file
-#     with open(file_name, "w", encoding="utf-8") as f:
-#         f.write(content)
-#
-#     # Read as binary to store in DB
-#     with open(file_name, "rb") as f:
-#         file_binary = f.read()
-#
-#     featurefile = Fetaurefile(
-#         featurefile_name=file_name,  # action name becomes file name
-#         file_data=file_binary,
-#         created_by=created_by
-#     )
-#
-#     session.add(featurefile)
-#     session.commit()
-#     return featurefile.id
+
 def save_featurefile_to_db(page_name, content, created_by):
     file_name = f"{page_name}.feature"
 
@@ -256,9 +151,35 @@ def save_featurefile_to_db(page_name, content, created_by):
     session.commit()
     return featurefile.id
 
-import csv
 
-def save_testcases_to_db(testcase_name, content, created_by):
+def save_testcases_to_db(testcase_name, dataframe: pd.DataFrame, created_by):
+    try:
+        # Convert DataFrame to real Excel binary
+        buffer = io.BytesIO()
+        dataframe.to_excel(buffer, index=False)
+        buffer.seek(0)
+        file_binary = buffer.read()
+
+        testcase = Testcasefile(
+            testcase_name=testcase_name,
+            file_data=file_binary,
+            created_by=created_by
+        )
+
+        session.add(testcase)
+        session.commit()
+        return testcase.id
+
+    except SQLAlchemyError as e:
+        session.rollback()
+        print(f"❌ Database error: {e}")
+        raise
+
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+        raise
+
+def save_testcases_to_db_old(testcase_name, content, created_by):
     try:
         # Case 1: content is a list of dictionaries (structured like a CSV)
         if isinstance(content, list) and content and isinstance(content[0], dict):
@@ -306,6 +227,9 @@ def get_action_file_by_name(action_name):
     else:
         raise FileNotFoundError(f"No file found in DB with name: {action_name}")
 
+def get_all_screenshot_names():
+  # adjust if your model is named differently
+    return [action.page_name for action in session.query(Screenshot).all()]
 def get_all_action_names():
   # adjust if your model is named differently
     return [action.action_name for action in session.query(Action).all()]
@@ -319,15 +243,6 @@ def get_all_testcasefile_names():
   # adjust if your model is named differently
     return [action.testcase_name for action in session.query(Testcasefile).all()]
 
-# def get_action_content_by_name(action_name: str) -> str:
-#     """
-#     Fetches the content of the action file from the database by action_name.
-#     Returns decoded string content if found, otherwise None.
-#     """
-#     action = session.query(Action).filter(Action.action_name.ilike(f"%{action_name}%")).first()
-#     if action and action.file_data:
-#         return action.file_data.decode("utf-8")
-#     return None
 
 def get_action_content_by_name(action_name: str, type: str) -> str:
     """
@@ -367,7 +282,7 @@ def get_action_content_by_name(action_name: str, type: str) -> str:
 
     except Exception as e:
         return f"[Error reading file: {str(e)}]"
-def prepare_selected_files_for_github(selected_file_names, created_by):
+def prepare_selected_files_for_github(selected_file_names):
     """
     1. Takes list of selected file names from UI (either .java or .py)
     2. Creates physical files in a temp directory using DB content
@@ -408,6 +323,7 @@ def get_screenshots_from_db(page_name: str = None):
     return query.order_by(Screenshot.created_on.desc()).all()
 
 def get_all_screenshots():
+    print(session.query(Screenshot).order_by(Screenshot.created_on.desc()).all())
     return session.query(Screenshot).order_by(Screenshot.created_on.desc()).all()
 
 def take_screenshot_db(driver,created_by="system"):
@@ -427,3 +343,68 @@ def take_screenshot_db(driver,created_by="system"):
     session.commit()
 
     return f"DB_Record_ID: {screenshot_record.id}"
+
+def download_files_from_database(file_names: list, file_type: str) -> bytes:
+    """
+    Given a list of filenames and file type, fetch content from DB and return zipped bytes
+    """
+    zip_buffer = BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for name in file_names:
+            # 🔁 Fetch content from the DB
+            content = get_file_content_by_type(name, file_type)  # You need to implement this dispatcher
+            if content:
+                print(f"[DEBUG] Writing {name}, type={type(content)}")
+                zipf.writestr(name, content)
+
+    zip_buffer.seek(0)
+    return zip_buffer.read()
+def get_file_content_by_type(name: str, file_type: str):
+    return get_file_content_by_name(name,file_type)
+def get_file_content_by_name(action_name: str, type: str) -> str:
+    """
+    Fetches the content of the specified file type from the database using action_name.
+    Supports:
+    - .txt, .py, .java as UTF-8 text
+    - .xlsx as parsed table using pandas
+    - .png/.jpg/.jpeg/.bmp as image bytes (base64 encoded for web display)
+    """
+    model_map = {
+        "Page_file": (Pagefile, "pagefile_name"),
+        "Testcase_file": (Testcasefile, "testcase_name"),
+        "Test_file": (Testfile, "testfile_name"),
+        "Recorded_Action_file": (Action, "action_name")
+
+    }
+
+    if type not in model_map:
+        return f"[Error: Unknown type '{type}']"
+
+    model, name_field = model_map[type]
+    action = session.query(model).filter(getattr(model, name_field).ilike(f"%{action_name}%")).first()
+
+    if not action or not getattr(action, "file_data", None):
+        return f"[No file data found for: {action_name}]"
+
+    # Determine file extension
+    _, ext = os.path.splitext(action_name.lower())
+
+    try:
+        if ext in [".txt", ".py", ".java"]:
+            return action.file_data.decode("utf-8", errors="ignore")
+
+
+        elif ext == ".xlsx":
+            return action.file_data
+
+        elif ext in [".png", ".jpg", ".jpeg", ".bmp",".html"]:
+            # 👇 Return base64-encoded image string (for rendering or download)
+            import base64
+            encoded = base64.b64encode(action.file_data).decode('utf-8')
+            return f"data:image/{ext[1:]};base64,{encoded}"
+
+        else:
+            return f"[Unsupported file type: {ext}]"
+
+    except Exception as e:
+        return f"[Error reading file: {str(e)}]"
