@@ -1,6 +1,8 @@
+from scripts.regsetup import description
+
 prompt_list = [
     {
-        "prompt_name": "featurefile_prompt",
+        "prompt_name": "Feature_file",
         "prompt_text": """You are a Behaviour Driven Development (BDD) assistant.
 Generate a .feature file using Gherkin syntax based on the recorded user actions provided below.
 Output only valid .feature file content—do not include explanations, notes, or any extra text.
@@ -17,7 +19,7 @@ Recorded User Actions:
         "description": "Prompt to generate BDD feature files based on user requirements"
     },
     {
-        "prompt_name": "powerbi_prompt",
+        "prompt_name": "PowerBi",
         "prompt_text": """You are a skilled XPath expert.
 
 Given the following list of HTML or SVG elements from a Power BI report, generate robust XPath expressions for each element. Follow these guidelines:
@@ -68,7 +70,7 @@ Generate XPath expressions for each of the following HTML elements, ensuring to 
         "description": "Prompt for Power BI dashboards - extract from visuals"
     },
     {
-        "prompt_name": "web_prompt",
+        "prompt_name": "Web",
         "prompt_text": """From the given list of elements, generate all possible XPath expressions for each element using its tag and attributes only.
 Return only valid XPath strings as output. Do not include any explanation or description.
 
@@ -76,7 +78,7 @@ Input: {formatted_summary}""",
         "description": "Prompt for generic web iframe/table scraping"
     },
     {
-        "prompt_name": "pagefile_prompt",
+        "prompt_name": "Page_file",
         "prompt_text": """Generate a complete {language} Page Object Model (POM) class file using Selenium, with the following elements:
 {xpaths}
 
@@ -91,8 +93,10 @@ Requirements:
         "description": "Prompt to dynamically generate page file"
     },
     {
-        "prompt_name": "pagefile_action_prompt",
-        "prompt_text": """Generate a complete {language} Page Object Model (POM) class using Selenium.
+        "prompt_name": "Page_file_action",
+        "prompt_text": """You are an expert in generating Page Object Model (POM) classes for Selenium frameworks.
+
+Your task is to generate a complete, syntactically correct, and production-ready {language} class based on the provided input.
 
 Inputs:
 1. Elements (with XPaths):
@@ -101,79 +105,58 @@ Inputs:
 2. Recorded User Actions (to derive methods and behavior):
 {Action_data}
 
-Requirements:
-1. Use @FindBy annotation with How.XPATH to locate elements.
-2. Initialize WebDriver in the constructor and call PageFactory.initElements().
-3. Generate methods based on the recorded actions, using appropriate interaction logic (e.g., sendKeys, click).
-4. Method names should reflect the intent of the action (e.g., enterUsername(), clickLoginButton()).
-5. Use meaningful and consistent naming conventions for the class, methods, and variables.
-6. The class name must be derived from the page name and be a valid {language} class name.
-7. Return only the complete and syntactically correct {language} class code — no explanations, comments, or extra output.""",
+Strict Requirements:
+1. Use correct syntax and structure for {language} Selenium Page Object Model.
+2. Use `@FindBy(how = How.XPATH, using = "...")` for Java or equivalent for the selected {language}.
+3. Initialize WebDriver in the constructor using the appropriate method (e.g., PageFactory for Java).
+4. Generate methods for each action using appropriate interaction logic (e.g., `click()`, `sendKeys()`).
+5. Method names must reflect the intent of the action (e.g., `enterUsername()`, `clickLoginButton()`).
+6. Use proper naming conventions for classes, methods, and variables as per {language} standards.
+7. Do not include any explanations, comments, markdown, or extra output — return only the complete {language} class code.
+8. The class should be ready to drop into an existing Selenium framework where dependencies are already handled.
+
+With this version, the model will only return the raw code — no ```python or any other wrapper.""",
         "description": "Prompt to dynamically generate page file with recorded actions"
     },
     {
-        "prompt_name": "testscript_prompt",
+        "prompt_name": "Test_file_action",
         "prompt_text": """You are a test automation expert.
 
-Your task is to generate a {test_file_language} test script using pytest (or unittest) based on the following inputs. The script should automate all test case steps by utilizing methods from the page object file(s) and ensuring complete execution of the test flow.
-
-## Input 1: Page Object File(s)
-{page_files_content}
-
-## Input 2: Test Case Definitions
-{test_files_content}
-
-## Instructions:
-1. Each test case must be fully implemented, step by step, from start to end—no step should be skipped.
-2. For each step:
-   - First, check if a matching page method exists and use it.
-   - If not, use a matching XPath from the page object.
-   - If still not found, write a direct Selenium command.
-3. Include assert statements to verify expected outcomes.
-4. Follow the test case step order exactly.
-5. Create reusable methods for shared flows like login.
-6. Use pytest structure as needed.
-7. Add clear inline comments for each step.
-8. Intelligently infer behavior when needed.
-9. Ensure the script is complete, syntactically valid, and executable.
-
-## Output Format:
-- Return only valid Python test code.
-- Include imports, test class, one function per test case, using page methods/XPath/raw Selenium.""",
-        "description": "Prompt to generate the test script"
-    },
-    {
-        "prompt_name": "testcasegenerate_prompt",
-        "prompt_text": """You are an expert QA Test Case Generator.
-
-Your task is to generate a comprehensive, logically ordered, end-to-end set of functional test cases using the following inputs:
+Your task is to generate a valid and production-ready {test_file_language} test script using pytest based on the inputs below.
 
 Inputs:
-- Navigation Flow: {navigation}
-- UI Layout from Screen Images: {image_data_processed}
-{action_data_processed}
+1. Page Object File(s):
+{page_files_content}
 
-Requirements:
-{requirements}
+2. Test Case Definitions:
+{test_files_content}
+
+3. (Optional) Recorded User Actions:
+{recorded_actions}
 
 Instructions:
-1. Start each case from login or the first screen and end at a success/confirmation screen.
-2. At least one full end-to-end case is required.
-3. Use recorded actions if available, otherwise infer from inputs.
-4. Include forms, navigation, validations, edge cases, etc.
-5. Use pairwise test coverage.
-6. Cover frontend and backend outcomes.
+1. Fully implement each test case from start to end — no step should be skipped.
+2. For each step:
+   - First, check if a matching method exists in the page object file and use it.
+   - If no method exists, check for a matching XPath locator and use `driver.find_element(...)`.
+   - If neither exists, use a direct Selenium command based on visible text or inferred intent.
+   - If `Recorded User Actions` is provided, align actions with the test case flow to improve accuracy or fill in any missing interactions.
+3. Include assert statements to validate expected outcomes as per each step.
+4. Follow the step order exactly as defined in the test case.
+5. Extract reusable flows (e.g., login) as helper methods inside the test file.
+6. Use pytest structure: imports, fixtures, and one test function per test case.
+7. Add inline comments that clearly describe the purpose of each step (based on the test case or recorded actions).
+8. Output only valid Python test code — no explanations, no markdown formatting, and no extra content.
 
-Output Format:
-- Markdown tables using:
-  Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type
-- Status = "New", Type = "Manual"
-- 15–20 test cases, each with 2–6 steps
-- No explanations, just raw tables.""",
-        "description": "Prompt for generate test cases"
+Do not wrap the output in triple backticks or add any non-code text — return the raw script only.
+
+With this version, the model will only return the raw code — no ```python or any other wrapper.
+Note: The Page Object file(s) are located in the following path and should be imported accordingly:
+output/page_file_generator/""",
+        "description":"Prompt to dynamically generate test script"
     },
     {
-        "prompt_name": "testcasegeneratewithdoc_prompt",
+        "prompt_name": "Test_case_generation_document",
         "prompt_text": """You are an expert QA Test Case Generator.
 
 Your task is to generate a comprehensive set of realistic, end-to-end functional test cases based solely on the extracted requirement text from a document.
@@ -181,47 +164,160 @@ Your task is to generate a comprehensive set of realistic, end-to-end functional
 Input:
 - Extracted Requirement to Validate: {requirements}
 
-Instructions:
-1. Follow realistic user flow.
-2. Test all fields, buttons, dropdowns, and outputs.
-3. Include positive, negative, boundary, edge, retry tests.
-4. Use pairwise input combination techniques.
+Instructions(strict):
+1. Login step is mandatory as Step 1 in every test case, regardless of whether it's mentioned in the navigation flow or actions.
+
+2. Logout step is mandatory as the last step in every test case (unless the flow ends in error, timeout, or system crash).
+
+3. Even if no user actions are provided, you must infer and include all critical steps, especially login and logout.
+
+4. At least one full end-to-end scenario is required.
+
+5. Include validations, navigation, edge cases, form inputs, and negative tests.
+
+6. Use pairwise test coverage for field combinations.
+
+7. Cover both frontend and backend outcomes (e.g., UI response + DB/API triggers).
+
+
 
 Output Format:
-- Markdown table with columns:
-  Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type
-- Status = "New"
-- Type = "Manual"
-- 15–20 test cases, each 2–6 steps
-- No extra output or explanation.""",
-        "description": "Prompt to generate test cases with uploaded documents"
+Strictly return the output as a Markdown-style table for each and every test case using the following columns:
+
+Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type
+
+- Status should be "New"
+- Type should be "Manual"
+- Include at least 15 to 20 complete test cases, each with 2 to 6 logical steps
+- Ensure all test cases are logically correct and follow the implied user flow
+- Do not include any markdown, explanation, or summary
+
+Begin now:
+Generate test cases for the following extracted requirement:
+{requirements}
+""",
+        "description":"Prompt to dynamically generate test cases with documents"
+    }
+    ,
+{
+        "prompt_name": "Test_case_accuracy",
+        "prompt_text": """You are an expert QA Test Case Evaluator and Coverage Analyst.
+
+Your task is to evaluate the **accuracy**, **completeness**, and **coverage** of a test case generated by an AI model based solely on the original requirement.
+
+### Input:
+- Requirement: {requirement_text}
+- Generated Test Case: {test_case_text}
+
+### Instructions:
+1. Carefully analyze whether the test case fully covers the intent of the requirement.
+2. Identify missing steps, validations, or edge cases that are expected but not covered.
+3. Check for correctness, clarity, and alignment with typical user flows.
+4. Based on your evaluation, assign accuracy scores for:
+   - Requirement Coverage
+   - Functional Correctness
+   - Completeness
+5. Provide an **Overall Accuracy Score (0–100%)** and describe any gaps.
+6. Suggest improvements if the test case is incomplete or partially aligned.
+
+### Output Format:
+```json
+{{
+  "overall_accuracy": 85,
+  "requirement_coverage": 90,
+  "functional_correctness": 80,
+  "completeness": 85,
+  "gaps": [
+    "Does not validate error messages for invalid input",
+    "No step to verify successful form submission"
+  ],
+  "suggestions": [
+    "Include edge cases like blank input and invalid credentials",
+    "Verify expected outputs or messages for each step"
+  ]
+}}
+
+With this version, the model will only return the json response — no ```json or any other wrapper.""",
+        "description":"Prompt to find the test case accuracy matrix"
     },
-    {
-        "prompt_name": "testcageneartev2_prompt",
+{
+        "prompt_name": "Test_case_regeneration_accuracy",
         "prompt_text": """You are an expert QA Test Case Generator.
 
-Your task is to generate a comprehensive set of realistic, end-to-end functional test cases to validate a target page or feature using the following inputs:
+Your task is to regenerate a high-coverage, logically ordered, end-to-end set of functional test cases using the following inputs:
 
 Inputs:
 - Navigation Flow: {navigation}
-- UI Layout (Image Context): {image_data_processed}
-- User Interaction Elements (Action Data): {action_data_processed}
-- Final Requirement to Validate: {requirements}
+- UI Layout from Screen Images: {image_data_processed}
+ {action_data_processed}
 
-Instructions:
-1. Each test case must follow a complete and realistic user flow from the beginning (such as login) to the final screen.
-2. Cover all UI elements: inputs, buttons, dropdowns, etc.
-3. Include a variety of test types: positive, negative, boundary, edge, retry.
-4. Use orthogonal array/pairwise testing for coverage.
+Requirements:
+{requirements}
+
+Initial AI-Generated Test Cases:
+{existing_prompt_response}
+
+Accuracy Feedback:
+{accuracy_Details}
+
+Instructions (strict):
+1. Analyze the feedback and coverage issues from the accuracy matrix.
+2. Regenerate all test cases with improved coverage based on gaps and suggestions.
+3. Maintain login as Step 1 and logout as the last step unless failure ends the flow.
+4. Include validations, edge cases, role-based checks, and proper error handling.
+5. Use pairwise test coverage for combinations of fields.
+6. Include frontend validations and backend impacts (e.g., DB/API triggers).
+7. Each test case must be correct and realistic from a user's point of view.
 
 Output Format:
-- Markdown table:
-  | Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type |
+- Markdown-style table with:
+  Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type
 - Status = "New", Type = "Manual"
-- Each case has 2–6 steps
-- 15–20 full test cases
-- No summaries or extra text""",
-        "description": "Prompt used to generate the test cases with new version"
+- At least 15–20 test cases with 2–6 steps each.
+- Output raw tables only — no additional text or explanation.
+
+Begin now:
+Regenerate test cases with at least 90% coverage.""",
+        "description":"Prompt to re generate the the test case with accuracy matrix"
+    },
+{
+        "prompt_name": "Test_case_regeneration_accuracy_doc",
+        "prompt_text": """You are an expert QA Test Case Generator.
+
+Your task is to regenerate a high-coverage, logically ordered, end-to-end set of functional test cases using the following inputs:
+
+Requirements:
+{requirements}
+
+Initial AI-Generated Test Cases:
+{existing_prompt_response}
+
+Accuracy Feedback:
+{accuracy_Details}
+
+Instructions (strict):
+1. Analyze the feedback and coverage issues from the accuracy matrix.
+2. Regenerate all test cases with improved coverage based on gaps and suggestions.
+3. Login step is mandatory as Step 1 in every test case, regardless of whether it's mentioned in the navigation flow or actions.
+4. Logout step is mandatory as the last step in every test case (unless the flow ends in error, timeout, or system crash).
+5. Even if no user actions are provided, you must infer and include all critical steps, especially login and logout.
+6. At least one full end-to-end scenario is required.
+7. Include validations, navigation, edge cases, form inputs, and negative tests.
+8. Use pairwise test coverage for field combinations.
+9. Cover both frontend and backend outcomes (e.g., UI response + DB/API triggers).
+10. Each test case must be logically correct, complete, and realistic from a user's point of view.
+
+Output Format:
+- Markdown-style table with:
+  Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type
+- Status = "New", Type = "Manual"
+- At least 15–20 test cases with 2–6 steps each.
+- Output raw tables only — no additional text or explanation.
+
+Begin now:
+Regenerate the test cases to achieve at least 90% accuracy coverage.
+""",
+        "description":"Prompt to re generate the the test case with accuracy matrix"
     }
 ]
 

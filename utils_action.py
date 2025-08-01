@@ -5,6 +5,77 @@ import os
 from collections import defaultdict
 from urllib.parse import urlparse
 from database_utils.models import Screenshot
+JS_EVENT_LISTENER_allsite="""(function () {
+    if (!window.recordedActions) {
+        window.recordedActions = [];
+    }
+
+    function getXPath(el) {
+        const getPos = e => {
+            let pos = 1;
+            while (e.previousElementSibling) {
+                e = e.previousElementSibling;
+                pos++;
+            }
+            return pos;
+        };
+
+        const parts = [];
+        while (el && el.nodeType === Node.ELEMENT_NODE) {
+            let index = getPos(el);
+            let tag = el.nodeName.toLowerCase();
+            parts.unshift(`${tag}[${index}]`);
+            el = el.parentNode;
+        }
+        return '/' + parts.join('/');
+    }
+
+    function recordAction(type, target) {
+        if (!target || ["script", "style"].includes(target.tagName?.toLowerCase())) return;
+
+        const xpath = getXPath(target);
+        const label = target.getAttribute("aria-label") || target.name || target.id || target.innerText || target.placeholder || target.value || target.type;
+        const value = (type === "input" || type === "change") ? target.value || "" : "";
+        const url = window.location.href;
+
+        const exists = window.recordedActions.some(action => action.xpath === xpath && action.action === type);
+        if (!exists) {
+            window.recordedActions.push({ action: type, xpath, label: label?.trim(), value, url });
+            console.log("Recorded:", { action: type, xpath, label, value });
+        }
+    }
+
+    function attachListeners() {
+        document.addEventListener('click', e => {
+            recordAction('click', e.target);
+        });
+
+        document.addEventListener('change', e => {
+            recordAction('change', e.target);
+        });
+
+        document.addEventListener('blur', e => {
+            if (e.target.tagName.toLowerCase() === 'input' || e.target.tagName.toLowerCase() === 'textarea') {
+                recordAction('input', e.target);
+            }
+        }, true);
+    }
+
+    if (document.readyState === "complete") {
+        attachListeners();
+    } else {
+        window.addEventListener('load', attachListeners);
+    }
+
+    // Optionally observe DOM changes
+    const observer = new MutationObserver(() => {
+        attachListeners();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    console.log("Recording actions...");
+})();
+"""
 JS_EVENT_LISTENER="""(function () {
     if (!window.recordedActions) {
         window.recordedActions = [];
@@ -101,7 +172,7 @@ JS_EVENT_LISTENER_1 = """(function() {
 })();"""
 
 def start_recording(driver):
-    driver.execute_script(JS_EVENT_LISTENER)
+    driver.execute_script(JS_EVENT_LISTENER_allsite)
 
 def get_recorded_actions(driver):
     return driver.execute_script("return window.recordedActions || []")
