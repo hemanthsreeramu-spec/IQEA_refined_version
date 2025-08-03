@@ -78,7 +78,7 @@ Input: {formatted_summary}""",
         "description": "Prompt for generic web iframe/table scraping"
     },
     {
-        "prompt_name": "Page_file",
+        "prompt_name": "Page_File",
         "prompt_text": """Generate a complete {language} Page Object Model (POM) class file using Selenium, with the following elements:
 {xpaths}
 
@@ -93,7 +93,7 @@ Requirements:
         "description": "Prompt to dynamically generate page file"
     },
     {
-        "prompt_name": "Page_file_action",
+        "prompt_name": "Page_File_Action",
         "prompt_text": """You are an expert in generating Page Object Model (POM) classes for Selenium frameworks.
 
 Your task is to generate a complete, syntactically correct, and production-ready {language} class based on the provided input.
@@ -119,7 +119,7 @@ With this version, the model will only return the raw code — no ```python or a
         "description": "Prompt to dynamically generate page file with recorded actions"
     },
     {
-        "prompt_name": "Test_file_action",
+        "prompt_name": "Test_File_Action",
         "prompt_text": """You are a test automation expert.
 
 Your task is to generate a valid and production-ready {test_file_language} test script using pytest based on the inputs below.
@@ -318,6 +318,43 @@ Begin now:
 Regenerate the test cases to achieve at least 90% accuracy coverage.
 """,
         "description":"Prompt to re generate the the test case with accuracy matrix"
+    },
+    {
+        "prompt_name": "Test_case_generation",
+        "prompt_text": """You are an expert QA Test Case Generator.
+
+Your task is to generate a comprehensive, logically ordered, end-to-end set of functional test cases using the following inputs:
+
+Inputs:
+- Navigation Flow: {navigation}
+- UI Layout from Screen Images: {image_data_processed}
+{action_data_processed}
+
+Requirements:
+{requirements}
+
+Instructions(strict):
+1. Login step is mandatory as Step 1 in every test case, regardless of whether it's mentioned in the navigation flow or actions.
+
+2. Logout step is mandatory as the last step in every test case (unless the flow ends in error, timeout, or system crash).
+
+3. Even if no user actions are provided, you must infer and include all critical steps, especially login and logout.
+
+4. At least one full end-to-end scenario is required.
+
+5. Include validations, navigation, edge cases, form inputs, and negative tests.
+
+6. Use pairwise test coverage for field combinations.
+
+7. Cover both frontend and backend outcomes (e.g., UI response + DB/API triggers).
+
+Output Format:
+- Markdown tables using:
+  Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type
+- Status = "New", Type = "Manual"
+- 15–20 test cases, each with 2–6 steps
+- No explanations, just raw tables.""",
+        "description": "Prompt to generate test cases with images and action file"
     }
 ]
 

@@ -750,7 +750,7 @@ def select_and_read_text_files(folder_path):
         return {}
 
     # Step 2: Let the user select multiple files
-    selected_files = st.multiselect("", txt_files)
+    selected_files = st.multiselect("Select relevant file(s)", txt_files)
 
     # Step 3: Read contents of selected files
     file_contents = {}
@@ -887,6 +887,7 @@ def get_queries_from_ai_updated(formatted_summary):
     output_value = model([message])
     print(output_value)
     return output_value.content
+
 def markdown_to_dataframe(markdown_text):
     # Extract lines that look like markdown rows
     lines = markdown_text.strip().splitlines()

@@ -325,10 +325,7 @@ if st.session_state.checkbox3_state:
                     Action_data = merged_content
         elif option == 'Documents':
             # Show only document upload section
-            # st.write("Upload a PDF, Word, or Excel document:")
-            st.markdown("**Upload a PDF, Word, or Excel document** <span style='color:red;'>*</span>",
-                        unsafe_allow_html=True)
-            uploaded_file = st.file_uploader("", type=['pdf', 'docx', 'xlsx'])
+            uploaded_file = st.file_uploader("Upload a PDF, Word, or Excel document", type=['pdf', 'docx', 'xlsx'])
 
             if uploaded_file is not None:
                 if utils.allowed_file(uploaded_file.name, ['pdf']):
@@ -407,10 +404,9 @@ if st.session_state.checkbox3_state:
                                                                                 image_data_processed, action_data_processed,
                                                                                 prompt)
                     st.session_state.testcase_response = utils.get_queries_from_ai_updated(constructedprompt)
-                    #st.code(prompt_response)
+                    st.code(st.session_state.testcase_response)
                     #utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
-                    #if st.button ("Calculate_Testcase_Accuracy"):
-                    st.write("🧠 Calculating Test Case Accuracy Matrix...")
+                    st.write("🧠 Test Case Accuracy Metrics...")
 
                     # Initialize progress bar
                     progress_bar = st.progress(0)
@@ -435,6 +431,7 @@ if st.session_state.checkbox3_state:
                     progress_text.text("✅ Finalizing Output...")
                     progress_bar.progress(100)
                     st.write(st.session_state.accuracy_response)
+
             elif option == 'Documents' and uploaded_file is not None:
                 extracted_data = utils.extract_text_from_document(uploaded_file,uploaded_file.name)
                 constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document",
@@ -470,6 +467,7 @@ if st.session_state.checkbox3_state:
                 progress_bar.progress(100)
                 st.code(st.session_state.accuracy_response)
                 # Convert JSON string to dict (only if it's a string)
+
         if st.session_state.accuracy_response:
             if isinstance(st.session_state.accuracy_response, str):
                 accuracy_response = json.loads(st.session_state.accuracy_response)
@@ -508,8 +506,8 @@ if st.session_state.checkbox3_state:
         if st.session_state.save_regenerated_testcases and st.button("Save regenerated test case"):
             utils.covert_response_to_testcases(st.session_state.testcase_regeneration, Test_case_collection)
 if st.session_state.checkbox4_state:
-    with st.expander("🔎 Xpath 🧾 Page File Generator"):
-        st.title("XPath Generator for Visible Elements")
+    with st.expander("🔎 Locators 🧾 POM File Generator"):
+        st.title("Locator Generator for Visible Elements")
         # page_url = st.text_input("Enter the URL of the page:")
         selected_app = st.multiselect(
             "Select application type:",
@@ -589,8 +587,8 @@ if st.session_state.checkbox4_state:
                     st.write("Page file generation skipped.")
         # Show popup only if the flag is set
         if st.session_state.show_form:
-            st.write("Generating Page File")
-            page_name = st.text_input("Enter Page Name", value=page_name)
+            st.header("Generating Page File")
+            page_name = st.text_input("Enter Page Name (same as xpath details)", value=page_name)
             language = st.selectbox("Select Language", ["java", "python", "c#", "javascript"])
             Action_data = ""
             if source == "file":
