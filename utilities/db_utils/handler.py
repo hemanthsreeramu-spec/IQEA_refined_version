@@ -3,8 +3,8 @@ from sqlalchemy import create_engine
 from io import BytesIO
 import csv
 import zipfile
-from database_utils.models import Prompt,Action,Pagefile,Testfile,Testcasefile,Fetaurefile,Screenshot
-from config.db_config import DB_URL
+from utilities.db_utils.models import *
+from config.settings_reader import get_db_url
 import os
 import io
 import pandas as pd
@@ -14,8 +14,8 @@ from datetime import datetime
 from urllib.parse import urlparse
 import re
 from sqlalchemy.exc import SQLAlchemyError
-import shutil
-engine = create_engine(DB_URL)
+
+engine = create_engine(get_db_url())
 Session = sessionmaker(bind=engine)
 session = Session()
 
@@ -77,6 +77,7 @@ def get_prompt_by_name(prompt_name):
     else:
         print(f"⚠️ Prompt '{prompt_name}' not found.")
         return None
+    
 def save_action_to_db(action_name, content, created_by):
     if isinstance(content, list):
         content = "\n".join(content)
@@ -282,6 +283,8 @@ def get_action_content_by_name(action_name: str, type: str) -> str:
 
     except Exception as e:
         return f"[Error reading file: {str(e)}]"
+    
+
 def prepare_selected_files_for_github(selected_file_names):
     """
     1. Takes list of selected file names from UI (either .java or .py)
@@ -359,8 +362,10 @@ def download_files_from_database(file_names: list, file_type: str) -> bytes:
 
     zip_buffer.seek(0)
     return zip_buffer.read()
+
 def get_file_content_by_type(name: str, file_type: str):
     return get_file_content_by_name(name,file_type)
+
 def get_file_content_by_name(action_name: str, type: str) -> str:
     """
     Fetches the content of the specified file type from the database using action_name.

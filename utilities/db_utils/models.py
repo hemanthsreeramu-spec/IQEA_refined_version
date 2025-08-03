@@ -1,6 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, func, LargeBinary
 from datetime import datetime
-from database_utils.base import Base  # Shared Base
+from utilities.db_utils.base import Base  # Shared Base
 
 
 class Prompt(Base):
@@ -20,9 +20,6 @@ class Prompt(Base):
     def __repr__(self):
         return f"<Prompt(name='{self.prompt_name}', created_by='{self.created_by}')>"
 
-from sqlalchemy import Column, Integer, Text, DateTime, func, LargeBinary
-
-
 class Action(Base):
     __tablename__ = 'actions'
 
@@ -40,6 +37,7 @@ class Pagefile(Base):
     file_data = Column(LargeBinary, nullable=False)
     created_by = Column(Text, nullable=False)
     created_on = Column(DateTime, server_default=func.now())
+
 class Testcasefile(Base):
     __tablename__ = 'testcase'
 
@@ -48,6 +46,7 @@ class Testcasefile(Base):
     file_data = Column(LargeBinary, nullable=False)
     created_by = Column(Text, nullable=False)
     created_on = Column(DateTime, server_default=func.now())
+
 class Testfile(Base):
     __tablename__ = 'testfile'
 
@@ -56,6 +55,7 @@ class Testfile(Base):
     file_data = Column(LargeBinary, nullable=False)
     created_by = Column(Text, nullable=False)
     created_on = Column(DateTime, server_default=func.now())
+
 class Fetaurefile(Base):
     __tablename__ = 'featurefile'
 

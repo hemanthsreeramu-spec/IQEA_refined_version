@@ -13,30 +13,22 @@ import json
 import shutil
 import threading
 import time
-import Utilities_Xpath as utils
-import utils_action as action_utils
+import utilities.Utilities_Xpath as utils
+import utilities.utils_action as action_utils
+import utilities.db_utils.handler as db_handler
 from PIL import Image
-from Utilities import *
 import pytesseract
 import io
 from langchain_core.messages import HumanMessage
 from langchain_openai import AzureChatOpenAI
-from dotenv import load_dotenv
-load_dotenv()
+from dotenv import load_dotenv; load_dotenv()
 import urllib3
-import database_utils.handler as db_handler
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-###Db
 
-#setting details - source
-from config.settings_reader import get_source
-
+#setting details - source either file or database
+from config.settings_reader import get_source, get_update_user
 source = get_source()
 
-#setting details - source
-from config.settings_reader import get_source
-
-source = get_source()
 # Setup output folder
 current_path = os.getcwd()
 input_folder = os.path.join(current_path, "Input")
@@ -55,7 +47,7 @@ os.makedirs(page_screenshot_folder, exist_ok=True)
 os.makedirs(Test_file_generator, exist_ok=True)
 
 st.set_page_config(
-    page_title="TigerQE One Stop AI Solution",
+    page_title="TigerQE AI iQEA",
     page_icon="🤖",
     layout="centered"
 )
@@ -128,7 +120,9 @@ if "save_testcases" not in st.session_state:
     st.session_state.save_testcases = False
 if "save_regenerated_testcases" not in st.session_state:
     st.session_state.save_regenerated_testcases = False
-st.title(" 🤖 TigerQE 'One-Stop' AI Solution")
+
+st.title(" 🤖 TigerQE AI Platform - iQEA (Intelligent QE Assistant)")
+
 # 1. Open the browser
 page_url = st.text_input("Enter the URL of the page:")
 st.session_state.page_url = page_url
@@ -191,7 +185,7 @@ if st.session_state.checkbox1_state:
                 workflow_text = action_utils.generate_workflow(st.session_state.actions)
                 if page_name:
                     if source == "database":
-                        action_id = db_handler.save_action_to_db(page_name, workflow_text, "sathanantham")
+                        action_id = db_handler.save_action_to_db(page_name, workflow_text, get_update_user())
                         st.success(f"✅ Action saved to database (ID: {action_id})")
                         #st.write(db_handler.get_action_file_by_name(page_name))
                     elif source == "file":
@@ -241,7 +235,7 @@ if st.session_state.checkbox2_state:
 
                 st.write(f"Feature file saved here: {save_feature_file}")
             if source == "database":
-                db_handler.save_featurefile_to_db(Feature_file_name, feature_response, "sathanantham")
+                db_handler.save_featurefile_to_db(Feature_file_name, feature_response, get_update_user())
                 st.success(f"feature file save in database for '{Feature_file_name}'")
 
 if st.session_state.checkbox3_state:
@@ -251,10 +245,10 @@ if st.session_state.checkbox3_state:
 
         option = st.radio(
             "Choose your Flow with:",
-            ('Documents', 'Recorded_details')
+            ('Documents', 'Recorded_Details')
         )
 
-        if option == 'Recorded_details':
+        if option == 'Recorded_Details':
             # Show image selection and prompt box
             if source == "file":
                 st.markdown("**Select Images (Mandatory)** <span style='color:red;'>*</span>", unsafe_allow_html=True)
@@ -353,7 +347,7 @@ if st.session_state.checkbox3_state:
             st.session_state.regenerate_clicked = False
             st.session_state.save_regenerated_testcases = False
             # st.write(Action_data)
-            if option == 'Recorded_details':
+            if option == 'Recorded_Details':
                 if st.session_state.selected_images and prompt:
                     # Construct navigation as a comma-separated string
                     navigation = ', '.join(st.session_state.selected_images)
@@ -627,7 +621,7 @@ if st.session_state.checkbox4_state:
                     utils.create_java_file(page_name, language, st.session_state.prompt_response_page_file)
                     st.success(f"Page file generated for '{page_name}' in '{language}' language.")
                 elif source == "database":
-                    db_handler.save_pagefile_to_db(page_name,st.session_state.prompt_response_page_file,"sathanantham",language)
+                    db_handler.save_pagefile_to_db(page_name,st.session_state.prompt_response_page_file,get_update_user(),language)
                     st.success(f"Page file save in database for '{page_name}' in '{language}' language.")
 
 
@@ -734,7 +728,7 @@ if st.session_state.checkbox4_state:
                                 elif source == "database":
                                     db_handler.save_pagefile_to_db(page_name,
                                                                    st.session_state.prompt_response_page_file,
-                                                                   "sathanantham", language)
+                                                                   get_update_user(), language)
                                     st.success(
                                         f"Page file save in database for '{page_name}' in '{language}' language.")
                                 st.session_state.show_popup = False
@@ -811,9 +805,9 @@ if st.session_state.checkbox4_state:
                 if source == "file":
                     utils.create_test_file(Test_file_generator,test_file_name, test_file_language, test_script_response)
                 elif source == "database":
-                    db_handler.save_testfile_to_db(test_file_name,test_script_response,"sathanantham",test_file_language)
+                    db_handler.save_testfile_to_db(test_file_name,test_script_response,get_update_user(),test_file_language)
 if st.session_state.checkbox6_state:
-    with st.expander("⚙️ GitHub 📡 Automation Bridge"):
+    with st.expander("⚙️ Source Code 📡 Automation Bridge"):
         st.title("Upload code to Repository")
         if source == "file":
             pytest_files = utils.select_and_read_text_files_xpath("pom_file", utils.Test_file_generator)
@@ -830,17 +824,7 @@ if st.session_state.checkbox6_state:
 
         if st.button("Push to Repo"):
 
-            # g = Github(os.getenv("GITlAB_ACCESS_TOKEN"))
-            # repo = g.get_repo(os.getenv("GITLAB_REPO_NAME"))
-            # branch = os.getenv("GITLAB_BRANCH_NAME", "main")
-            # try:
-            #     g = Gitlab('https://git.tigeranalytics.com/', private_token=os.getenv("GITLAB_ACCESS_TOKEN"),ssl_verify=False)
-            #     repo = g.projects.get(os.getenv("GITLAB_REPO_NAME"))
-            # except Exception as e:
-            #     print("-------------exception-----------------")
-            #     print(e)
             token = os.getenv("GITLAB_ACCESS_TOKEN")
-            print(f"TOKEN: {token!r}")
 
             if token:
                 try:
@@ -899,7 +883,7 @@ if st.session_state.checkbox7_state:
         with st.expander("📥 Download Artifacts"):
             st.title("Download Artifacts from Database")
             file_type = st.selectbox("Select FileType",
-                                     ["Recorded_Action_file", "Page_file", "Test_file", "Testcase_file"])
+                            ["Recorded_Action_file", "Page_file", "Test_file", "Testcase_file"])
 
             selected_files = []
 
@@ -932,14 +916,11 @@ if st.session_state.checkbox7_state:
                 else:
                     st.warning("⚠️ Please select at least one file.")
 
-    st.markdown("""    
-        ### Contact Us
-        - Reach us at [QE Core Team](mailto:QE@tigeranalytics.com)
-
-
-    ### Want to learn more?
-    - Check out [streamlit.io](https://streamlit.io)
-
+# Footer of webpage
+st.divider()
+st.markdown("""    
+    ### Contact Us
+    - Reach us at [QE Core Team](mailto:sahil.gupta@tigeranalytics.com)
 """)
 
 # Create 7 columns
@@ -977,7 +958,6 @@ with col6:
     if st.session_state.checkbox6_state != checkbox6:
         st.session_state.checkbox6_state = checkbox6  # Update session state
         st.rerun()
-
 with col7:
     checkbox7= st.checkbox("(7)", value=st.session_state.checkbox7_state)
     if st.session_state.checkbox7_state != checkbox7:

@@ -4,7 +4,8 @@ import re
 import os
 from collections import defaultdict
 from urllib.parse import urlparse
-from database_utils.models import Screenshot
+from utilities.db_utils.models import Screenshot
+
 JS_EVENT_LISTENER_allsite="""(function () {
     if (!window.recordedActions) {
         window.recordedActions = [];
@@ -76,6 +77,7 @@ JS_EVENT_LISTENER_allsite="""(function () {
     console.log("Recording actions...");
 })();
 """
+
 JS_EVENT_LISTENER="""(function () {
     if (!window.recordedActions) {
         window.recordedActions = [];
@@ -132,6 +134,7 @@ JS_EVENT_LISTENER="""(function () {
     console.log("Recording actions...");
 })();
 """
+
 JS_EVENT_LISTENER_1 = """(function() {
     if (!window.recordedActions) {
         window.recordedActions = [];
@@ -225,6 +228,7 @@ def generate_workflow(actions):
         workflow_lines.append("")  # separate pages with blank line
 
     return workflow_lines
+
 def sanitize_filename(name):
     return re.sub(r'[\\/*?:"<>|]', "_", name)
 

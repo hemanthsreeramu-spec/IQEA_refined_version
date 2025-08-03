@@ -1,9 +1,17 @@
 import os
+import base64
 from typing import Union, IO
+import re
+import docx2txt
+import gitlab
+from github import Github, GithubException
+from gitlab import Gitlab,GitlabGetError
+from collections import defaultdict
+from urllib.parse import urlparse
 import yaml
 import PyPDF2
 import random
-import utils_action as action_utils
+import utilities.utils_action as action_utils
 import time
 import string
 import json
@@ -26,6 +34,12 @@ from webdriver_manager.chrome import ChromeDriverManager
 from uuid import uuid4
 from dotenv import load_dotenv
 import os
+import utilities.db_utils.handler as db_handler
+
+#setting details - source
+from config.settings_reader import get_source
+
+source = get_source()
 
 load_dotenv()
 current_path = os.getcwd()
@@ -46,41 +60,55 @@ if not os.path.exists(xpath_file):
         pd.DataFrame().to_excel(writer, index=False)
     print(f"Excel file created: {xpath_file}")
 def load_prompt_from_file(prompt_type):
-    config_folder = os.path.join(os.getcwd(), "Input")
-    prompt_file = ""
+    print("********************source**********")
+    print(source)
+    if source == "file":
+        config_folder = os.path.join(os.getcwd(), "Input")
+        prompt_file = ""
 
-    if prompt_type == "Web":
-        prompt_file = os.path.join(config_folder, "web_prompt.txt")
-    if prompt_type == "Actionxpath":
-        prompt_file = os.path.join(config_folder, "web_prompt.txt")
-    elif prompt_type== "PowerBi":
-        prompt_file = os.path.join(config_folder, "powerBi_prompt.txt")
-    elif prompt_type== "Page_File":
-        prompt_file = os.path.join(config_folder, "Page_file_prompt.txt")
-    elif prompt_type== "Page_File_Action":
-        prompt_file = os.path.join(config_folder, "Page_file_prompt_with_action.txt")
-    elif prompt_type== "Test_File_Action":
-        prompt_file = os.path.join(config_folder, "test_script_prompt.txt")
-    elif prompt_type== "Test_case_generation":
-        prompt_file = os.path.join(config_folder, "Testcase_generate_prompt.txt")
-    elif prompt_type== "Test_case_generation_document":
-        prompt_file = os.path.join(config_folder, "Testcase_generate_prompt_with_document.txt")
-    elif prompt_type== "Test_case_generation_withaction":
-        prompt_file = os.path.join(config_folder, "Testcase_generate_prompt_with_action.txt")
-    elif prompt_type == "featureaction":
-        prompt_file = os.path.join(config_folder, "featureaction_prompt.txt")
-    elif prompt_type == "featurefile":
-        prompt_file = os.path.join(config_folder, "featurefile_prompt.txt")
-    else:
-        raise ValueError(f"Invalid prompt type: {prompt_type}. Expected 'web' or 'powerBi'.")
+        if prompt_type == "Web":
+            prompt_file = os.path.join(config_folder, "web_prompt.txt")
+        elif prompt_type== "PowerBi":
+            prompt_file = os.path.join(config_folder, "powerBi_prompt.txt")
+        elif prompt_type== "Page_File":
+            prompt_file = os.path.join(config_folder, "Page_file_prompt.txt")
+        elif prompt_type== "Page_File_Action":
+            prompt_file = os.path.join(config_folder, "Page_file_prompt_with_action.txt")
+        elif prompt_type== "Test_File_Action":
+            prompt_file = os.path.join(config_folder, "test_script_prompt.txt")
+        elif prompt_type== "Test_case_generation":
+            prompt_file = os.path.join(config_folder, "Testcase_generate_prompt.txt")
+        elif prompt_type== "Test_case_generation_document":
+            prompt_file = os.path.join(config_folder, "Testcase_generate_prompt_with_document.txt")
+        elif prompt_type== "Test_case_generation_withaction":
+            prompt_file = os.path.join(config_folder, "Testcase_generate_prompt_with_action.txt")
+        elif prompt_type == "featureaction":
+            prompt_file = os.path.join(config_folder, "featureaction_prompt.txt")
+        elif prompt_type == "Feature_file":
+            prompt_file = os.path.join(config_folder, "featurefile_prompt.txt")
+        elif prompt_type== "Test_case_accuracy":
+            prompt_file = os.path.join(config_folder, "Testcase_Accuracy_matrix.txt")
+        elif prompt_type == "Test_case_regeneration_accuracy":
+            prompt_file = os.path.join(config_folder, "Testcase_regeneration_accuracy.txt")
+        elif prompt_type == "Test_case_regeneration_accuracy_doc":
+            prompt_file = os.path.join(config_folder, "Testcase_regeneration_accuracy_doc.txt")
 
-    if not os.path.exists(prompt_file):
-        raise FileNotFoundError(f"Prompt file not found at: {prompt_file}")
+        else:
+            raise ValueError(f"Invalid prompt type: {prompt_type}. Expected 'web' or 'powerBi'.")
 
-    with open(prompt_file, "r", encoding="utf-8") as file:
-        prompt_template = file.read()
+        if not os.path.exists(prompt_file):
+            raise FileNotFoundError(f"Prompt file not found at: {prompt_file}")
 
-    return prompt_template
+        with open(prompt_file, "r", encoding="utf-8") as file:
+            prompt_template = file.read()
+        print("-------------file- prompttemplate--------------")
+        return prompt_template
+    elif source == "database":
+        prompt_template = db_handler.get_prompt_by_name(prompt_type)
+        print("-------------Database- prompttemplate--------------")
+        print(prompt_template)
+        return prompt_template
+    return None
 def create_java_file(file_name: str, file_extension: str,response):
     # Ensure the file extension is .java
     if not file_extension.startswith("."):
@@ -97,8 +125,8 @@ def create_java_file(file_name: str, file_extension: str,response):
     with open(full_file_path, "w") as file:
         file.write(response)
 
-    st.write(f"✅ page file script generated: {full_file_path}")
-def create_test_file(file_name: str, file_extension: str,response):
+    st.write(f"✅ script generated: {full_file_path}")
+def create_test_file(Test_file_location,file_name: str, file_extension: str,response):
     # Ensure the file extension is .java
     if not file_extension.startswith("."):
         if file_extension =="java":
@@ -109,7 +137,7 @@ def create_test_file(file_name: str, file_extension: str,response):
             file_extension = f".{file_extension}"
 
     # Full file path with specified directory
-    full_file_path = os.path.join(Test_file_generator, f"{file_name}{file_extension}")
+    full_file_path = os.path.join(Test_file_location, f"{file_name}{file_extension}")
 
     with open(full_file_path, "w") as file:
         file.write(response)
@@ -168,38 +196,6 @@ Input: {formatted_summary}
         output_value = model([message])
         print(output_value)
         return output_value.content
-    elif prompt == "Actionxpath":
-        all_responses = []
-
-        for page_url, page_data in formatted_summary.items():
-            print(f"\n🔍 Processing page: {page_url}")
-
-            # Get the list of elements
-            elements = page_data.get("collected_elements", [])
-
-            if not elements:
-                print(f"⚠️ No elements found on {page_url}")
-                continue
-
-            # Convert elements list to JSON string
-            elements_json = json.dumps(elements, indent=2)
-
-            # Format the prompt
-            final_prompt = prompt_template.format(formatted_summary=elements_json)
-            print(f"📝 Final prompt for {page_url}:\n", final_prompt)
-
-            # Pass to model
-            message = HumanMessage(content=final_prompt)
-            response = model([message])
-            print(f"📨 Response from AI for {page_url}:\n", response.content)
-
-            # Optional: add page name in response if needed
-            response_with_context = response.content
-            all_responses.append(response_with_context)
-
-        # Return all combined responses
-        return "\n\n".join(all_responses)
-
     elif prompt == "Page_File":
         print(formatted_summary)
         message = HumanMessage(content=formatted_summary)
@@ -211,12 +207,10 @@ Input: {formatted_summary}
 def get_queries_from_ai_duplicate(prompt,formatted_summary):
     prompt_template = load_prompt_from_file(prompt)
     print(prompt_template)
-
     if prompt=="PowerBI":
         print("formatted_summary:",{formatted_summary})
         formatted_summary_json = json.dumps(formatted_summary, indent=2)
         final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
-
     elif prompt=="Web":
         print("formatted_summary:", {formatted_summary})
         final_prompt = prompt_template.format(formatted_summary=formatted_summary)
@@ -613,6 +607,12 @@ def generate_excel_testcases_with_document(prompt_type,extracted_data):
     final_prompt = prompt_template.format(requirements=extracted_data)
     print(final_prompt)
     return final_prompt
+def generate_testcase_accuracy_matrix(prompt_type,requirements,testcase):
+    prompt_template = load_prompt_from_file(prompt_type)
+    # Conditionally inject Action Data section or leave it blank
+    final_prompt = prompt_template.format(requirement_text=requirements,test_case_text=testcase)
+    print(final_prompt)
+    return final_prompt
 def generate_pom_from_excel_testcases(prompt_type,navigation,image_data,action_data=None,requirements=""):
     prompt_template = load_prompt_from_file(prompt_type)
     # Conditionally inject Action Data section or leave it blank
@@ -623,14 +623,46 @@ def generate_pom_from_excel_testcases(prompt_type,navigation,image_data,action_d
     final_prompt = prompt_template.format(navigation=navigation,image_data_processed=image_data,action_data_processed=action_section,requirements=requirements)
     print(final_prompt)
     return final_prompt
+def generate_testcases_regeneration(prompt_type,navigation,image_data,action_data=None,requirements="",existing_prompt_response=None,accuracy_matrix=None):
+    prompt_template = load_prompt_from_file(prompt_type)
+    # Conditionally inject Action Data section or leave it blank
+    if action_data:
+        action_section = f"- User Interaction Elements (Action Data): {action_data}"
+    else:
+        action_section = ""
+    final_prompt = prompt_template.format(navigation=navigation,image_data_processed=image_data,action_data_processed=action_section,requirements=requirements,accuracy_Details=accuracy_matrix,existing_prompt_response=existing_prompt_response)
+    print(final_prompt)
+    return final_prompt
+def generate_testcases_regeneration_doc(prompt_type,requirements="",existing_prompt_response=None,accuracy_matrix=None,):
+    prompt_template = load_prompt_from_file(prompt_type)
+    # Conditionally inject Action Data section or leave it blank
+    final_prompt = prompt_template.format(requirements=requirements,accuracy_Details=accuracy_matrix,existing_prompt_response=existing_prompt_response)
+    print(final_prompt)
+    return final_prompt
 def generate_pom_from_excel_feature(prompt_type,Recorded_Action):
     prompt_template = load_prompt_from_file(prompt_type)
     final_prompt = prompt_template.format(recorded_action=Recorded_Action)
     print(final_prompt)
     return final_prompt
-def generate_test_script(prompt_type,test_file_language,page_file_conetent,test_file_content):
+def generate_test_script(prompt_type,test_file_language,page_file_conetent,test_file_content,action_data=None):
     prompt_template = load_prompt_from_file(prompt_type)
-    final_prompt = prompt_template.format(test_file_language=test_file_language,page_files_content=page_file_conetent,test_files_content=test_file_content)
+    if action_data:
+        final_prompt = prompt_template.format(
+            test_file_language=test_file_language,
+            page_files_content=page_file_conetent,
+            test_files_content=test_file_content,
+            recorded_actions=action_data
+        )
+    else:
+        # Remove the optional section related to recorded_actions
+        prompt_template = prompt_template.replace("3. (Optional) Recorded User Actions:\n{recorded_actions}\n\n", "")
+        final_prompt = prompt_template.format(
+            test_file_language=test_file_language,
+            page_files_content=page_file_conetent,
+            test_files_content=test_file_content,
+            recorded_actions=""
+        )
+
     print(final_prompt)
     return final_prompt
 def generate_pom_from_excel_with_action(prompt_type,page_name,language,action_data):
@@ -718,7 +750,7 @@ def select_and_read_text_files(folder_path):
         return {}
 
     # Step 2: Let the user select multiple files
-    selected_files = st.multiselect("Please select relevent action file ", txt_files)
+    selected_files = st.multiselect("", txt_files)
 
     # Step 3: Read contents of selected files
     file_contents = {}
@@ -737,7 +769,12 @@ def monitor_url_changes(driver, screenshot_folder, stop_flag):
             current_url = driver.current_url
             if current_url != last_url:
                 last_url = current_url
-                filepath = action_utils.take_screenshot(driver, screenshot_folder)
+                if source == "file":
+                    filepath = action_utils.take_screenshot(driver, screenshot_folder)
+                elif source == "database":
+                    filepath=db_handler.take_screenshot_db(driver,"sathanantham")
+                else:
+                    filepath=None
                 print(f"📸 Screenshot taken for: {current_url} => {filepath}")
         except Exception as e:
             print("Error during URL monitoring:", e)
@@ -759,30 +796,51 @@ def select_and_read_text_files_xpath(type, folder_path):
 
         try:
             # Type: For txt-based files
-            if type in ["xpath", "page", "feature"]:
+            if type in ["xpath","recorded action (Optional)", "page", "feature"]:
                 with open(full_path, 'r', encoding='utf-8') as f:
                     file_contents[file_name] = f.read()
 
-
-            elif type == "page_test" and file_name.endswith(".py"):
+            elif type in ("page_test", "pom_file","test_file") and file_name.endswith((".py", ".java", ".cs", ".js")):
                 try:
                     with open(full_path, 'r', encoding='utf-8') as f:
                         content = f.read()
 
                     # Remove common Markdown wrappers
-                    if content.startswith("```python"):
-                        content = content.split("```python", 1)[1]
+                    for lang in ["python", "java", "csharp", "javascript"]:
+                        if content.startswith(f"```{lang}"):
+                            content = content.split(f"```{lang}", 1)[1]
+                            break  # remove only one matching wrapper
                     if "```" in content:
                         content = content.split("```", 1)[0]
 
-                    try:
-                        tree = ast.parse(content)
-                        functions = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
-                        file_contents[file_name] = functions
-                    except SyntaxError as syntax_err:
-                        st.error(
-                            f"Syntax error in {file_name}:\nLine {syntax_err.lineno} - {syntax_err.text.strip() if syntax_err.text else ''}")
-                        continue
+                    file_extension = os.path.splitext(file_name)[1].lower()
+
+                    # Process based on file type
+                    if file_extension == ".py":
+                        try:
+                            tree = ast.parse(content)
+                            functions = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
+                            file_contents[file_name] = functions
+                        except SyntaxError as syntax_err:
+                            st.error(
+                                f"Syntax error in {file_name}:\nLine {syntax_err.lineno} - {syntax_err.text.strip() if syntax_err.text else ''}")
+                            continue
+
+                    else:
+                        # For Java, C#, JS – just collect method/function-like definitions as lines (basic version)
+                        lines = content.splitlines()
+                        func_like_lines = []
+                        for line in lines:
+                            line_strip = line.strip()
+                            # crude method detection for other languages
+                            if file_extension == ".java" and (" void " in line_strip or line_strip.endswith(");")):
+                                func_like_lines.append(line_strip)
+                            elif file_extension == ".cs" and (
+                                    " void " in line_strip or "public" in line_strip or "private" in line_strip):
+                                func_like_lines.append(line_strip)
+                            elif file_extension == ".js" and ("function " in line_strip or "=>" in line_strip):
+                                func_like_lines.append(line_strip)
+                        file_contents[file_name] = func_like_lines
 
                 except Exception as read_err:
                     st.error(f"Failed to read {file_name}: {read_err}")
@@ -853,39 +911,275 @@ def markdown_to_dataframe(markdown_text):
     except Exception as e:
         print(f"❌ Failed to convert markdown to DataFrame: {e}")
         return pd.DataFrame()
-def covert_response_to_testcases(markdown_text,test_collection):
-    # STEP 1: Strip markdown code fencing (``` or ```markdown)
+# def covert_response_to_testcases(markdown_text,test_collection):
+#     # STEP 1: Strip markdown code fencing (``` or ```markdown)
+#     if markdown_text.startswith("```"):
+#         markdown_text = "\n".join(
+#             line for line in markdown_text.splitlines()
+#             if not line.strip().startswith("```")
+#         )
+#     # STEP 2: Clean and parse markdown table
+#     lines = markdown_text.strip().split('\n')
+#     cleaned_lines = [line for line in lines if not set(line.strip()).issubset(set('|- '))]
+#     cleaned_text = "\n".join(cleaned_lines)
+#
+#     df = pd.read_csv(StringIO(cleaned_text), sep='|', engine='python')
+#     df = df.dropna(axis=1, how='all')
+#     df.columns = [col.strip() for col in df.columns]
+#     # df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+#     for col in df.select_dtypes(include='object').columns:
+#         df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+#
+#     # STEP 3: Fill missing Test Case Names
+#     df['Test Case Name'] = df['Test Case Name'].replace('', pd.NA).ffill()
+#
+#
+#     # STEP 5: Write each test case into a separate Excel file
+#     for test_case, group in df.groupby("Test Case Name"):
+#         file_name = f"{test_case.strip()[:50]}.xlsx"  # Truncate for safety
+#         safe_file_name = "".join(c for c in file_name if c.isalnum() or c in "._- ()").rstrip()
+#         path = os.path.join(test_collection, safe_file_name)
+#         group.to_excel(path, index=False)
+#
+#     print(f"✅ Created individual Excel files in folder: {output_folder}")
+def clean_table_lines(raw_markdown):
+    cleaned_lines = []
+    for line in raw_markdown.strip().splitlines():
+        line = line.strip()
+        if "|" in line and not set(line).issubset(set("|- ")) and line.count("|") >= 3:
+            cleaned_lines.append(line.strip("|").strip())  # Remove leading/trailing pipes
+    return cleaned_lines
+def covert_response_to_testcases(markdown_text, test_collection):
+    print("\n🚀 Starting test case parsing...")
+    print("\n🚀 Starting test case parsing...")
+
+    if source == "file":
+        if not os.path.exists(test_collection):
+            os.makedirs(test_collection)
+            print(f"📁 Created output directory: {test_collection}")
+
     if markdown_text.startswith("```"):
         markdown_text = "\n".join(
             line for line in markdown_text.splitlines()
             if not line.strip().startswith("```")
         )
-    # STEP 2: Clean and parse markdown table
-    lines = markdown_text.strip().split('\n')
-    cleaned_lines = [line for line in lines if not set(line.strip()).issubset(set('|- '))]
-    cleaned_text = "\n".join(cleaned_lines)
 
-    df = pd.read_csv(StringIO(cleaned_text), sep='|', engine='python')
-    df = df.dropna(axis=1, how='all')
-    df.columns = [col.strip() for col in df.columns]
-    # df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
-    for col in df.select_dtypes(include='object').columns:
-        df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+    # Fix 1: Clean up AI-format table lines
+    table_lines = clean_table_lines(markdown_text)
 
-    # STEP 3: Fill missing Test Case Names
-    df['Test Case Name'] = df['Test Case Name'].replace('', pd.NA).ffill()
+    if len(table_lines) >= 2 and "Test Case Name" in table_lines[0]:
+        table_text = "\n".join(table_lines)
+        try:
+            df = pd.read_csv(StringIO(table_text), sep='|', engine='python', on_bad_lines='skip')
+            df = df.dropna(axis=1, how='all')
+            df.columns = [re.sub(r'\*+', '', col.strip()) for col in df.columns]
+            for col in df.select_dtypes(include='object').columns:
+                df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
 
+            if 'Test Case Name' not in df.columns:
+                raise ValueError("'Test Case Name' column missing.")
 
-    # STEP 5: Write each test case into a separate Excel file
-    for test_case, group in df.groupby("Test Case Name"):
-        file_name = f"{test_case.strip()[:50]}.xlsx"  # Truncate for safety
-        safe_file_name = "".join(c for c in file_name if c.isalnum() or c in "._- ()").rstrip()
-        path = os.path.join(test_collection, safe_file_name)
-        group.to_excel(path, index=False)
+            df['Test Case Name'] = df['Test Case Name'].replace('', pd.NA).ffill()
 
-    print(f"✅ Created individual Excel files in folder: {output_folder}")
+            for test_case, group in df.groupby('Test Case Name'):
+                file_name = f"{test_case.strip()[:50]}.xlsx"
+                safe_file_name = "".join(c for c in file_name if c.isalnum() or c in "._- ()").rstrip()
 
+                if source == "file":
+                    path = os.path.join(test_collection, safe_file_name)
+                    group.to_excel(path, index=False)
+                    print(f"✅ Saved to file: {safe_file_name}")
+                elif source == "database":
+                    #content_str = group.to_csv(index=False)
+                    db_handler.save_testcases_to_db(safe_file_name, group, "sathanantham")
+                    #db_handler.save_testcases_to_db(safe_file_name[:50], content_str, "sathanantham")
+                    print(f"✅ Saved to DB: {safe_file_name}")
 
+            print(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test case files.")
+            st.write(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test case files.")
+            return
+
+        except Exception as e:
+            print(f"❌ Failed to parse single-table format: {e}")
+            print("🔁 Attempting markdown section fallback...")
+
+    # STEP 2: Fallback to splitting by markdown sections
+    test_cases = re.split(r'####\s+\*\*(.*?)\*\*', markdown_text)
+    if len(test_cases) < 3:
+        print("❌ No valid markdown headings found either. Exiting.")
+        return
+
+    for i in range(1, len(test_cases), 2):
+        test_case_name = test_cases[i].strip()
+        test_case_body = test_cases[i + 1]
+
+        lines = []
+        for line in test_case_body.strip().splitlines():
+            line = line.strip()
+            if "|" in line and not set(line).issubset(set("|- ")):
+                lines.append(line)
+
+        if not lines:
+            print(f"⚠️ No valid table in: {test_case_name}")
+            continue
+
+        table_text = "\n".join(lines)
+
+        try:
+            df = pd.read_csv(StringIO(table_text), sep='|', engine='python')
+            df = df.dropna(axis=1, how='all')
+            df.columns = [re.sub(r'\*+', '', col.strip()) for col in df.columns]
+
+            for col in df.select_dtypes(include='object').columns:
+                df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+
+            if 'Test Case Name' not in df.columns:
+                df.insert(0, 'Test Case Name', test_case_name)
+            else:
+                df['Test Case Name'] = df['Test Case Name'].replace('', pd.NA).ffill()
+            for test_case, group in df.groupby('Test Case Name'):
+                safe_file_name = "".join(c for c in test_case[:50] if c.isalnum() or c in "._- ()").rstrip()
+
+                if source == "file":
+                    path = os.path.join(test_collection, safe_file_name + ".xlsx")
+                    group.to_excel(path, index=False)
+                    print(f"✅ Saved to file: {safe_file_name}")
+                elif source == "database":
+                    #content_str = group.to_csv(index=False)
+                    db_handler.save_testcases_to_db(safe_file_name, group, "sathanantham")
+                    #db_handler.save_testcases_to_db(safe_file_name, content_str, "sathanantham")
+                    print(f"✅ Saved to DB: {safe_file_name}")
+
+        except Exception as e:
+            print(f"❌ Failed to parse section: {test_case_name}")
+            print(f"   Error: {e}")
+
+    if source == "file":
+        print(f"\n✅ Completed saving all test cases to folder: {test_collection}")
+        st.write(f"\n✅ Completed saving all test cases to folder: {test_collection}")
+    elif source == "database":
+        print(f"\n✅ Completed saving all test cases to the database.")
+        st.write(f"\n✅ Completed saving all test cases to the database.")
+
+def covert_response_to_testcases_1(markdown_text, test_collection):
+    print("\n🚀 Starting test case parsing...")
+
+    # Ensure output directory exists
+    if not os.path.exists(test_collection):
+        os.makedirs(test_collection)
+        print(f"📁 Created output directory: {test_collection}")
+
+    # Remove markdown code fences
+    if markdown_text.startswith("```"):
+        markdown_text = "\n".join(
+            line for line in markdown_text.splitlines()
+            if not line.strip().startswith("```")
+        )
+
+    # STEP 1: Try to detect if it's a big single table
+    table_lines = []
+    for line in markdown_text.strip().splitlines():
+        line = line.strip()
+        if "|" in line and not set(line).issubset(set("|- ")):
+            table_lines.append(line)
+
+    if len(table_lines) >= 2 and "Test Case Name" in table_lines[0]:
+        # Likely a single big table
+        table_text = "\n".join(table_lines)
+        try:
+            df = pd.read_csv(StringIO(table_text), sep='|', engine='python')
+            df = df.dropna(axis=1, how='all')
+            # df.columns = [col.strip() for col in df.columns]
+            df.columns = [re.sub(r'\*+', '', col.strip()) for col in df.columns]
+            for col in df.select_dtypes(include='object').columns:
+                df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+
+            # Validate 'Test Case Name'
+            if 'Test Case Name' not in df.columns:
+                raise ValueError("'Test Case Name' column missing.")
+
+            df['Test Case Name'] = df['Test Case Name'].replace('', pd.NA).ffill()
+
+            # Group by 'Test Case Name'
+            for test_case, group in df.groupby('Test Case Name'):
+                file_name = f"{test_case.strip()[:50]}.xlsx"
+                safe_file_name = "".join(c for c in file_name if c.isalnum() or c in "._- ()").rstrip()
+                # path = os.path.join(test_collection, safe_file_name)
+                # group.to_excel(path, index=False)
+                # print(f"✅ Saved: {safe_file_name}")
+                if source == "file":
+                    path = os.path.join(test_collection, safe_file_name)
+                    df.to_excel(path, index=False)
+                    print(f"✅ Saved to file: {safe_file_name}")
+                elif source == "database":
+                    #content_str = df.to_csv(index=False)
+                    content_str = group.to_csv(index=False)
+                    db_handler.save_testcases_to_db(safe_file_name[:50], content_str, "sathanantham")
+                    print(f"✅ Saved to DB: {safe_file_name}")
+
+            print(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test case files.")
+            return
+
+        except Exception as e:
+            print(f"❌ Failed to parse single-table format: {e}")
+            print("🔁 Attempting markdown section fallback...")
+
+    # STEP 2: Fallback to splitting by markdown sections (#### **Test Case Name**)
+    test_cases = re.split(r'####\s+\*\*(.*?)\*\*', markdown_text)
+    if len(test_cases) < 3:
+        print("❌ No valid markdown headings found either. Exiting.")
+        return
+
+    for i in range(1, len(test_cases), 2):
+        test_case_name = test_cases[i].strip()
+        test_case_body = test_cases[i + 1]
+
+        lines = []
+        for line in test_case_body.strip().splitlines():
+            line = line.strip()
+            if "|" in line and not set(line).issubset(set("|- ")):
+                lines.append(line)
+
+        if not lines:
+            print(f"⚠️ No valid table in: {test_case_name}")
+            continue
+
+        table_text = "\n".join(lines)
+
+        try:
+            df = pd.read_csv(StringIO(table_text), sep='|', engine='python')
+            df = df.dropna(axis=1, how='all')
+            # df.columns = [col.strip() for col in df.columns]
+            df.columns = [re.sub(r'\*+', '', col.strip()) for col in df.columns]
+
+            for col in df.select_dtypes(include='object').columns:
+                df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+
+            if 'Test Case Name' not in df.columns:
+                df.insert(0, 'Test Case Name', test_case_name)
+            else:
+                df['Test Case Name'] = df['Test Case Name'].replace('', pd.NA).ffill()
+
+            file_name = f"{test_case_name.strip()[:50]}.xlsx"
+            safe_file_name = "".join(c for c in file_name if c.isalnum() or c in "._- ()").rstrip()
+            # path = os.path.join(test_collection, safe_file_name)
+            # df.to_excel(path, index=False)
+            # print(f"✅ Saved: {safe_file_name}")
+            if source == "file":
+                path = os.path.join(test_collection, safe_file_name)
+                df.to_excel(path, index=False)
+                print(f"✅ Saved to file: {safe_file_name}")
+            elif source == "database":
+                #content_str = df.to_csv(index=False)
+                content_str = group.to_csv(index=False)
+                db_handler.save_testcases_to_db(test_case_name[:50], content_str, "sathanantham")
+                print(f"✅ Saved to DB: {test_case_name}")
+
+        except Exception as e:
+            print(f"❌ Failed to parse section: {test_case_name}")
+            print(f"   Error: {e}")
+
+    print(f"\n✅ Completed saving all test cases to: {test_collection}")
 def create_testcase_in_Excel(raw_response, test_location):
     os.makedirs(test_location, exist_ok=True)
 
@@ -948,6 +1242,36 @@ def extract_text_from_pdf(uploaded_pdf):
         text += re.sub(r'\W+', ' ', page.extract_text())
     print("text extracted"+text)
     return text
+
+
+
+def extract_text_from_document(uploaded_file, filename):
+    text = ""
+
+    if filename.lower().endswith(".pdf"):
+        # PDF Extraction
+        pdf_reader = PyPDF2.PdfReader(uploaded_file)
+        for page in pdf_reader.pages:
+            extracted = page.extract_text()
+            if extracted:
+                text += re.sub(r'\W+', ' ', extracted)
+
+    elif filename.lower().endswith(".docx"):
+        # Word Document Extraction
+        text_content = docx2txt.process(uploaded_file)
+        text += re.sub(r'\W+', ' ', text_content)
+
+    elif filename.lower().endswith(".txt"):
+        # Plain Text File Extraction
+        text_content = uploaded_file.read().decode("utf-8", errors="ignore")
+        text += re.sub(r'\W+', ' ', text_content)
+
+    else:
+        raise ValueError("Unsupported file type. Only PDF, DOCX, and TXT are supported.")
+
+    print("✅ Text extracted:", text)
+    return text
+
 
 
 def get_queries_from_ai_file_extract(uploaded_pdf):
@@ -1021,3 +1345,138 @@ def extract_page_file_info_from_file(file_obj):
             "methods": [],
             "xpaths": []
         }
+
+
+def push_file_to_github(file_path, file_content, repo, branch):
+    try:
+        existing = repo.get_contents(file_path, ref=branch)
+        repo.update_file(
+            path=file_path,
+            message=f"Update {file_path}",
+            content=str(file_content),
+            sha=existing.sha,
+            branch=branch
+        )
+        st.success(f"✅ Updated: `{file_path}`")
+    # except GithubException as e:
+    #     if e.status == 404:
+    except gitlab.GitlabGetError as e:
+        if e.response_code == 404:
+            # File doesn't exist – create it
+            repo.create_file(
+                path=file_path,
+                message=f"Upload {file_path}",
+                content=str(file_content),
+                branch=branch
+            )
+            st.success(f"🆕 Created: `{file_path}`")
+        else:
+            st.error(f"❌ Error for `{file_path}`: {e.data['message']}")
+
+
+def push_file_to_gitlab(file_path, file_content, repo, branch):
+    try:
+        # Check if file already exists in GitLab
+        file = repo.files.get(file_path=file_path, ref=branch)
+
+        # File exists — update it
+        file.content = str(file_content)
+        file.save(branch=branch, commit_message=f"Update {file_path}")
+        st.success(f"✅ Updated: `{file_path}`")
+
+    except gitlab.exceptions.GitlabGetError as e:
+        if e.response_code == 404:
+            # File doesn't exist — create it
+            repo.files.create({
+                'file_path': file_path,
+                'branch': branch,
+                'content': str(file_content),
+                'commit_message': f"Upload {file_path}"
+            })
+            st.success(f"🆕 Created: `{file_path}`")
+        else:
+            st.error(f"❌ GitLab error for `{file_path}`: {e.error_message}")
+
+
+def deduplicate_element_records(elements):
+    seen = set()
+    deduped = []
+    for el in elements:
+        # Pick a unique identifier
+        unique_key = el.get("id") or el.get("name") or el.get("attributes", {}).get("data-test") or el.get("attributes", {}).get("placeholder")
+        if unique_key and unique_key not in seen:
+            deduped.append(el)
+            seen.add(unique_key)
+    return deduped
+
+
+def generate_hoverable_image_buttons(image_folder, image_list, preview_width=300, preview_height=225):
+    html_buttons = ""
+
+    for image_name in image_list:
+        image_path = os.path.join(image_folder, image_name).replace("\\", "/")
+        with open(image_path, "rb") as img_file:
+            encoded_image = base64.b64encode(img_file.read()).decode()
+
+        html_buttons += f"""
+        <div class="hover-img-button" style="display:inline-block; margin:20px; text-align:center;">
+            <button 
+                class="img-btn"
+                data-img="data:image/png;base64,{encoded_image}"
+                data-name="{image_name}"
+                style="margin-bottom:5px; cursor:pointer;"
+            >{image_name}</button>
+        </div>
+        """
+
+    hover_css_and_script = f"""
+    <style>
+    #img-preview {{
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: none;
+        z-index: 9999;
+        border: 2px solid #ccc;
+        background: white;
+        padding: 6px;
+        box-shadow: 0 0 8px rgba(0,0,0,0.3);
+        text-align: center;
+    }}
+    </style>
+
+    <div id="img-preview">
+        <img id="preview-img" src="" width="{preview_width}" height="{preview_height}" />
+        <div id="preview-label" style="font-size:14px; margin-top:4px;"></div>
+    </div>
+
+    <script>
+    document.addEventListener("DOMContentLoaded", function() {{
+        const buttons = document.querySelectorAll('.img-btn');
+        const preview = document.getElementById('img-preview');
+        const previewImg = document.getElementById('preview-img');
+        const previewLabel = document.getElementById('preview-label');
+
+        buttons.forEach(btn => {{
+            btn.addEventListener('mouseover', () => {{
+                previewImg.src = btn.dataset.img;
+                previewLabel.innerText = btn.dataset.name;
+                preview.style.display = 'block';
+            }});
+            btn.addEventListener('mouseout', () => {{
+                preview.style.display = 'none';
+            }});
+            btn.addEventListener('click', () => {{
+                const imgName = btn.dataset.name;
+                const url = new URL(window.location.href);
+                url.searchParams.set("selected", imgName);
+                window.location.href = url.toString();
+            }});
+        }});
+    }});
+    </script>
+    """
+
+    return hover_css_and_script + html_buttons
+

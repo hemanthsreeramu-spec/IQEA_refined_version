@@ -321,5 +321,7 @@ Regenerate the test cases to achieve at least 90% accuracy coverage.
     }
 ]
 
-from handler import bulk_add_prompts
-bulk_add_prompts(prompt_list, created_by="sathanantham")
+from utilities.db_utils.handler import bulk_add_prompts
+from config.settings_reader import get_update_user
+
+bulk_add_prompts(prompt_list, created_by=get_update_user())

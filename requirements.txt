@@ -106,3 +106,8 @@ watchdog
 wcwidth
 webdriver-manager
 PyGithub
+sqlalchemy
+python-gitlab
+psycopg2
+docx2txt
+tldextract
