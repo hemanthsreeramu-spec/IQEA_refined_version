@@ -2,12 +2,16 @@
 SET VENV_DIR=.venv
 SET REQUIREMENTS=requirements.txt
 SET PYTHON_FILE=action_new_xpath.py
+SET POSTGRES_PATH=C:\postgresql\data
 
 REM Check if virtual environment exists
 IF NOT EXIST %VENV_DIR% (
     echo Creating virtual environment...
     python -m venv %VENV_DIR%
 )
+
+REM Start the postgresql server
+CALL pg_ctl -D %POSTGRES_PATH% -l logfile start
 
 REM Activate the virtual environment
 CALL %VENV_DIR%\Scripts\activate
