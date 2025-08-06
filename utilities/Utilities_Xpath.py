@@ -779,6 +779,39 @@ def monitor_url_changes(driver, screenshot_folder, stop_flag):
         except Exception as e:
             print("Error during URL monitoring:", e)
         time.sleep(1)  # check every second
+
+
+def monitor_url_changes_for_each_nav(driver, screenshot_folder, stop_flag):
+    last_url = ""
+    while not stop_flag["stop"]:
+        try:
+            current_url = driver.current_url
+            if current_url != last_url:
+                last_url = current_url
+
+                # Wait for page to fully load
+                for _ in range(50):  # up to ~5 seconds
+                    state = driver.execute_script("return document.readyState")
+                    if state == "complete":
+                        break
+                    time.sleep(0.1)
+
+                # Re-inject your recorder JS here
+                action_utils.start_recording(driver)  # Make sure injection_script1 is in scope!
+
+                # Then take screenshot as before
+                if source == "file":
+                    filepath = action_utils.take_screenshot(driver, screenshot_folder)
+                elif source == "database":
+                    filepath = db_handler.take_screenshot_db(driver, "sathanantham")
+                else:
+                    filepath = None
+                print(f"📸 Screenshot taken for: {current_url} => {filepath}")
+
+        except Exception as e:
+            print("Error during URL monitoring:", e)
+        time.sleep(1)  # check every second
+
 def select_and_read_text_files_xpath(type, folder_path):
     # Step 1: List all files in the folder
     files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]

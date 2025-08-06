@@ -1,0 +1,53 @@
+Page: [https://www.myntra.com/]
+- Click on "Search for products, brands and more"
+- Change the value in "Search for products, brands and more"
+- Enter "Shoes" in the "Search for products, brands and more" field
+- Click on ""
+
+Page: [https://www.myntra.com/shoes]
+- Click on "Sizes: UK11"
+- Click on ""
+
+Page: [https://www.myntra.com/login?referer=https://www.myntra.com/shoes]
+- Click on "MENWOMENKIDSHOME LIVINGSTUDIO
+Wishlist
+Bag
+Login or Signup
++91|Mobile Number*
+By continuing, I agree to the Terms of Use & Privacy Policy and I am above 18 years old.
+CONTINUE
+Have trouble logging in? Get help"
+- Click on "tel"
+- Enter "" in the "tel" field
+- Click on "MEN"
+
+Page: [https://www.myntra.com/shop/men]
+- Click on "T-Shirts"
+
+Page: [https://www.myntra.com/men-tshirts]
+- Click on "XS"
+- Click on ""
+
+Page: [https://www.myntra.com/men-tshirts?f=Brand%3AWOOSTRO]
+- Click on "WOOSTRO"
+- Change the value in "WOOSTRO"
+- Click on "Roadster(7138)"
+
+Page: [https://www.myntra.com/men-tshirts?f=Brand%3ARoadster%2CWOOSTRO]
+- Click on "Roadster"
+- Change the value in "Roadster"
+- Click on "Greylongg(7060)"
+- Click on "Greylongg"
+- Click on "Size"
+- Click on "size_facet"
+- Change the value in "size_facet"
+- Click on ""
+
+Page: [https://www.myntra.com/men-tshirts?f=Brand%3AGreylongg%2CRoadster%2CWOOSTRO]
+- Click on "Greylongg"
+- Change the value in "Greylongg"
+- Click on ""
+
+Page: [https://www.myntra.com/men-tshirts?f=Brand%3ARoadster%2CWOOSTRO%3A%3Asize_facet%3AM]
+- Click on "M"
+- Change the value in "M"

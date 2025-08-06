@@ -158,7 +158,7 @@ if st.session_state.checkbox1_state:
                 # Start thread to monitor URL and take screenshots
                 st.session_state.stop_monitor = {"stop": False}
                 st.session_state.monitor_thread = threading.Thread(
-                    target=utils.monitor_url_changes,
+                    target=utils.monitor_url_changes_for_each_nav,
                     args=(st.session_state.driver, page_screenshot_folder, st.session_state.stop_monitor),
                     daemon=True
                 )
