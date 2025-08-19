@@ -109,6 +109,7 @@ def load_prompt_from_file(prompt_type):
         print(prompt_template)
         return prompt_template
     return None
+
 def create_java_file(file_name: str, file_extension: str,response):
     # Ensure the file extension is .java
     if not file_extension.startswith("."):
@@ -126,6 +127,7 @@ def create_java_file(file_name: str, file_extension: str,response):
         file.write(response)
 
     st.write(f"✅ script generated: {full_file_path}")
+
 def create_test_file(Test_file_location,file_name: str, file_extension: str,response):
     # Ensure the file extension is .java
     if not file_extension.startswith("."):
@@ -233,6 +235,7 @@ def get_queries_from_ai_duplicate(prompt,formatted_summary):
 
 def is_page_loaded(driver):
     return driver.execute_script("return document.readyState")
+
 def loading_newpage(driver):
     new_page_url = driver.current_url
     print(new_page_url)
@@ -244,6 +247,7 @@ def generate_random_prefix(length=8):
     """Generate a random alphanumeric prefix."""
     characters = string.ascii_letters + string.digits
     return ''.join(random.choice(characters) for _ in range(length))
+
 def generate_unique_key(element, page_identifier):
     """
     Generate a truly unique key for each visible element.
@@ -274,6 +278,7 @@ def generate_unique_key(element, page_identifier):
         counter += 1
 
     return unique_key
+
 def generate_unique_key_duplicate(element,page_identifier='page', prefix='element'):
     """Generate a unique key based on the element's properties."""
     element_str = f"{element.get_attribute('id')}-{element.tag_name}-{element.text.strip()}"
@@ -283,6 +288,7 @@ def generate_unique_key_duplicate(element,page_identifier='page', prefix='elemen
     #unique_uuid = uuid.uuid4().hex
     random_prefix = generate_random_prefix()
     return f"{prefix}_{page_identifier}_{unique_hash}_{random_prefix}"
+
 def details_visible_elements(collected_elements,visible_elements,selected_tags,page_identifier):
     for idx, element in enumerate(collected_elements):
         try:
@@ -321,6 +327,7 @@ def details_visible_elements(collected_elements,visible_elements,selected_tags,p
 
     print(f"[INFO] Total visible elements found inside method: {len(visible_elements)}")
     return visible_elements
+
 def load_config(config_path=None):
 
     if not config_path:
@@ -597,22 +604,26 @@ def adding_selected_xapth_excel(new_page_name,):
     # Save the combined DataFrame back to the Excel file
     combined_df.to_excel(excel_file, index=False, engine='openpyxl')
     st.success(f"XPaths successfully added to Excel! Download the file [here](sandbox:{excel_file})")
+
 def clean_xpath(xpath):
     """Extracts only the actual XPath from a given string."""
     match = re.search(r'(//[^\]]+\])', xpath)  # Find everything starting with // until the first ]
     return match.group(1) if match else xpath  # Return extracted XPath or original if not found
+
 def generate_excel_testcases_with_document(prompt_type,extracted_data):
     prompt_template = load_prompt_from_file(prompt_type)
     # Conditionally inject Action Data section or leave it blank
     final_prompt = prompt_template.format(requirements=extracted_data)
     print(final_prompt)
     return final_prompt
+
 def generate_testcase_accuracy_matrix(prompt_type,requirements,testcase):
     prompt_template = load_prompt_from_file(prompt_type)
     # Conditionally inject Action Data section or leave it blank
     final_prompt = prompt_template.format(requirement_text=requirements,test_case_text=testcase)
     print(final_prompt)
     return final_prompt
+
 def generate_pom_from_excel_testcases(prompt_type,navigation,image_data,action_data=None,requirements=""):
     prompt_template = load_prompt_from_file(prompt_type)
     # Conditionally inject Action Data section or leave it blank
@@ -623,6 +634,7 @@ def generate_pom_from_excel_testcases(prompt_type,navigation,image_data,action_d
     final_prompt = prompt_template.format(navigation=navigation,image_data_processed=image_data,action_data_processed=action_section,requirements=requirements)
     print(final_prompt)
     return final_prompt
+
 def generate_testcases_regeneration(prompt_type,navigation,image_data,action_data=None,requirements="",existing_prompt_response=None,accuracy_matrix=None):
     prompt_template = load_prompt_from_file(prompt_type)
     # Conditionally inject Action Data section or leave it blank
@@ -633,17 +645,20 @@ def generate_testcases_regeneration(prompt_type,navigation,image_data,action_dat
     final_prompt = prompt_template.format(navigation=navigation,image_data_processed=image_data,action_data_processed=action_section,requirements=requirements,accuracy_Details=accuracy_matrix,existing_prompt_response=existing_prompt_response)
     print(final_prompt)
     return final_prompt
+
 def generate_testcases_regeneration_doc(prompt_type,requirements="",existing_prompt_response=None,accuracy_matrix=None,):
     prompt_template = load_prompt_from_file(prompt_type)
     # Conditionally inject Action Data section or leave it blank
     final_prompt = prompt_template.format(requirements=requirements,accuracy_Details=accuracy_matrix,existing_prompt_response=existing_prompt_response)
     print(final_prompt)
     return final_prompt
+
 def generate_pom_from_excel_feature(prompt_type,Recorded_Action):
     prompt_template = load_prompt_from_file(prompt_type)
     final_prompt = prompt_template.format(recorded_action=Recorded_Action)
     print(final_prompt)
     return final_prompt
+
 def generate_test_script(prompt_type,test_file_language,page_file_conetent,test_file_content,action_data=None):
     prompt_template = load_prompt_from_file(prompt_type)
     if action_data:
@@ -665,6 +680,7 @@ def generate_test_script(prompt_type,test_file_language,page_file_conetent,test_
 
     print(final_prompt)
     return final_prompt
+
 def generate_pom_from_excel_with_action(prompt_type,page_name,language,action_data):
     prompt_template = load_prompt_from_file(prompt_type)
     print(prompt_template)
@@ -694,6 +710,7 @@ def generate_pom_from_excel_with_action(prompt_type,page_name,language,action_da
     final_prompt = prompt_template.format(language=language,xpaths=xpaths,Action_data=action_data)
     print(final_prompt)
     return final_prompt
+
 def generate_pom_from_excel(prompt_type,page_name,language):
     prompt_template = load_prompt_from_file(prompt_type)
     print(prompt_template)
@@ -724,6 +741,7 @@ def generate_pom_from_excel(prompt_type,page_name,language):
     final_prompt = prompt_template.format(language=language,xpaths=xpaths)
     print(final_prompt)
     return final_prompt
+
 def scroll_and_focus():
     st.markdown("""
         <script>
@@ -976,6 +994,7 @@ def markdown_to_dataframe(markdown_text):
 #         group.to_excel(path, index=False)
 #
 #     print(f"✅ Created individual Excel files in folder: {output_folder}")
+
 def clean_table_lines(raw_markdown):
     cleaned_lines = []
     for line in raw_markdown.strip().splitlines():
@@ -983,8 +1002,8 @@ def clean_table_lines(raw_markdown):
         if "|" in line and not set(line).issubset(set("|- ")) and line.count("|") >= 3:
             cleaned_lines.append(line.strip("|").strip())  # Remove leading/trailing pipes
     return cleaned_lines
+
 def covert_response_to_testcases(markdown_text, test_collection):
-    print("\n🚀 Starting test case parsing...")
     print("\n🚀 Starting test case parsing...")
 
     if source == "file":
@@ -1214,6 +1233,7 @@ def covert_response_to_testcases_1(markdown_text, test_collection):
             print(f"   Error: {e}")
 
     print(f"\n✅ Completed saving all test cases to: {test_collection}")
+
 def create_testcase_in_Excel(raw_response, test_location):
     os.makedirs(test_location, exist_ok=True)
 
@@ -1264,8 +1284,10 @@ def extract_testcase_context_from_excel_file(file_obj):
             "actions": [],
             "expected_results": []
         }
+
 def allowed_file(filename, allowed_extensions):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
+
 def extract_text_from_pdf(uploaded_pdf):
     text = ""
     pdf_reader = PyPDF2.PdfReader(uploaded_pdf)
@@ -1276,7 +1298,6 @@ def extract_text_from_pdf(uploaded_pdf):
         text += re.sub(r'\W+', ' ', page.extract_text())
     print("text extracted"+text)
     return text
-
 
 
 def extract_text_from_document(uploaded_file, filename):
@@ -1305,7 +1326,6 @@ def extract_text_from_document(uploaded_file, filename):
 
     print("✅ Text extracted:", text)
     return text
-
 
 
 def get_queries_from_ai_file_extract(uploaded_pdf):

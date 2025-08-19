@@ -437,9 +437,7 @@ if st.session_state.checkbox3_state:
                 constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document",
                                                                                  extracted_data)
                 st.session_state.testcase_response = utils.get_queries_from_ai_updated(constructedprompt)
-                #st.code(prompt_response)
-                #utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
-                #if st.button ("Calculate_Testcase_Accuracy"):
+                st.code(st.session_state.testcase_response)
                 # Show message
                 st.write("🧠 Calculating Test Case Accuracy Matrix...")
 
@@ -794,8 +792,8 @@ if st.session_state.checkbox4_state:
                         else:
                             st.warning(f"⚠️ Could not load content for: {file}")
                     Action_data = merged_content
-            action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
-            action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
+                    action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
+                    action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
             if st.button("Generate_Test_Script"):
                 Prompt = utils.generate_test_script("Test_File_Action", test_file_language, page_files_content,test_files_content,action_data_processed)
                 test_script_response= utils.get_queries_from_ai_updated(Prompt)
