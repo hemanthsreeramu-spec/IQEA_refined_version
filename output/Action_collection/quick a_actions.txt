@@ -1,0 +1,49 @@
+Switched to new window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Click on "Place an Alert"
+Change the value to "PLACE AN ALERT" in "Place an Alert"
+Switched to new window: [https://my.equifax.com/consumer-registration/UCSC/#/personal-info]
+Enter "firstname" in the "firstName" field
+Click on "lastName"
+Enter "lastname" in the "lastName" field
+Click on "ssn"
+Enter "***-**-7898" in the "ssn" field
+Click on "phoneNumber"
+Enter "789-789-****" in the "phoneNumber" field
+Click on "dateOfBirthMasked"
+Enter "04/22/1990" in the "dateOfBirthMasked" field
+Click on "addressLine1"
+Enter "add" in the "addressLine1" field
+Click on "addressLine2"
+Enter "add" in the "addressLine2" field
+Click on "cityName"
+Enter "city" in the "cityName" field
+Click on "expand_more"
+Click on "Select state"
+Click on "expand_more"
+Click on "AS"
+Change the value to "American Samoa" in "AS"
+Change the value to "American Samoa" in "AS"
+Click on "zipCode"
+Enter "89089" in the "zipCode" field
+Change the value to "" in "a-z5wgvf1vpgih"
+Click on "saveConsumer"
+Switched to window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Change the value to "PLACE AN ALERT" in "Place an Alert"
+Click on "learn"
+Change the value to "Learn" in "learn"
+Click on "Business"
+Change the value to "Business" in "Business"
+Click on "API Developer Portal"
+Change the value to "API Developer Portal" in "API Developer Portal"
+Switched to new window: [https://developer.equifax.com/]
+Click on "mx-auto d-block"
+Change the value to "Become a Customer
+
+Set up your business to access Equifax APIs." in "Become a Customer
+
+Set up your business to access Equifax APIs."
+Switched to window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Change the value to "API Developer Portal" in "API Developer Portal"
+Click on "aboutus"
+Change the value to "About Us" in "aboutus"
+Click on "Leadership"

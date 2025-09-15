@@ -1,0 +1,67 @@
+
+Step 1: New window opened: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Step 2: Click on "Place an Alert"
+Step 3: Change the value to "PLACE AN ALERT" in "Place an Alert"
+
+Step 4: New window opened: [https://my.equifax.com/consumer-registration/UCSC/#/personal-info]
+Step 5: Click on "firstName"
+Step 6: Enter "test" in the "firstName" field
+Step 7: Click on "ssn"
+Step 8: Enter "***-**-6456" in the "ssn" field
+Step 9: Click on "lastName"
+Step 10: Enter "test" in the "lastName" field
+Step 11: Click on "dateOfBirthMasked"
+Step 12: Enter "04/22/1990" in the "dateOfBirthMasked" field
+Step 13: Click on "phoneNumber"
+Step 14: Enter "678-678-****" in the "phoneNumber" field
+Step 15: Click on "addressLine1"
+Step 16: Enter "test" in the "addressLine1" field
+Step 17: Click on "addressLine2"
+Step 18: Enter "test" in the "addressLine2" field
+Step 19: Click on "cityName"
+Step 20: Enter "test" in the "cityName" field
+Step 21: Click on "expand_more"
+Step 22: Click on "AL"
+Step 23: Change the value to "Alabama" in "AL"
+Step 24: Change the value to "Alabama" in "AL"
+Step 25: Click on "zipCode"
+Step 26: Enter "56756" in the "zipCode" field
+Step 27: Change the value to "" in "a-8lshca1w04d4"
+Step 28: Click on "saveConsumer"
+
+Step 29: New window opened: [https://my.equifax.com/consumer-registration/UCSC/#/account-creation]
+Step 30: Click on "emailAcct"
+Step 31: Enter "newtest@test.com" in the "emailAcct" field
+Step 32: Click on "confirmEmailAcct"
+Step 33: Enter "newtest@test.com" in the "confirmEmailAcct" field
+Step 34: Click on "Show: content is currently hidden"
+Step 35: Enter "latest@123" in the "Show: content is currently hidden" field
+Step 36: Click on "confirmPassword-component"
+Step 37: Enter "Latest@123" in the "Show: content is currently hidden" field
+Step 38: Click on "Show: content is currently hidden"
+Step 39: Click on "Hide: content is currently visible"
+Step 40: Enter "Latest@123" in the "Hide: content is currently visible" field
+Step 41: Click on "Show: content is currently hidden"
+Step 42: Enter "Latest@123" in the "Show: content is currently hidden" field
+Step 43: Click on "I accept and agree to the Terms of Use."
+Step 44: Click on "chkAccept"
+Step 45: Select "on" in the "chkAccept" field
+Step 46: Click on "CONTINUE"
+
+Step 47: New window opened: [https://my.equifax.com/consumer-registration/UCSC/#/call-center-ptp]
+Step 48: Change the value to "...
+We’re verifying your information." in "mat-mdc-dialog-1"
+
+Step 49: New window opened: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Step 50: Change the value to "PLACE AN ALERT" in "Place an Alert"
+Step 51: Click on "aboutus"
+Step 52: Change the value to "About Us" in "aboutus"
+Step 53: Click on "Leadership"
+
+Step 54: New window opened: [https://developer.equifax.com/]
+Step 55: Click on "mx-auto d-block"
+Step 56: Change the value to "Become a Customer
+
+Set up your business to access Equifax APIs." in "Become a Customer
+
+Set up your business to access Equifax APIs."

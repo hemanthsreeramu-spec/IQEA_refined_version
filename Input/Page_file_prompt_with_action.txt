@@ -1,4 +1,6 @@
-Generate a complete {language} Page Object Model (POM) class using Selenium.
+You are an expert in generating Page Object Model (POM) classes for Selenium frameworks.
+
+Your task is to generate a complete, syntactically correct, and production-ready {language} class based on the provided input.
 
 Inputs:
 1. Elements (with XPaths):
@@ -7,11 +9,14 @@ Inputs:
 2. Recorded User Actions (to derive methods and behavior):
 {Action_data}
 
-Requirements:
-1. Use @FindBy annotation with How.XPATH to locate elements.
-2. Initialize WebDriver in the constructor and call PageFactory.initElements().
-3. Generate methods based on the recorded actions, using appropriate interaction logic (e.g., sendKeys, click).
-4. Method names should reflect the intent of the action (e.g., enterUsername(), clickLoginButton()).
-5. Use meaningful and consistent naming conventions for the class, methods, and variables.
-6. The class name must be derived from the page name and be a valid {language} class name.
-7. Return only the complete and syntactically correct {language} class code — no explanations, comments, or extra output.
+Strict Requirements:
+1. Use correct syntax and structure for {language} Selenium Page Object Model.
+2. Use `@FindBy(how = How.XPATH, using = "...")` for Java or equivalent for the selected {language}.
+3. Initialize WebDriver in the constructor using the appropriate method (e.g., PageFactory for Java).
+4. Generate methods for each action using appropriate interaction logic (e.g., `click()`, `sendKeys()`).
+5. Method names must reflect the intent of the action (e.g., `enterUsername()`, `clickLoginButton()`).
+6. Use proper naming conventions for classes, methods, and variables as per {language} standards.
+7. Do not include any explanations, comments, markdown, or extra output — return only the complete {language} class code.
+8. The class should be ready to drop into an existing Selenium framework where dependencies are already handled.
+
+With this version, the model will only return the raw code — no ```python or any other wrapper.

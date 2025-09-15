@@ -1,0 +1,27 @@
+Page: [https://www.saucedemo.com/]
+- Click on "user-name"
+- Change the value in "user-name"
+- Enter "standard_user" in the "user-name" field
+- Change the value in "password"
+- Enter "secret_sauce" in the "password" field
+- Click on "login-button"
+Page: [https://www.saucedemo.com/inventory.html]
+- Enter "Login" in the "login-button" field
+- Click on "Name (A to Z)
+Name (A to Z)
+Name (Z to A)
+Price (low to high)
+Price (high to low)"
+- Click on "Name (A to Z)
+Name (Z to A)
+Price (low to high)
+Price (high to low)"
+- Change the value in "Name (A to Z)Name (Z to A)Price (low to high)Price (high to low)"
+- Click on "add-to-cart-sauce-labs-backpack"
+- Click on "react-burger-menu-btn"
+- Click on "react-burger-cross-btn"
+Page: [https://www.saucedemo.com/cart.html]
+- Click on ""
+Page: [https://www.saucedemo.com/inventory.html]
+- Click on "continue-shopping"
+- Click on "inventory_sidebar_link"

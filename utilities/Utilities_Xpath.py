@@ -2,6 +2,8 @@ import os
 import base64
 from typing import Union, IO
 import re
+import time
+from datetime import datetime
 import docx2txt
 import gitlab
 from github import Github, GithubException
@@ -59,6 +61,7 @@ if not os.path.exists(xpath_file):
     with pd.ExcelWriter(xpath_file) as writer:
         pd.DataFrame().to_excel(writer, index=False)
     print(f"Excel file created: {xpath_file}")
+
 def load_prompt_from_file(prompt_type):
     print("********************source**********")
     print(source)
@@ -87,7 +90,7 @@ def load_prompt_from_file(prompt_type):
         elif prompt_type == "Feature_file":
             prompt_file = os.path.join(config_folder, "featurefile_prompt.txt")
         elif prompt_type== "Test_case_accuracy":
-            prompt_file = os.path.join(config_folder, "Testcase_Accuracy_matrix.txt")
+            prompt_file = os.path.join(config_folder, "Testcase_Accuracy_matrix1.txt")
         elif prompt_type == "Test_case_regeneration_accuracy":
             prompt_file = os.path.join(config_folder, "Testcase_regeneration_accuracy.txt")
         elif prompt_type == "Test_case_regeneration_accuracy_doc":
@@ -191,6 +194,7 @@ From the given list of elements, generate all possible XPath expressions for eac
 Return only valid XPath strings as output. Do not include any explanation or description. 
 
 Input: {formatted_summary}
+Strict Instruction:no ``` or any other wrapper 
 """
         message = HumanMessage(content=prompt)
         output_value = model([message])
@@ -761,27 +765,219 @@ def select_and_read_text_files(folder_path):
 
     # Step 4: Return dictionary of filename: content
     return file_contents
+def get_window_statuses(driver):
+    try:
+        return driver.execute_script("""
+            const results = {};
+            for (let i=0; i<localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith("recorder_status_")) {
+                    try {
+                        const data = JSON.parse(localStorage.getItem(key));
+                        if (data && data.windowId) {
+                            results[data.windowId] = data;  // use clean windowId as key
+                        }
+                    } catch (e) {
+                        console.warn("⚠️ Bad status JSON for", key, e);
+                    }
+                }
+            }
+            return results;
+        """)
+    except Exception:
+        return {}
 
-def monitor_url_changes(driver, screenshot_folder, stop_flag):
+
+
+def thread_new_window_checker(driver, injected_windows, last_urls, stop_flag, screenshot_folder, current_window_ref):
+    """
+    Monitor newly opened windows and inject JS.
+    """
+    print("thread 1 started")
+    while not stop_flag["stop"]:
+        try:
+            handles = driver.window_handles
+            for handle in handles:
+                if handle not in injected_windows:
+                    # New window detected
+                    driver.switch_to.window(handle)
+                    driver.execute_script(action_utils.injection_script_updated_fixed())
+
+                    # Mark as injected
+                    injected_windows[handle] = True
+                    last_urls[handle] = driver.current_url
+                    current_window_ref["handle"] = handle
+
+                    print(f"✅ JS injected in new window {handle} ({driver.current_url})")
+                    # Optionally: take screenshot
+                    # _take_screenshot(driver, driver.current_url, screenshot_folder)
+            print("thread 1 ended")
+        except Exception as e:
+            print("New window monitor error:", e)
+
+        # Check every 2-3 seconds
+        time.sleep(3)
+
+def thread_focus_screenshot(driver,stop_flag,screenshot_folder,source="file"):
+    """
+    Screenshots
+    """
+    print("screenshot thread started")
     last_url = ""
     while not stop_flag["stop"]:
         try:
             current_url = driver.current_url
             if current_url != last_url:
                 last_url = current_url
+
+                # Wait for page to fully load
+                for _ in range(50):  # up to ~5 seconds
+                    state = driver.execute_script("return document.readyState")
+                    if state == "complete":
+                        break
+                    time.sleep(0.1)
+
+                # Then take screenshot as before
                 if source == "file":
                     filepath = action_utils.take_screenshot(driver, screenshot_folder)
                 elif source == "database":
-                    filepath=db_handler.take_screenshot_db(driver,"sathanantham")
+                    filepath = db_handler.take_screenshot_db(driver, "sathanantham")
                 else:
-                    filepath=None
+                    filepath = None
                 print(f"📸 Screenshot taken for: {current_url} => {filepath}")
+                print("screenshot thread ended")
         except Exception as e:
             print("Error during URL monitoring:", e)
         time.sleep(1)  # check every second
 
+def thread_reinject_action_check(driver, stop_flag,
+                                 last_urls=None, current_window_ref=None,
+                                 injected_windows=None, idle_timeout=5):
+    """
+    Reinjection when no action for > idle_timeout seconds.
+    Handles both epoch-ms and ISO 8601 timestamps.
+    Tracks last reinjection time in localStorage so reinjection
+    only happens if a new action occurred after the last reinject.
+    """
+    print("🧵 thread 3 started (idle reinject checker)")
 
-def monitor_url_changes_for_each_nav(driver, screenshot_folder, stop_flag):
+    while not stop_flag["stop"]:
+        try:
+            # Get last recorded action and last reinjection time from localStorage
+            result = driver.execute_script("""
+                const actions = JSON.parse(localStorage.getItem('recordedActions') || '[]');
+                const lastReinject = localStorage.getItem('lastReinjectTime');
+                let lastActionTs = null;
+
+                if (actions.length > 0) {
+                    lastActionTs = actions[actions.length - 1].timestamp || null;
+                }
+
+                return {
+                    lastAction: lastActionTs,
+                    lastReinject: lastReinject
+                };
+            """)
+
+            last_action = result.get("lastAction")
+            last_reinject = result.get("lastReinject")
+
+            # Convert action timestamp
+            last_action_ts = None
+            if last_action:
+                if isinstance(last_action, (int, float)):  # epoch millis
+                    last_action_ts = float(last_action) / 1000.0
+                elif isinstance(last_action, str):
+                    try:
+                        dt = datetime.fromisoformat(last_action.replace("Z", "+00:00"))
+                        last_action_ts = dt.timestamp()
+                    except Exception as parse_err:
+                        print(f"⚠️ Could not parse ISO timestamp: {last_action} ({parse_err})")
+
+            # Convert reinjection timestamp
+            last_reinject_ts = None
+            if last_reinject:
+                try:
+                    last_reinject_ts = float(last_reinject)
+                except:
+                    pass
+
+            if last_action_ts:
+                now_ts = time.time()
+                print("⏰ Current Time:", datetime.fromtimestamp(now_ts).strftime("%Y-%m-%d %H:%M:%S"))
+                print("📝 Last Action:", datetime.fromtimestamp(last_action_ts).strftime("%Y-%m-%d %H:%M:%S"))
+                if last_reinject_ts:
+                    print("♻️ Last Reinjection:", datetime.fromtimestamp(last_reinject_ts).strftime("%Y-%m-%d %H:%M:%S"))
+
+                # ✅ MAIN CHECK: Only if new action happened after last reinject
+                if not last_reinject_ts or last_action_ts > last_reinject_ts:
+                    diff = now_ts - last_action_ts
+                    print("🔎 Difference (sec):", round(diff, 2))
+
+                    if diff >= idle_timeout:  # ⬅️ MAIN idle timeout check
+                        print(f"⏱️ Idle > {idle_timeout}s detected. Clearing injected_windows…")
+                        if injected_windows is not None:
+                            injected_windows.clear()
+
+                        # Update reinjection time
+                        driver.execute_script("""
+                            localStorage.setItem('lastReinjectTime', Date.now() / 1000);
+                        """)
+                        time.sleep(1)
+
+            else:
+                print("ℹ️ No actions recorded yet.")
+
+        except Exception as e:
+            print("Idle reinject monitor error:", e)
+
+        time.sleep(2)
+
+    print("🛑 thread 3 stopped (idle reinject checker)")
+
+def thread_focus_and_url_monitor(driver, injected_windows, last_urls, stop_flag, screenshot_folder, current_window_ref):
+    """
+    Monitor the current window for focus or URL changes. Reinjection if DOM replaced.
+    """
+    print("thread 2 started")
+
+    while not stop_flag["stop"]:
+        try:
+            # Always read the last focused window
+            last_focused = driver.execute_script("return localStorage.getItem('lastFocusedWindow');")
+            print("last_focused------",last_focused)
+            current_handle = driver.current_window_handle
+            current_window_ref["handle"] = current_handle
+            print("current_window_ref------", current_window_ref["handle"])
+            current_url = driver.current_url
+            print("current_url------", current_url)
+            print("last url-----",last_urls.get(current_handle))
+
+            # Compare last URL for current handle
+            print("last_urls.get(current_handle)",last_urls.get(current_handle))
+            if last_urls.get(current_handle) != current_url:
+                driver.execute_script(action_utils.injection_script_updated_fixed())
+                last_urls[current_handle] = current_url
+                print(f"🔄 URL changed in window {current_handle}, JS reinjected ({current_url})")
+
+            # Check if another window has focus
+            if last_focused and last_focused != current_handle:
+                if last_focused in injected_windows:
+                    # Optionally, inject JS without switching focus
+                    driver.switch_to.window(last_focused)
+                    focused_url = driver.current_url
+                    if last_urls.get(last_focused) != focused_url:
+                        driver.execute_script(action_utils.injection_script_updated_fixed())
+                        last_urls[last_focused] = focused_url
+                        print(f"🔄 Focused window changed, JS reinjected in {last_focused} ({focused_url})")
+                    driver.switch_to.window(current_handle)  # return focus to current window
+
+        except Exception as e:
+            print("Focus/URL monitor error:", e)
+
+        time.sleep(2)
+
+def monitor_url_changes_for_each_nav_old(driver, screenshot_folder, stop_flag):
     last_url = ""
     while not stop_flag["stop"]:
         try:
@@ -991,7 +1187,11 @@ def covert_response_to_testcases(markdown_text, test_collection):
         if not os.path.exists(test_collection):
             os.makedirs(test_collection)
             print(f"📁 Created output directory: {test_collection}")
+    if isinstance(markdown_text, list):
+        markdown_text = "\n".join(str(line) for line in markdown_text)
 
+    elif not isinstance(markdown_text, str):
+        markdown_text = str(markdown_text)
     if markdown_text.startswith("```"):
         markdown_text = "\n".join(
             line for line in markdown_text.splitlines()
@@ -1514,3 +1714,247 @@ def generate_hoverable_image_buttons(image_folder, image_list, preview_width=300
 
     return hover_css_and_script + html_buttons
 
+def accuracy_collect(response_text: str) -> float:
+    # More flexible regex: find "Overall Accuracy" followed by any non-digits, then a number%
+    match = re.search(r"Overall\s*Accuracy[^0-9]*(\d+\.?\d*)\s*%", response_text, re.IGNORECASE)
+
+    if match:
+        overall_accuracy = float(match.group(1))
+    else:
+        # Fallback: try computing from "Score" columns in tables
+        scores = re.findall(r"\|\s*\d+\s*\|\s*[^\|]+\|\s*[A-Z/]+\s*\|\s*[^\|]+\|\s*(\d+)", response_text)
+        if scores:
+            scores = [float(s) for s in scores]
+            overall_accuracy = sum(scores) / len(scores)
+        else:
+            overall_accuracy = 0.0
+
+    return overall_accuracy
+
+
+import re
+import pandas as pd
+
+def parse_ai_testcase_output(ai_response: str):
+    """
+    Parses AI Markdown table response into structured DataFrames:
+    - Technique-level table with emoji scores
+    - Scenario summary table
+    - Overall accuracy visual
+    """
+    # Step 1: Flexible regex to capture table rows
+    row_pattern = re.compile(
+        r'^\|\s*(\d+)\s*\|\s*(.*?)\s*\|\s*(\w+)\s*\|\s*(.*?)\s*\|\s*(\d+)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|',
+        re.MULTILINE | re.DOTALL
+    )
+    matches = row_pattern.findall(ai_response)
+
+    if not matches:
+        # fallback: detect tables even if extra spaces/newlines
+        row_pattern_fallback = re.compile(r'^\|\s*(\d+)\s*\|(.+?)\|(.+?)\|(.+?)\|(.+?)\|(.+?)\|(.+?)\|', re.MULTILINE | re.DOTALL)
+        matches = row_pattern_fallback.findall(ai_response)
+        if not matches:
+            raise ValueError("No table rows detected in AI response. Ensure AI output is a Markdown table with pipes '|'.")
+
+    data = []
+    for m in matches:
+        scenario_id, description, technique, parameters, score, gaps, suggestions = m
+        data.append({
+            "Scenario ID": int(scenario_id.strip()),
+            "Scenario Description": description.strip(),
+            "Technique": technique.strip(),
+            "Parameters / Factors": parameters.strip(),
+            "Score": int(score.strip()),
+            "Gaps": gaps.strip(),
+            "Suggestions": suggestions.strip()
+        })
+
+    df = pd.DataFrame(data)
+
+    # Step 2: Per-scenario summary
+    scenario_summary = df.groupby(["Scenario ID", "Scenario Description"]).agg({
+        "Score": "mean",
+        "Gaps": lambda x: "; ".join([g for g in x if g and g.lower() != "none"]),
+        "Suggestions": lambda x: "; ".join([s for s in x if s and s.lower() != "none"])
+    }).reset_index()
+
+    scenario_summary.rename(columns={
+        "Score": "Overall Coverage (%)",
+        "Gaps": "Key Gaps",
+        "Suggestions": "Key Suggestions"
+    }, inplace=True)
+
+    # Step 3: Add emoji to technique-level scores
+    def score_emoji(score):
+        if score >= 90:
+            return f"✅{score}"
+        elif score >= 75:
+            return f"⚠️{score}"
+        else:
+            return f"❌{score}"
+
+    df["Score"] = df["Score"].apply(score_emoji)
+
+    # Step 4: Overall Accuracy
+    overall_accuracy = scenario_summary["Overall Coverage (%)"].mean()
+    def progress_bar(percentage, length=20):
+        filled = int(length * percentage / 100)
+        empty = length - filled
+        return f"[{'█'*filled}{' ' * empty}] {percentage:.2f}%"
+
+    overall_accuracy_visual = progress_bar(overall_accuracy)
+
+    return df, scenario_summary, overall_accuracy, overall_accuracy_visual
+
+import re
+import pandas as pd
+
+def clean_ai_testcase_output(ai_response: str):
+    """
+    Parse AI response with test case tables into:
+    - df_techniques: technique-level table without duplicates
+    - df_summary: clean scenario summary
+    - overall_accuracy: float
+    - overall_visual: progress bar string
+    """
+    # 1. Split by scenarios
+    scenario_blocks = re.split(r'#+\s*Scenario \d+:', ai_response, flags=re.IGNORECASE)
+
+    tech_rows = []
+    summary_rows = []
+
+    for block in scenario_blocks[1:]:
+        # Scenario ID and Description
+        header_match = re.match(r'\s*(\d+)?[:\s-]*(.+)', block)
+        scenario_id = header_match.group(1) if header_match else "Unknown"
+        description = header_match.group(2).split('\n')[0].strip() if header_match else "Unknown"
+
+        # Extract table rows (avoid header separators)
+        table_lines = [line for line in block.split('\n') if re.match(r'^\|', line)]
+        for line in table_lines:
+            cols = [c.strip() for c in line.strip('|').split('|')]
+            if len(cols) >= 7:  # Technique-level
+                technique, params, score, gaps, suggestions = cols[2], cols[3], cols[4], cols[5], cols[6]
+                # Clean score to int
+                try:
+                    score_num = int(re.sub(r'\D', '', score))
+                except:
+                    score_num = 0
+                # Emoji indicator
+                if score_num >= 90: score_display = f"✅{score_num}"
+                elif score_num >= 75: score_display = f"⚠️{score_num}"
+                else: score_display = f"❌{score_num}"
+
+                tech_rows.append({
+                    "Scenario ID": scenario_id,
+                    "Scenario Description": description,
+                    "Technique": technique,
+                    "Parameters / Factors": params,
+                    "Score": score_display,
+                    "Gaps": gaps if gaps != "None" else "",
+                    "Suggestions": suggestions if suggestions != "None" else ""
+                })
+
+        # Compute Overall Coverage per scenario (average of technique scores)
+        scores = []
+        for line in table_lines:
+            cols = [c.strip() for c in line.strip('|').split('|')]
+            if len(cols) >= 7:
+                try:
+                    scores.append(int(re.sub(r'\D', '', cols[4])))
+                except: pass
+        overall = round(sum(scores)/len(scores),2) if scores else 0
+
+        # Merge Gaps and Suggestions
+        gaps = ', '.join([r['Gaps'] for r in tech_rows if r['Scenario ID'] == scenario_id and r['Gaps']])
+        suggestions = ', '.join([r['Suggestions'] for r in tech_rows if r['Scenario ID'] == scenario_id and r['Suggestions']])
+
+        summary_rows.append({
+            "Scenario ID": scenario_id,
+            "Scenario Description": description,
+            "Overall Coverage (%)": overall,
+            "Key Gaps": gaps,
+            "Key Suggestions": suggestions
+        })
+
+    df_techniques = pd.DataFrame(tech_rows).drop_duplicates()
+    df_summary = pd.DataFrame(summary_rows)
+
+    # Overall Accuracy
+    overall_accuracy = df_summary["Overall Coverage (%)"].mean() if not df_summary.empty else 0
+    bar_len = 20
+    filled = int(bar_len * overall_accuracy / 100)
+    overall_visual = f"[{'█'*filled}{' '*(bar_len-filled)}] {overall_accuracy:.2f}%"
+
+    return df_techniques, df_summary, overall_accuracy, overall_visual
+#### max test cases
+
+def split_requirement_chunks(requirement_text):
+    # Access the variables
+    api_key = os.getenv("AZURE_OPENAI_API_KEY")
+    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+
+    # Set the environment variables explicitly if needed
+    os.environ["AZURE_OPENAI_API_KEY"] = api_key
+    os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
+
+    model = AzureChatOpenAI(
+        openai_api_version="2023-05-15",
+        azure_deployment="qepracticekey",
+    )
+    # prompt = f"""
+    # You are given a software requirement. Group related functional points into chunks.
+    # Each chunk should contain up to {max_scenarios_per_chunk} related scenarios.
+    # Ensure the requirement context is preserved in each chunk.
+    # Output JSON array in the format:
+    #
+    # [
+    #     {{ "chunk_id": 1, "text": "..." }},
+    #     {{ "chunk_id": 2, "text": "..." }},
+    #     ...
+    # ]
+    #
+    # Requirement:
+    # {requirement_text}
+    #
+    #  With this version, the model will only return the raw json — no ```json or any other wrapper.
+    #     """
+    prompt = f"""
+    You are an expert in requirement engineering and test case design. 
+    You are given a software requirement with multiple functional points. 
+    Your task is to intelligently split the requirement into well-structured chunks.
+
+    Rules for splitting:
+    1. Do NOT just split by length or token count.
+    2. Split based on:
+       - Logical connection between requirements
+       - Functional grouping (features, modules, or flows)
+       - Dependencies (steps that must happen together stay together)
+       - Level of importance (critical/high-risk requirements may need smaller, focused chunks)
+       - Similarity (similar requirements grouped to maximize coverage)
+    3. Each chunk should be complete and meaningful on its own, retaining enough context.
+    4. The purpose is to maximize test case generation coverage, so ensure chunks are designed 
+       to highlight different aspects of the requirement (positive flow, negative flow, edge cases).
+    5. Keep the number of chunks minimal but sufficient for maximum coverage. 
+       Some chunks can be large, some small — use your judgment.
+    6. Do not drop or simplify requirements. Preserve all details.
+
+    Output only in raw JSON array format:
+    [
+      {{ "chunk_id": 1, "text": "..." }},
+      {{ "chunk_id": 2, "text": "..." }},
+      ...
+    ]
+
+    Requirement:
+    {requirement_text}
+    With this version, the model will only return the raw json — no ```json or any other wrapper.
+    """
+
+    message = HumanMessage(content=prompt)
+    output_value = model([message])
+    print("-----------------------chunks test--------------------")
+    print(output_value)
+    chunks = json.loads(output_value.content)
+    print(chunks)
+    return chunks

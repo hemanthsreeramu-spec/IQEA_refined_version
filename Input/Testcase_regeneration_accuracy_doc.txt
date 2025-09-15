@@ -1,16 +1,11 @@
 You are an expert QA Test Case Generator.
-
 Your task is to regenerate a high-coverage, logically ordered, end-to-end set of functional test cases using the following inputs:
-
 Requirements:
 {requirements}
-
 Initial AI-Generated Test Cases:
 {existing_prompt_response}
-
 Accuracy Feedback:
 {accuracy_Details}
-
 Instructions (strict):
 1. Analyze the feedback and coverage issues from the accuracy matrix.
 2. Regenerate all test cases with improved coverage based on gaps and suggestions.
@@ -20,15 +15,21 @@ Instructions (strict):
 6. At least one full end-to-end scenario is required.
 7. Include validations, navigation, edge cases, form inputs, and negative tests.
 8. Use pairwise test coverage for field combinations.
-9. Cover both frontend and backend outcomes (e.g., UI response + DB/API triggers).
-10. Each test case must be logically correct, complete, and realistic from a user's point of view.
+9. Apply relevant software testing design techniques when generating test cases, including:
+	OAT (Orthogonal Array Testing) – for pairwise or combinatorial coverage of inputs.
+	BVA (Boundary Value Analysis) – for numeric or range-based fields.
+	EP (Equivalence Partitioning) – for grouping valid and invalid input sets.
+	DT (Decision Table Testing) – for business rules and conditional flows.
+	ST (State Transition Testing) – for workflows that depend on system states.
+	Select and apply the techniques appropriate to each scenario."
+10. Cover both frontend and backend outcomes (e.g., UI response + DB/API triggers).
+11. Each test case must be logically correct, complete, and realistic from a user's point of view.
 
 Output Format:
 - Markdown-style table with:
   Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type
 - Status = "New", Type = "Manual"
-- At least 15–20 test cases with 2–6 steps each.
+- Maximum number of test cases, each with Atomic steps
 - Output raw tables only — no additional text or explanation.
-
 Begin now:
 Regenerate the test cases to achieve at least 90% accuracy coverage.

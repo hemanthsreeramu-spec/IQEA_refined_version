@@ -1,0 +1,70 @@
+Switched to new window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Click on "Place an Alert"
+Change the value to "PLACE AN ALERT" in "Place an Alert"
+Switched to new window: [https://my.equifax.com/consumer-registration/UCSC/#/personal-info]
+Click on "firstName"
+Enter "test" in the "firstName" field
+Click on "ssn"
+Enter "***-**-9789" in the "ssn" field
+Click on "lastName"
+Enter "test" in the "lastName" field
+Click on "phoneNumber"
+Enter "898-989-****" in the "phoneNumber" field
+Click on "dateOfBirthMasked"
+Enter "04/22/1990" in the "dateOfBirthMasked" field
+Click on "addressLine1"
+Enter "test" in the "addressLine1" field
+Click on "SSN or ITIN (XXX-XX-XXXX)
+lock
+Your Social Security number helps us locate your credit report and verify your identity.
+Mobile number (XXX-XXX-XXXX)
+We may text you to verify your identity and to provide service-related alerts. Message and data rates may apply. If you do not have a mobile number, use your home phone number."
+Click on "cityName"
+Enter "test" in the "cityName" field
+Click on "addressLine2"
+Enter "test" in the "addressLine2" field
+Click on "Select state"
+Click on "AL"
+Change the value to "Alabama" in "AL"
+Change the value to "Alabama" in "AL"
+Click on "zipCode"
+Enter "34534" in the "zipCode" field
+Change the value to "" in "a-p6uzbjihwmkd"
+Click on "saveConsumer"
+Switched to new window: [https://my.equifax.com/consumer-registration/UCSC/#/account-creation]
+Click on "emailAcct"
+Enter "test@test.com" in the "emailAcct" field
+Click on "confirmEmailAcct"
+Enter "test@test.com" in the "confirmEmailAcct" field
+Click on "Show: content is currently hidden"
+Enter "Rocker@90" in the "Show: content is currently hidden" field
+Click on "Show: content is currently hidden"
+Enter "Rocker@90" in the "Show: content is currently hidden" field
+Click on "I accept and agree to the Terms of Use."
+Click on "chkAccept"
+Select "on" in the "chkAccept" field
+Click on "continue-button"
+Change the value to "...
+Please wait while we look up your information..." in "mat-mdc-dialog-0"
+Click on "account-create-try-again"
+Change the value to "try again" in "account-create-try-again"
+Switched to window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Change the value to "PLACE AN ALERT" in "Place an Alert"
+Click on "learn"
+Change the value to "Learn" in "learn"
+Click on "Business"
+Change the value to "Business" in "Business"
+Click on "API Developer Portal"
+Change the value to "API Developer Portal" in "API Developer Portal"
+Switched to new window: [https://developer.equifax.com/]
+Click on "Become a Customer"
+Change the value to "Become a Customer
+
+Set up your business to access Equifax APIs." in "Become a Customer
+
+Set up your business to access Equifax APIs."
+Switched to window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Change the value to "API Developer Portal" in "API Developer Portal"
+Click on "aboutus"
+Change the value to "About Us" in "aboutus"
+Click on "Leadership"

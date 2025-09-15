@@ -2,3 +2,5 @@ From the given list of elements, generate all possible XPath expressions for eac
 Return only valid XPath strings as output. Do not include any explanation or description.
 
 Input: {formatted_summary}
+
+Strict note: no ``` or any other wrapper

@@ -37,11 +37,14 @@ Generate XPath expressions for each of the following HTML elements, ensuring to 
 ### Input Elements:
 {formatted_summary}
 
-### Expected Output Format:
+### Output Format (Strict)
+Return a JSON array where each object contains **only**:
+```json
 [
   {{
-    "description": "Readable description of the element",
     "xpath": "Generated XPath (flexible and correct)"
   }},
-  ...
 ]
+Do not include explanations, descriptions, raw text content, or unrelated information.
+Output must be valid JSON.
+With this version, the model will only return the json response — no ```json or any other wrapper.

@@ -1,7 +1,8 @@
 import configparser
 import os
+from configparser import RawConfigParser
 
-config = configparser.RawConfigParser()
+config = RawConfigParser()
 config_path = os.path.join(os.path.dirname(__file__), 'settings.ini')
 config.read(config_path)
 
@@ -10,7 +11,7 @@ def get_source():
 
 def get_db_url():
     DB_USER = config.get('DATABASE', 'DB_USER')
-    DB_PASS = config.get('DATABASE', 'DB_PASS_2') # ensure to choose the valid postgres db password
+    DB_PASS = config.get('DATABASE', 'DB_PASS_1') # ensure to choose the valid postgres db password
     DB_HOST = config.get('DATABASE', 'DB_HOST')
     DB_PORT = config.get('DATABASE', 'DB_PORT')
     DB_NAME = config.get('DATABASE', 'DB_NAME')
@@ -18,4 +19,4 @@ def get_db_url():
     return DB_URL
 
 def get_update_user():
-    return config.get('DATABASE', 'DB_UPDATE_USER') # change the username for database updates
+    return config.get('DATABASE', 'DB_USER') # change the username for database updates

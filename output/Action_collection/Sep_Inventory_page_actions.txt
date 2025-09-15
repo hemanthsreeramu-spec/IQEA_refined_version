@@ -1,0 +1,17 @@
+Page: [https://www.saucedemo.com/inventory.html]
+- Click on "add-to-cart-sauce-labs-backpack"
+- Click on "add-to-cart-sauce-labs-bike-light"
+- Click on "add-to-cart-sauce-labs-bolt-t-shirt"
+- Click on "add-to-cart-sauce-labs-fleece-jacket"
+- Click on "remove-sauce-labs-fleece-jacket"
+- Click on "remove-sauce-labs-bolt-t-shirt"
+- Click on "remove-sauce-labs-bike-light"
+- Click on "react-burger-menu-btn"
+- Click on "react-burger-cross-btn"
+- Click on "Name (A to Z)
+Name (Z to A)
+Price (low to high)
+Price (high to low)"
+- Change the value in "Name (A to Z)Name (Z to A)Price (low to high)Price (high to low)"
+Page: [https://www.saucedemo.com/cart.html]
+- Click on "1"

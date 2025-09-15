@@ -1,0 +1,33 @@
+User opened page: https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/  
+1. Click the "Place an Alert" button  
+Switched to new window: https://my.equifax.com/consumer-registration/UCSC/#/personal-info  
+2. Click the "firstName" field  
+3. Enter "testname" in "firstName" field  
+4. Click the "lastName" field  
+5. Enter "lastname" in "lastName" field  
+6. Click the "dateOfBirthMasked" field  
+7. Enter "04/22/1990" in "dateOfBirthMasked" field  
+8. Click the "ssn" field  
+9. Enter "***-**-8678" in "ssn" field  
+10. Click the "phoneNumber" field  
+11. Enter "987-987-****" in "phoneNumber" field  
+12. Click the "addressLine1" field  
+13. Enter "test" in "addressLine1" field  
+14. Click the "cityName" field  
+15. Enter "test" in "cityName" field  
+16. Click the "addressLine2" field  
+17. Enter "test" in "addressLine2" field  
+18. Click the "Select state expand_more" dropdown  
+19. Select "Arizona" from "AZ" dropdown  
+20. Click the "zipCode" field  
+21. Enter "78978" in "zipCode" field  
+22. Click the "saveConsumer" button  
+Switched to window: https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/  
+23. Click the "learn" button  
+24. Click the "Business" button  
+25. Click the "API Developer Portal" button  
+Switched to new window: https://developer.equifax.com/  
+26. Click the "Become a Customer" button  
+Switched to window: https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/  
+27. Click the "aboutus" button  
+28. Click the "Leadership" button  

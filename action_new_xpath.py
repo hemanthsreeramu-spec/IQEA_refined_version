@@ -90,7 +90,7 @@ if 'requirements_details' not in st.session_state:
 if 'accuracy_response' not in st.session_state:
     st.session_state.accuracy_response = None
 if 'testcase_response' not in st.session_state:
-    st.session_state.testcase_response = None
+    st.session_state.testcase_response = []
 if 'testcase_regeneration' not in st.session_state:
     st.session_state.testcase_regeneration = None
 if 'overall_accuracy' not in st.session_state:
@@ -120,7 +120,10 @@ if "save_testcases" not in st.session_state:
     st.session_state.save_testcases = False
 if "save_regenerated_testcases" not in st.session_state:
     st.session_state.save_regenerated_testcases = False
-
+if 'workflow_text' not in st.session_state:
+    st.session_state.workflow_text = []
+if 'injected_windows' not in st.session_state:
+    st.session_state.injected_windows= {}
 st.title(" 🤖 TigerQE AI Platform - iQEA (Intelligent QE Assistant)")
 
 # 1. Open the browser
@@ -130,8 +133,11 @@ if st.button("Open Browser"):
     if page_url:
         chromedriver_path = os.path.join(input_folder, "chromedriver.exe")
         chrome_options = Options()
+        chrome_options.add_argument("--disable-gpu")  # 🔑 prevents Skia/SharedImage GPU errors
+        chrome_options.add_argument("--disable-software-rasterizer")
         chrome_options.add_argument("--remote-debugging-port=9222")
         chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--remote-allow-origins=*")
         chrome_options.add_argument("--disable-dev-shm-usage")
         #chrome_options.binary_location = chromedriver_path
         #service = Service(executable_path=chromedriver_path)
@@ -148,52 +154,178 @@ if st.session_state.checkbox1_state:
     with st.expander("🔴 User Workflow Recorder"):
         # 2. Start Recording
         st.subheader("Record User Actions & Capture Screenshots of User Navigation")
-
+        st.session_state.workflow_text = []
         if not st.session_state.recording_started and st.button("🎥 Start Recording"):
             if st.session_state.driver:
-                st.session_state.actions = [] # reset if previously recorded
-                action_utils.start_recording(st.session_state.driver)
-                st.session_state.recording_started = True
+                # --- Stop any existing monitor threads ---
+                if "monitor_threads" in st.session_state:
+                    st.session_state.stop_monitor["stop"] = True
+                    for t in st.session_state.monitor_threads:
+                        if t and t.is_alive():
+                            t.join(timeout=2)
 
-                # Start thread to monitor URL and take screenshots
+                # --- Reset recording state ---
+                st.session_state.injected_windows = {}
+                st.session_state.last_urls = {}
+                st.session_state.current_window_ref = {"handle": None}
                 st.session_state.stop_monitor = {"stop": False}
-                st.session_state.monitor_thread = threading.Thread(
-                    target=utils.monitor_url_changes_for_each_nav,
-                    args=(st.session_state.driver, page_screenshot_folder, st.session_state.stop_monitor),
+                st.session_state.monitor_threads = []
+                handle=st.session_state.driver.current_window_handle
+                st.session_state.driver.execute_script(action_utils.injection_script_updated_fixed())
+                print(f"✅ JS injected in new window {handle} ({st.session_state.driver.current_url})")
+                st.session_state.injected_windows[handle] = True
+
+
+
+
+                # --- Thread 1: New windows checker ---
+                t1 = threading.Thread(
+                    target=utils.thread_new_window_checker,
+                    args=(
+                        st.session_state.driver,
+                        st.session_state.injected_windows,
+                        st.session_state.last_urls,
+                        st.session_state.stop_monitor,
+                        page_screenshot_folder,
+                        st.session_state.current_window_ref
+                    ),
                     daemon=True
                 )
-                st.session_state.monitor_thread.start()
+
+                # --- Thread 2: Focus and URL monitor ---
+                t2 = threading.Thread(
+                    target=utils.thread_focus_and_url_monitor,
+                    args=(
+                        st.session_state.driver,
+                        st.session_state.injected_windows,
+                        st.session_state.last_urls,
+                        st.session_state.stop_monitor,
+                        page_screenshot_folder,
+                        st.session_state.current_window_ref
+                    ),
+                    daemon=True
+                )
+                t3 = threading.Thread(
+                    target=utils.thread_focus_screenshot,
+                    args=(
+                        st.session_state.driver,
+                        st.session_state.stop_monitor,
+                        page_screenshot_folder,source
+
+                    ),
+                    daemon=True
+                )
+                t4 = threading.Thread(
+                    target=utils.thread_reinject_action_check,
+                    args=(
+                        st.session_state.driver,
+                        st.session_state.stop_monitor,
+                        st.session_state.last_urls, st.session_state.current_window_ref,
+                        st.session_state.injected_windows
+
+                    ),
+                    daemon=True
+                )
+                # --- Start threads ---
+                t1.start()
+                t2.start()
+                t3.start()
+                t4.start()
+                st.session_state.monitor_threads = [t1, t2,t3,t4]
+
+                st.session_state.recording_started = True
                 st.success("Recording started. Please interact in the browser.")
+        if st.session_state.recording_started and st.button("🛑 Stop Recording"):
+            st.session_state.actions = action_utils.get_recorded_actions(
+                st.session_state.driver,
+                st.session_state.injected_windows
+            )
+            st.session_state.recording_started = False
+
+            # Signal all threads to stop
+            st.session_state.stop_monitor["stop"] = True
+
+            # Join all monitor threads
+            for t in st.session_state.get("monitor_threads", []):
+                if t and t.is_alive():
+                    t.join(timeout=2)
+
+            # Clear thread references for next start
+            st.session_state.monitor_threads = []
+            st.success("Recording stopped. Performed actions are captured.")
+            actions = []
+            # if st.session_state.driver:
+            #     st.session_state.workflow_text = []
+            #     st.session_state.actions = []
+            #     st.session_state.recording_started = True
+            #
+            #     # Store which windows are injected
+            #     st.session_state.injected_windows = {}
+            #
+            #     # # Inject for current window
+            #     # action_utils.start_recording(st.session_state.driver)
+            #     # st.session_state.injected_windows[st.session_state.driver.current_window_handle] = True
+            #
+            #     # Start thread to monitor windows
+            #     st.session_state.stop_monitor = {"stop": False}
+            #     st.session_state.monitor_thread = threading.Thread(
+            #         target=utils.monitor_windows_and_inject_fixed,
+            #         args=(st.session_state.driver, st.session_state.injected_windows, st.session_state.stop_monitor,page_screenshot_folder),
+            #         daemon=True
+            #     )
+            #     st.session_state.monitor_thread.start()
+            #
+            #     st.success("Recording started. Please interact in the browser.")
+        # if not st.session_state.recording_started and st.button("🎥 Start Recording"):
+        #     if st.session_state.driver:
+        #         st.session_state.workflow_text = []
+        #         st.session_state.actions = [] # reset if previously recorded
+        #         action_utils.start_recording(st.session_state.driver)
+        #         st.session_state.recording_started = True
+        #
+        #         # Start thread to monitor URL and take screenshots
+        #         st.session_state.stop_monitor = {"stop": False}
+        #         st.session_state.monitor_thread = threading.Thread(
+        #             target=utils.monitor_url_changes_for_each_nav,
+        #             args=(st.session_state.driver, page_screenshot_folder, st.session_state.stop_monitor),
+        #             daemon=True
+        #         )
+        #         st.session_state.monitor_thread.start()
+        #         st.success("Recording started. Please interact in the browser.")
 
         # 3. Stop Recording
-        if st.session_state.recording_started and st.button("🛑 Stop Recording"):
-            st.session_state.actions = action_utils.get_recorded_actions(st.session_state.driver)
-            st.session_state.recording_started = False
-            #st.session_state.actions = actions
-            # Stop the monitoring thread
-            st.session_state.stop_monitor["stop"] = True
-            if st.session_state.monitor_thread:
-                st.session_state.monitor_thread.join()
-            st.success(f"Recording stopped. performed actions are captured.")
-            actions=[]
+        # if st.session_state.recording_started and st.button("🛑 Stop Recording"):
+        #     st.session_state.actions = action_utils.get_recorded_actions(st.session_state.driver,st.session_state.injected_windows)
+        #     st.session_state.recording_started = False
+        #     #st.session_state.actions = actions
+        #     # Stop the monitoring thread
+        #     st.session_state.stop_monitor["stop"] = True
+        #     if st.session_state.monitor_thread:
+        #         st.session_state.monitor_thread.join()
+        #     st.success(f"Recording stopped. performed actions are captured.")
+        #     actions=[]
 
         # 4. Show and Save Actions
         if st.session_state.actions:
-
+            st.session_state.workflow_text = []
             page_name = st.text_input("Enter Page Name for Saving the Workflow:")
             if st.button("💾 Save Workflow"):
-                workflow_text = action_utils.generate_workflow(st.session_state.actions)
+                st.session_state.workflow_text = action_utils.generate_workflow_manual(st.session_state.actions)
+                print("****************workflowtext**************")
+                print( st.session_state.workflow_text )
+                print("****************workflowtext end**************")
                 if page_name:
                     if source == "database":
-                        action_id = db_handler.save_action_to_db(page_name, workflow_text, get_update_user())
+                        action_id = db_handler.save_action_to_db(page_name,st.session_state.workflow_text , get_update_user())
                         st.success(f"✅ Action saved to database (ID: {action_id})")
                         #st.write(db_handler.get_action_file_by_name(page_name))
                     elif source == "file":
                         filename = os.path.join(Action_collection, f"{page_name}_actions.txt")
                         with open(filename, "w") as f:
-                            f.write("\n".join(workflow_text))  # ✅ FIXED
+                            f.write("\n".join(st.session_state.workflow_text ))  # ✅ FIXED
+                             #f.write(st.session_state.workflow_text)
                         st.success(f"✅ Workflow saved: {filename}")
-                        st.download_button("⬇ Download Workflow", data="\n".join(workflow_text),
+                        st.download_button("⬇ Download Workflow", data="\n".join(st.session_state.workflow_text ),
                                         file_name=f"{page_name}_actions.txt")
                         st.session_state.actions = []  # clear after save
                         st.session_state.show_popup = True
@@ -302,7 +434,7 @@ if st.session_state.checkbox3_state:
 
             if st.button("Clear All Selection"):
                 st.session_state.selected_images = []
-            st.markdown("**Enter the prompt Functional Test Case** <span style='color:red;'>*</span>",
+            st.markdown("**Enter the additional information or requirements** <span style='color:red;'>*</span>",
                         unsafe_allow_html=True)
             prompt = st.text_area('', '')
             st.markdown("**Please select relevent action file(Optional)**", unsafe_allow_html=True)
@@ -434,10 +566,19 @@ if st.session_state.checkbox3_state:
 
             elif option == 'Documents' and uploaded_file is not None:
                 extracted_data = utils.extract_text_from_document(uploaded_file,uploaded_file.name)
+                # chunks= utils.split_requirement_chunks(extracted_data)
+                st.session_state.testcase_response=[]
+                # for chunk in chunks:
+                #     print("iterating requirements")
+                #
+                #     constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document",
+                #                                                                      chunk)
+                #     st.session_state.testcase_response.append(utils.get_queries_from_ai_updated(constructedprompt))
+                #     st.code(st.session_state.testcase_response)
                 constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document",
                                                                                  extracted_data)
-                st.session_state.testcase_response = utils.get_queries_from_ai_updated(constructedprompt)
-                #st.code(prompt_response)
+                st.session_state.testcase_response.append(utils.get_queries_from_ai_updated(constructedprompt))
+                st.code(st.session_state.testcase_response)
                 #utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
                 #if st.button ("Calculate_Testcase_Accuracy"):
                 # Show message
@@ -466,14 +607,19 @@ if st.session_state.checkbox3_state:
                 progress_text.text("✅ Finalizing Output...")
                 progress_bar.progress(100)
                 st.code(st.session_state.accuracy_response)
+                st.code(utils.clean_ai_testcase_output(st.session_state.accuracy_response))
+                #st.code(st.session_state.accuracy_response)
                 # Convert JSON string to dict (only if it's a string)
 
         if st.session_state.accuracy_response:
-            if isinstance(st.session_state.accuracy_response, str):
-                accuracy_response = json.loads(st.session_state.accuracy_response)
+            # if isinstance(st.session_state.accuracy_response, str):
+            #     accuracy_response = json.loads(st.session_state.accuracy_response)
 
-            # Now it's safe to call .get()
-            st.session_state.overall_accuracy = accuracy_response.get("overall_accuracy", 0)
+            # # Now it's safe to call .get()
+            st.session_state.overall_accuracy=utils.accuracy_collect(st.session_state.accuracy_response)
+            print("------------st.session_state.overall_accuracy----------")
+            print(st.session_state.overall_accuracy)
+            #st.session_state.overall_accuracy = accuracy_response.get("overall_accuracy", 0)
         if st.session_state.testcase_response:
             st.session_state.save_testcases = True
         if st.session_state.save_testcases and st.button("Save test cases"):
@@ -628,6 +774,8 @@ if st.session_state.checkbox4_state:
             if st.button("Find XPath for new page"):
                 formatted_summary = None
                 st.session_state.selected_xpaths = []
+                print("going inside add excel")
+                print(st.session_state.selected_xpaths)
                 st.session_state.prompt_response = ""
                 st.session_state.prompt_response_page_file = ""
                 st.session_state.show_popup = False
@@ -665,7 +813,9 @@ if st.session_state.checkbox4_state:
 
                     st.title("Select XPath Expressions from new page to Add to Excel")
                     try:
-                        utils.adding_xapth_user_view(xpath_dict)
+                        st.session_state.selected_xpaths =utils.adding_xapth_user_view(xpath_dict)
+                        print("going inside add excel")
+                        print(st.session_state.selected_xpaths)
                     except (Exception) as e:
                         print(e)
                     new_page_name = st.text_input("Enter the New Page Name:", key="new_page_name")
@@ -808,8 +958,8 @@ if st.session_state.checkbox6_state:
     with st.expander("⚙️ Source Code 📡 Automation Bridge"):
         st.title("Upload code to Repository")
         if source == "file":
-            pytest_files = utils.select_and_read_text_files_xpath("pom_file", utils.Test_file_generator)
-            pom_files = utils.select_and_read_text_files_xpath("test_file", utils.Page_file_generator)
+            pytest_files = utils.select_and_read_text_files_xpath("test_file", utils.Test_file_generator)
+            pom_files = utils.select_and_read_text_files_xpath("pom_file", utils.Page_file_generator)
         elif source == "database":
             all_page_files = db_handler.get_all_pagefile_names()
             all_test_files = db_handler.get_all_testfile_names()

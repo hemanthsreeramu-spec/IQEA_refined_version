@@ -1,0 +1,13 @@
+Page: [https://www.saucedemo.com/cart.html]
+- Click on "remove-sauce-labs-backpack"
+Page: [https://www.saucedemo.com/inventory.html]
+- Click on "continue-shopping"
+- Click on "add-to-cart-sauce-labs-backpack"
+- Click on "add-to-cart-sauce-labs-bike-light"
+- Click on "add-to-cart-sauce-labs-bolt-t-shirt"
+Page: [https://www.saucedemo.com/cart.html]
+- Click on "3"
+- Click on "remove-sauce-labs-bolt-t-shirt"
+- Click on "remove-sauce-labs-bike-light"
+Page: [https://www.saucedemo.com/checkout-step-one.html]
+- Click on "checkout"

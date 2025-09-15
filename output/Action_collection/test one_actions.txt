@@ -1,0 +1,5 @@
+
+Step 1: New window opened: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Step 2: Click on "aboutus"
+Step 3: Change the value to "About Us" in "aboutus"
+Step 4: Click on "Leadership"

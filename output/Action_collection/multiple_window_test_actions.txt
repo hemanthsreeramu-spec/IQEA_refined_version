@@ -1,0 +1,36 @@
+
+Window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/] | Page: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+- [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/] Click on "Place an Alert"
+- [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/] Change the PLACE AN ALERT in "Place an Alert"
+
+Window: [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] | Page: [https://my.equifax.com/consumer-registration/UCSC/#/personal-info]
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Click on "firstName"
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Enter "test" in the "firstName" field
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Click on "ssn"
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Enter "***-**-8678" in the "ssn" field
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Click on "lastName"
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Enter "test" in the "lastName" field
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Click on "phoneNumber"
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Enter "789-789-****" in the "phoneNumber" field
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Click on "dateOfBirthMasked"
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Enter "04/22/1990" in the "dateOfBirthMasked" field
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Click on "addressLine1"
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Enter "test" in the "addressLine1" field
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Enter "test" in the "addressLine2" field
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Click on "cityName"
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Enter "test" in the "cityName" field
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Click on "expand_more"
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Click on "AK"
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Change the Alaska in "AK"
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Click on "zipCode"
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Enter "78906" in the "zipCode" field
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Change the  in "c-w5dhgch4v07w"
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Change the  in "a-w5dhgch4v07w"
+- [https://my.equifax.com/consumer-registration/UCSC/#/personal-info] Click on "saveConsumer"
+
+Window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/] | Page: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+- [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/] Click on "learn"
+- [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/] Change the Learn in "learn"
+- [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/] Click on "aboutus"
+- [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/] Change the About Us in "aboutus"
+- [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/] Click on "Leadership"

@@ -1,0 +1,8 @@
+Page: [https://www.saucedemo.com/cart.html]
+- Click on "remove-sauce-labs-fleece-jacket"
+Page: [https://www.saucedemo.com/inventory.html]
+- Click on "continue-shopping"
+Page: [https://www.saucedemo.com/cart.html]
+- Click on "1"
+Page: [https://www.saucedemo.com/checkout-step-one.html]
+- Click on "checkout"

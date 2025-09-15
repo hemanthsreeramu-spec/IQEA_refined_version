@@ -1,0 +1,7 @@
+Switched to new window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Click on "Place an Alert"
+Change the value to "PLACE AN ALERT" in "Place an Alert"
+Change the value to "PLACE AN ALERT" in "Place an Alert"
+Click on "aboutus"
+Change the value to "About Us" in "aboutus"
+Click on "Leadership"

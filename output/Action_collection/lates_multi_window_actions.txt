@@ -1,0 +1,149 @@
+New window opened: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+New window opened: [https://my.equifax.com/consumer-registration/UCSC/#/personal-info]
+New window opened: [https://my.equifax.com/consumer-registration/UCSC/#/account-creation]
+
+User switched to Window: [ Change the Equifax and its partners use Cookies and similar technologies as necessary to provide digital services and for advertising and targeting, analytics and performance, and functionality and personalization purposes. For more information, please review our Privacy Statement. in "banner-description"]
+| Page: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+ Change the Equifax and its partners use Cookies and similar technologies as necessary to provide digital services and for advertising and targeting, analytics and performance, and functionality and personalization purposes. For more information, please review our Privacy Statement. in "banner-description"
+ Change the Equifax and its partners use Cookies and similar technologies as necessary to provide digital services and for advertising and targeting, analytics and performance, and functionality and personalization purposes. For more information, please review our Privacy Statement. in "banner-description"
+ Change the Equifax and its partners use Cookies and similar technologies as necessary to provide digital services and for advertising and targeting, analytics and performance, and functionality and personalization purposes. For more information, please review our Privacy Statement. in "banner-description"
+ Click on "ketch-h-6 ketch-w-6 !ketch-fill-[--k-banner-header-returnButton-icon-color]"
+ Click on "Place an Alert"
+ Change the PLACE AN ALERT in "Place an Alert"
+ Change the PLACE AN ALERT in "Place an Alert"
+ Click on "learn"
+ Change the Learn in "learn"
+ Click on "aboutus"
+ Change the About Us in "aboutus"
+ Click on "Leadership"
+
+User switched to Window: [ Click on "firstName"]
+| Page: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+ Click on "firstName"
+ Enter "test" in the "firstName" field
+ Enter "test" in the "lastName" field
+ Click on "ssn"
+ Enter "***-**-4234" in the "ssn" field
+ Click on "dateOfBirthMasked"
+ Enter "04/22/1990" in the "dateOfBirthMasked" field
+ Click on "phoneNumber"
+ Enter "890-890-****" in the "phoneNumber" field
+ Click on "addressLine1"
+ Enter "test" in the "addressLine1" field
+ Click on "addressLine2"
+ Enter "test" in the "addressLine2" field
+ Click on "cityName"
+ Enter "test" in the "cityName" field
+ Click on "Select state
+expand_more"
+ Click on "American Samoa"
+ Change the American Samoa in "AS"
+ Change the American Samoa in "AS"
+ Click on "zipCode"
+ Enter "67867" in the "zipCode" field
+ Change the  in "a-ci14ycgpr17"
+ Click on "saveConsumer"
+
+User switched to Window: [ Click on "emailAcct"]
+| Page: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+ Click on "emailAcct"
+ Enter "test@test.com" in the "emailAcct" field
+ Click on "confirmEmailAcct"
+ Enter "test@test.com" in the "confirmEmailAcct" field
+ Click on "Show: content is currently hidden"
+ Enter "Test@123" in the "Show: content is currently hidden" field
+ Click on "confirmPassword-component"
+ Enter "test@123" in the "Show: content is currently hidden" field
+ Click on "Show: content is currently hidden"
+ Click on "Create your account
+Email address
+Your email will be used as your account user name.
+Confirm Email
+
+PASSWORD REQUIREMENTS:
+
+	Must be between 8 and 120 characters
+	Must contain both upper and lower case letters
+	Must contain at least 1 number
+	Must contain at least 1 of these special characters !"#$%&'()*+,-./:;<=>?@[]^_`{|}~
+	Cannot contain any other special characters beside those listed above
+	Cannot contain more than 2 repeating characters
+	Cannot contain your email address
+	Cannot contain 9 or more consecutive numbers
+	Cannot contain spaces
+Enter password
+Show
+Password requirements should match
+Confirm password
+Show
+Password and re-entered Password do not match"
+ Enter "Test@12345" in the "Show: content is currently hidden" field
+ Click on "Show: content is currently hidden"
+ Click on "Create your account
+Email address
+Your email will be used as your account user name.
+Confirm Email
+
+PASSWORD REQUIREMENTS:
+
+	Must be between 8 and 120 characters
+	Must contain both upper and lower case letters
+	Must contain at least 1 number
+	Must contain at least 1 of these special characters !"#$%&'()*+,-./:;<=>?@[]^_`{|}~
+	Cannot contain any other special characters beside those listed above
+	Cannot contain more than 2 repeating characters
+	Cannot contain your email address
+	Cannot contain 9 or more consecutive numbers
+	Cannot contain spaces
+Enter password
+Show
+Password requirements should match
+Confirm password
+Show
+Password and re-entered Password do not match"
+ Enter "test$123456" in the "Show: content is currently hidden" field
+ Click on "Show: content is currently hidden"
+ Enter "Test$123456" in the "Show: content is currently hidden" field
+ Click on "Show: content is currently hidden"
+ Click on "Hide: content is currently visible"
+ Click on "Create your account
+Email address
+Your email will be used as your account user name.
+Confirm Email
+
+PASSWORD REQUIREMENTS:
+
+	Must be between 8 and 120 characters
+	Must contain both upper and lower case letters
+	Must contain at least 1 number
+	Must contain at least 1 of these special characters !"#$%&'()*+,-./:;<=>?@[]^_`{|}~
+	Cannot contain any other special characters beside those listed above
+	Cannot contain more than 2 repeating characters
+	Cannot contain your email address
+	Cannot contain 9 or more consecutive numbers
+	Cannot contain spaces
+Enter password
+Hide
+Password requirements should match
+Confirm password
+Show
+Password and re-entered Password do not match"
+ Enter "Test$123456" in the "Hide: content is currently visible" field
+ Click on "Show: content is currently hidden"
+ Enter "Test$123456" in the "Show: content is currently hidden" field
+ Click on "I accept and agree to the Terms of Use."
+ Click on "chkAccept"
+ Select "on" in the "chkAccept" field
+ Click on "continue-button"
+ Click on "Hide: content is currently visible"
+ Enter "Rocker$123456" in the "Hide: content is currently visible" field
+ Click on "Show: content is currently hidden"
+ Enter "Rocker@123456" in the "Show: content is currently hidden" field
+ Click on "Hide: content is currently visible"
+ Enter "Rocker@123456" in the "Hide: content is currently visible" field
+ Click on "Show: content is currently hidden"
+ Enter "Rocker@123456" in the "Show: content is currently hidden" field
+ Click on "CONTINUE"
+ Change the ...
+Please wait while we look up your information... in "mat-mdc-dialog-1"
+ Click on "×"

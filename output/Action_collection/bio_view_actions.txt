@@ -1,0 +1,9 @@
+Page: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+- Click on "aboutus"
+- Click on "Leadership"
+Page: [https://www.equifax.com/about-equifax/leadership/]
+- Click on "tab-1420970-1"
+- Click on "dropdown-filter-btn__committees"
+- Click on "Governance Committee"
+- Click on "View Bio"
+- Click on "Close"
