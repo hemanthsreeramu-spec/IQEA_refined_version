@@ -1,0 +1,106 @@
+Switched to new window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Click on "Place an Alert"
+Change the value to "PLACE AN ALERT" in "Place an Alert"
+Switched to new window: [https://my.equifax.com/consumer-registration/UCSC/#/personal-info]
+Click on "firstName"
+Enter "test" in the "firstName" field
+Click on "ssn"
+Enter "***-**-5765" in the "ssn" field
+Click on "lastName"
+Enter "test" in the "lastName" field
+Click on "phoneNumber"
+Enter "987-687-****" in the "phoneNumber" field
+Click on "dateOfBirthMasked"
+Enter "04/22/1990" in the "dateOfBirthMasked" field
+Click on "addressLine1"
+Enter "test" in the "addressLine1" field
+Click on "cityName"
+Enter "test" in the "cityName" field
+Click on "addressLine2"
+Enter "test" in the "addressLine2" field
+Click on "Select state
+expand_more"
+Click on "AL"
+Change the value to "Alabama" in "AL"
+Click on "zipCode"
+Enter "87687" in the "zipCode" field
+Change the value to "" in "c-mkiwdpypgij9"
+Switched to window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Click on "learn"
+Change the value to "Learn" in "learn"
+Click on "Business"
+Change the value to "Business" in "Business"
+Click on "API Developer Portal"
+Change the value to "API Developer Portal" in "API Developer Portal"
+Switched to new window: [https://developer.equifax.com/]
+Click on "Become a Customer"
+Change the value to "Become a Customer
+
+Set up your business to access Equifax APIs." in "Become a Customer
+
+Set up your business to access Equifax APIs."
+Click on "Getting Started"
+Change the value to "Getting Started" in "Getting Started"
+Click on "FAQS"
+Change the value to "FAQS" in "FAQS"
+Click on "User Guide"
+Change the value to "User Guide" in "User Guide"
+Click on "Register"
+Change the value to "Register" in "Register"
+Click on "first_name[0][value]"
+Enter "test" in the "first_name[0][value]" field
+Enter "test" in the "last_name[0][value]" field
+Enter "tesdt" in the "field_company[0][value]" field
+Enter "tesdt@test.com" in the "mail" field
+Switched to window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Click on "aboutus"
+Change the value to "About Us" in "aboutus"
+Click on "Leadership"
+Click on "View Bio"
+Click on "Close"
+Click on "View Bio"
+Click on "Close"
+Click on "tab-1420970-1"
+Change the value to "Board of Directors" in "tab-1420970-1"
+Click on "dropdown-filter-btn__committees"
+Click on "Governance Committee"
+Click on "View Bio"
+Click on "Close"
+Click on "Resource Library"
+Switched to window: [https://developer.equifax.com/user/register]
+Click on "mail"
+Enter "tesdt@test.comljsdkasjdhf" in the "mail" field
+Click on "Company *"
+Click on "terms-of-use"
+Select "1" in the "terms-of-use" field
+Switched to window: [https://www.equifax.com/all-resources/]
+Click on "dropdown-filter-btn__industry"
+Click on "Government"
+Click on "government"
+Select "Government" in the "government" field
+Click on "dropdown-filter-btn__capability"
+Click on "Credit Risk"
+Click on "credit_risk"
+Select "Credit Risk" in the "credit_risk" field
+Click on "dropdown-filter-btn__content_type"
+Click on "Webinar"
+Click on "webinar"
+Select "Webinar" in the "webinar" field
+Click on "0 - 0 of 0 Results
+Sort By:
+Alphabetical
+Date"
+Click on "1 Filters Selected"
+Click on "Capital Markets"
+Click on "capital_markets"
+Select "Capital Markets" in the "capital_markets" field
+Click on "dropdown-filter-btn__capability"
+Click on "Data-Driven Marketing"
+Click on "data_driven_marketing"
+Select "Data-Driven Marketing" in the "data_driven_marketing" field
+Click on "dropdown-filter-btn__content_type"
+Click on "Report"
+Click on "report"
+Select "Report" in the "report" field
+Click on "content"
+Click on "Clear All"

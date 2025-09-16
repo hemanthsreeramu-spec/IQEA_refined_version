@@ -80,7 +80,7 @@ def load_prompt_from_file(prompt_type):
         elif prompt_type== "Test_File_Action":
             prompt_file = os.path.join(config_folder, "test_script_prompt.txt")
         elif prompt_type== "Test_case_generation":
-            prompt_file = os.path.join(config_folder, "Testcase_generate_prompt.txt")
+            prompt_file = os.path.join(config_folder, "testcase_generation_final_prompt.txt")
         elif prompt_type== "Test_case_generation_document":
             prompt_file = os.path.join(config_folder, "Testcase_generate_prompt_with_document.txt")
         elif prompt_type== "Test_case_generation_withaction":
@@ -867,8 +867,108 @@ def thread_focus_screenshot(driver,stop_flag,screenshot_folder,source="file"):
         except Exception as e:
             print("Error during URL monitoring:", e)
         time.sleep(1)  # check every second
+import time
+from datetime import datetime
 
 def thread_reinject_action_check(driver, stop_flag,
+                                 last_urls=None, current_window_ref=None,
+                                 injected_windows=None, idle_timeout=5):
+    """
+    Reinjection checker thread:
+    - Monitors last action timestamp and action count in localStorage
+    - Clears injected_windows only if:
+        1. Idle time exceeded > idle_timeout
+        2. New actions were recorded since last reinject
+    - Updates last_action_ts after reinjection to prevent unnecessary clears
+    """
+    print("🧵 thread 3 started (idle reinject checker)")
+
+    # Track last known action count
+    last_action_count = 0
+
+    while not stop_flag["stop"]:
+        try:
+            # Fetch from localStorage
+            result = driver.execute_script("""
+                const actions = JSON.parse(localStorage.getItem('recordedActions') || '[]');
+                const lastReinject = localStorage.getItem('lastReinjectTime');
+                let lastActionTs = null;
+
+                if (actions.length > 0) {
+                    lastActionTs = actions[actions.length - 1].timestamp || null;
+                }
+
+                return {
+                    lastAction: lastActionTs,
+                    lastReinject: lastReinject,
+                    actionCount: actions.length
+                };
+            """)
+
+            last_action = result.get("lastAction")
+            last_reinject = result.get("lastReinject")
+            action_count = result.get("actionCount", 0)
+
+            # Parse last action timestamp
+            last_action_ts = None
+            if last_action:
+                if isinstance(last_action, (int, float)):  # epoch millis
+                    last_action_ts = float(last_action) / 1000.0
+                elif isinstance(last_action, str):
+                    try:
+                        dt = datetime.fromisoformat(last_action.replace("Z", "+00:00"))
+                        last_action_ts = dt.timestamp()
+                    except Exception as parse_err:
+                        print(f"⚠️ Could not parse ISO timestamp: {last_action} ({parse_err})")
+
+            # Parse reinjection timestamp
+            last_reinject_ts = None
+            if last_reinject:
+                try:
+                    last_reinject_ts = float(last_reinject)
+                except:
+                    pass
+
+            if last_action_ts:
+                now_ts = time.time()
+                diff = now_ts - last_action_ts
+
+                print("⏰ Current Time:", datetime.fromtimestamp(now_ts).strftime("%Y-%m-%d %H:%M:%S"))
+                print("📝 Last Action:", datetime.fromtimestamp(last_action_ts).strftime("%Y-%m-%d %H:%M:%S"))
+                if last_reinject_ts:
+                    print("♻️ Last Reinjection:", datetime.fromtimestamp(last_reinject_ts).strftime("%Y-%m-%d %H:%M:%S"))
+                print("🔢 Action Count:", action_count)
+
+                # ✅ MAIN CHECK: only reinject if new actions appeared after last reinject
+                if (not last_reinject_ts or last_action_ts > last_reinject_ts):
+                    idle_condition = diff >= idle_timeout
+                    new_actions_condition = action_count > last_action_count
+
+                    if idle_condition and new_actions_condition:
+                        print(f"⏱️ Idle > {idle_timeout}s AND new actions detected. Clearing injected_windows…")
+                        if injected_windows is not None:
+                            injected_windows.clear()
+
+                        # Update reinjection time + last action time
+                        driver.execute_script("""
+                            localStorage.setItem('lastReinjectTime', Date.now() / 1000);
+                        """)
+                        last_action_ts = now_ts
+                        last_action_count = action_count  # reset count reference
+
+                        time.sleep(1)
+
+            else:
+                print("ℹ️ No actions recorded yet.")
+
+        except Exception as e:
+            print("Idle reinject monitor error:", e)
+
+        time.sleep(2)
+
+    print("🛑 thread 3 stopped (idle reinject checker)")
+
+def thread_reinject_action_check_without_action_count(driver, stop_flag,
                                  last_urls=None, current_window_ref=None,
                                  injected_windows=None, idle_timeout=5):
     """
@@ -978,17 +1078,17 @@ def thread_focus_and_url_monitor(driver, injected_windows, last_urls, stop_flag,
                 last_urls[current_handle] = current_url
                 print(f"🔄 URL changed in window {current_handle}, JS reinjected ({current_url})")
 
-            # Check if another window has focus
-            if last_focused and last_focused != current_handle:
-                if last_focused in injected_windows:
-                    # Optionally, inject JS without switching focus
-                    driver.switch_to.window(last_focused)
-                    focused_url = driver.current_url
-                    if last_urls.get(last_focused) != focused_url:
-                        driver.execute_script(action_utils.injection_script_updated_fixed())
-                        last_urls[last_focused] = focused_url
-                        print(f"🔄 Focused window changed, JS reinjected in {last_focused} ({focused_url})")
-                    driver.switch_to.window(current_handle)  # return focus to current window
+            # # Check if another window has focus
+            # if last_focused and last_focused != current_handle:
+            #     if last_focused in injected_windows:
+            #         # Optionally, inject JS without switching focus
+            #         driver.switch_to.window(last_focused)
+            #         focused_url = driver.current_url
+            #         if last_urls.get(last_focused) != focused_url:
+            #             driver.execute_script(action_utils.injection_script_updated_fixed())
+            #             last_urls[last_focused] = focused_url
+            #             print(f"🔄 Focused window changed, JS reinjected in {last_focused} ({focused_url})")
+            #         driver.switch_to.window(current_handle)  # return focus to current window
 
         except Exception as e:
             print("Focus/URL monitor error:", e)

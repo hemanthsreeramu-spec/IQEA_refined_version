@@ -1,0 +1,115 @@
+Your task is to generate a comprehensive set of at least 20–25 functional test cases using all four inputs below:
+
+Inputs to Use:
+
+Navigation Flow ({navigation})
+
+Defines the overall page-to-page flow and sequence.
+
+Use this to order test cases correctly and validate redirection, forward/backward navigation, multi-window/tab switching.
+
+UI Layout / Image Content ({image_data_processed})
+
+Provides details of page labels, fields, buttons, dropdowns, and mandatory fields.
+
+Use this to generate field-level test cases: mandatory validations, visibility checks, success/confirmation screens, boundary values.
+
+Action Data ({action_data_processed})
+
+Represents user interactions (click, enter text, select dropdown, submit).
+
+Use this as the primary workflow driver for functional and navigation scenarios.
+
+Every distinct action must map to at least one test case.
+
+Requirements ({requirements})
+
+Defines the user’s business goals and expected logic.
+
+Use this to ensure test cases validate business outcomes, not just UI interactions.
+
+Each requirement should map to at least one positive and one negative test case.
+
+Instructions
+
+Feature & Page Coverage
+
+Treat each page/feature from the action file as a separate test case group.
+
+For each page, create at least 9 test cases covering:
+
+Positive workflow
+
+Negative scenarios
+
+Field validations
+
+Mandatory validations
+
+Success page flow
+
+Navigation correctness
+
+Visibility of UI elements
+
+Workflow Logic
+
+Test cases must follow the action file flow (from {action_data_processed}) but also:
+
+Validate fields from {image_data_processed}
+
+Respect the order of {navigation}
+
+Enforce expected outcomes from {requirements}
+
+Start & End Rules
+
+If login/logout exists, include login as the first and logout as the last step.
+
+If not, start from "Home" or entry point and end at confirmation/success.
+
+Validation Rules
+
+Create separate test cases per field using labels from {image_data_processed}.
+
+Cover both valid and invalid inputs.
+
+Explicitly check mandatory fields.
+
+Map at least one test case to each {requirements}.
+
+Output Format
+
+Output only in Markdown table format.
+
+Columns:
+
+| Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type |
+
+Status = New
+
+Type = Manual
+
+Group multiple steps under the same Test Case Name.
+
+Do not provide explanations, only test case tables.
+
+Coverage Requirements
+
+Minimum: 20–25 full test cases (at least 9 per page).
+
+Must cover:
+
+Positive + Negative
+
+Field validations
+
+Mandatory validations
+
+Success page
+
+Navigation
+
+Visibility checks
+
+Requirement-based outcomes

@@ -25,5 +25,5 @@ Output Format:
 - Markdown tables using:
   Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type
 - Status = "New", Type = "Manual"
-- Maximum number of test cases, each with Atomic steps
+- Create at least 25 test cases which covers workflow and individual functionalities, do not stop the test cases generation for additional inputs/confirmations from user , and each with Atomic steps
 - No explanations, just raw tables.

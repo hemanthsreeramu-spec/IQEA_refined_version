@@ -10,7 +10,139 @@ from langchain_openai import AzureChatOpenAI
 from dotenv import load_dotenv
 load_dotenv()
 from utilities.db_utils.models import Screenshot
+
 JS_action_listeners = """(function (statusKey) {
+    if (window.__listenersInjected) return;
+    window.__listenersInjected = true;
+
+    // --- Action persistence ---
+    if (!window.__recordedActions) {
+        window.__recordedActions = JSON.parse(localStorage.getItem("recordedActions") || "[]");
+    }
+
+    function saveAction(action) {
+        const existing = JSON.parse(localStorage.getItem("recordedActions") || "[]");
+        const last = existing.length > 0 ? existing[existing.length - 1] : null;
+
+        // ✅ Skip duplicate (same action+label+url+value)
+        if (last &&
+            last.action === action.action &&
+            last.label === action.label &&
+            last.url === action.url &&
+            (!action.value || action.value === last.value)) {
+            console.log("⏭️ Duplicate action skipped:", action);
+            return;
+        }
+
+        existing.push(action);
+        localStorage.setItem("recordedActions", JSON.stringify(existing));
+        window.__recordedActions.push(action);
+
+        try {
+            window.dispatchEvent(new CustomEvent("__action_recorded", { detail: action }));
+            if (window.opener && window.opener !== window) {
+                window.opener.postMessage({ __relay: true, payload: action }, "*");
+            }
+        } catch (err) {
+            console.warn("Relay failed:", err);
+        }
+    }
+
+    // --- Focus listener ---
+    window.addEventListener("focus", () => {
+        localStorage.setItem("lastFocusedWindow", window.location.href);
+    });
+
+    // --- XPath helper ---
+    function getXPath(el) {
+        const getPos = e => {
+            let pos = 1;
+            while (e.previousElementSibling) { e = e.previousElementSibling; pos++; }
+            return pos;
+        };
+        const parts = [];
+        while (el && el.nodeType === Node.ELEMENT_NODE) {
+            let index = getPos(el);
+            parts.unshift(el.tagName.toLowerCase() + '[' + index + ']');
+            el = el.parentNode;
+        }
+        return '/' + parts.join('/');
+    }
+
+    // --- Record action ---
+    function recordAction(type, target) {
+        // ⛔ Skip if still in grace period (reinjection)
+        if (Date.now() - (window.__reinjectionGrace || 0) < 800) return;
+        if (!target || ["script", "style"].includes(target.tagName?.toLowerCase())) return;
+
+        const xpath = getXPath(target);
+        const label = target.getAttribute("aria-label") ||
+                      target.name || target.id ||
+                      target.innerText || target.placeholder ||
+                      target.value || target.type ||
+                      target.getAttribute('alt') || target.getAttribute('class');
+        const value = (["input","change","input_others"].includes(type))
+                        ? target.value || target.innerText || "" : "";
+
+        const actionObj = {
+            action: type,
+            xpath,
+            label: label?.trim(),
+            value,
+            url: window.location.href,
+            windowId: window.name || statusKey,
+            timestamp: new Date().toISOString()
+        };
+
+        // ✅ If last recorded action was only a "switch", replace it with this real action
+        const last = window.__recordedActions.length > 0 ? window.__recordedActions[window.__recordedActions.length - 1] : null;
+        if (last && last.action === "switch" && last.windowId === actionObj.windowId) {
+            window.__recordedActions.pop();
+            let existing = JSON.parse(localStorage.getItem("recordedActions") || "[]");
+            existing.pop();
+            localStorage.setItem("recordedActions", JSON.stringify(existing));
+        }
+
+        saveAction(actionObj);
+        console.log("Recorded:", actionObj);
+    }
+
+    // --- Attach listeners ---
+    function attachListeners() {
+        if (window.__listenersAttached) return;
+        window.__listenersAttached = true;
+
+        document.addEventListener('click', e => recordAction('click', e.target), true);
+        document.addEventListener('change', e => {
+            if (e.target.type === 'checkbox' || e.target.type === 'radio')
+                recordAction('input_others', e.target);
+            else
+                recordAction('input', e.target);
+        }, true);
+        document.addEventListener('focusout', e => {
+            const tag = e.target.tagName.toLowerCase();
+            if (tag !== 'button' && tag !== 'input' && tag !== 'textarea')
+                recordAction('change', e.target);
+        }, true);
+    }
+
+    // --- Relay handler ---
+    window.addEventListener("message", function(event) {
+        if (event.data && event.data.__relay && event.data.payload) {
+            saveAction(event.data.payload);
+            if (window.opener && window.opener !== window) {
+                window.opener.postMessage(event.data, "*");
+            }
+        }
+    });
+
+    if (document.readyState === "complete") attachListeners();
+    else window.addEventListener('load', attachListeners, { once:true });
+
+    console.log("✅ Action listeners bound with key:", statusKey);
+})(STATUS_KEY_PLACEHOLDER);
+"""
+JS_action_listeners_1 = """(function (statusKey) {
     if (window.__listenersInjected) return;
     window.__listenersInjected = true;
 
@@ -59,6 +191,8 @@ JS_action_listeners = """(function (statusKey) {
 
     // --- Record action ---
     function recordAction(type, target) {
+        // ⛔ Skip if still in grace period (800ms default)
+        if (Date.now() - (window.__reinjectionGrace || 0) < 800) return;
         if (!target || ["script", "style"].includes(target.tagName?.toLowerCase())) return;
 
         const xpath = getXPath(target);
@@ -151,6 +285,8 @@ def injection_script_updated_fixed():
         {JS_action_listeners
             .replace("STATUS_KEY_PLACEHOLDER", "statusKey")
             .replace("WINDOW_ID_PLACEHOLDER", "windowId")}
+        // ✅ Reinjection grace flag
+        window.__reinjectionGrace = Date.now();    
 
         console.log("✅ Recorder JS injected + heartbeat + listeners active (aligned key)");
     }})();
@@ -680,6 +816,17 @@ def humanize_action(action_dict):
 
     elif action_type:
         return f'{action_type.capitalize()} on "{display_label}"'
+    elif action_type == "scroll":
+        return f'Scroll the page'
+
+    elif action_type == "hover":
+        return f'Hover over "{display_label}"'
+
+    elif action_type == "keypress":
+        return f'Press key in "{display_label}" field'
+
+    elif action_type == "ajax":
+        return f'Wait for page load/update triggered by "{display_label}"'
 
     else:
         return f'Perform action on "{display_label}"'

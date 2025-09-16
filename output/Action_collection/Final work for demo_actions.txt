@@ -1,0 +1,110 @@
+Switched to new window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Click on "Place an Alert"
+Change the value to "PLACE AN ALERT" in "Place an Alert"
+Switched to new window: [https://my.equifax.com/consumer-registration/UCSC/#/personal-info]
+Enter "test" in the "lastName" field
+Click on "ssn"
+Enter "***-**-6686" in the "ssn" field
+Click on "phoneNumber"
+Enter "767-867-****" in the "phoneNumber" field
+Click on "dateOfBirthMasked"
+Enter "04/22/1990" in the "dateOfBirthMasked" field
+Click on "addressLine1"
+Enter "test" in the "addressLine1" field
+Click on "cityName"
+Enter "test" in the "cityName" field
+Click on "addressLine2"
+Enter "test" in the "addressLine2" field
+Click on "Select state"
+Click on "AK"
+Change the value to "Alaska" in "AK"
+Click on "zipCode"
+Enter "87686" in the "zipCode" field
+Switched to window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Click on "learn"
+Change the value to "Learn" in "learn"
+Click on "Business"
+Change the value to "Business" in "Business"
+Click on "API Developer Portal"
+Change the value to "API Developer Portal" in "API Developer Portal"
+Switched to new window: [https://developer.equifax.com/]
+Click on "Become a Customer"
+Change the value to "Become a Customer
+
+Set up your business to access Equifax APIs." in "Become a Customer
+
+Set up your business to access Equifax APIs."
+Click on "FAQS"
+Change the value to "FAQS" in "FAQS"
+Click on "User Guide"
+Change the value to "User Guide" in "User Guide"
+Change the value to "Getting Started" in "Getting Started"
+Click on "Register"
+Change the value to "Register" in "Register"
+Click on "first_name[0][value]"
+Enter "test" in the "first_name[0][value]" field
+Enter "test" in the "last_name[0][value]" field
+Enter "test" in the "field_company[0][value]" field
+Enter "test675765677bvnbv@test.com" in the "mail" field
+Click on "terms-of-use"
+Select "1" in the "terms-of-use" field
+Click on "Contact Us"
+Change the value to "Contact Us" in "Contact Us"
+Switched to window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Click on "aboutus"
+Change the value to "About Us" in "aboutus"
+Click on "Leadership"
+Click on "tab-1420970-1"
+Change the value to "Board of Directors" in "tab-1420970-1"
+Click on "Select"
+Click on "Compensation, Human Resources & Management Succession Committee"
+Click on "View Bio"
+Click on "Close"
+Click on "View Bio"
+Click on "Close"
+Click on "Compensation, Human Resources & Management Succession Committee"
+Click on "Governance Committee"
+Click on "View Bio"
+Click on "Close"
+Switched to window: [https://my.equifax.com/consumer-registration/UCSC/#/personal-info]
+Click on "Current address
+Address line 1
+Address line 2"
+Enter "" in the "addressLine2" field
+Switched to window: [https://developer.equifax.com/contact]
+Click on "op"
+Switched to window: [https://my.equifax.com/consumer-registration/UCSC/#/personal-info]
+Click on "Current address
+Address line 1
+Address line 2
+City
+State
+Alaska
+expand_more
+ZIP code"
+Enter "" in the "cityName" field
+Click on "Current address
+Address line 1
+Address line 2
+City
+Please enter your city.
+State
+Alaska
+expand_more
+ZIP code"
+Enter "" in the "addressLine1" field
+Click on "SSN or ITIN (XXX-XX-XXXX)
+lock
+Your Social Security number helps us locate your credit report and verify your identity.
+Mobile number (XXX-XXX-XXXX)
+We may text you to verify your identity and to provide service-related alerts. Message and data rates may apply. If you do not have a mobile number, use your home phone number."
+Enter "***-*" in the "ssn" field
+Click on "SSN or ITIN (XXX-XX-XXXX)
+lock
+Please enter 9 digits.
+Your Social Security number helps us locate your credit report and verify your identity.
+Mobile number (XXX-XXX-XXXX)
+We may text you to verify your identity and to provide service-related alerts. Message and data rates may apply. If you do not have a mobile number, use your home phone number."
+Enter "34" in the "phoneNumber" field
+Click on "dateOfBirthMasked"
+Enter "04/24/2" in the "dateOfBirthMasked" field

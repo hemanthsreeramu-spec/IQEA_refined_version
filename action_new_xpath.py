@@ -42,7 +42,8 @@ os.makedirs(Page_collection, exist_ok=True)
 os.makedirs(Test_case_collection, exist_ok=True)
 os.makedirs(Action_collection, exist_ok=True)
 os.makedirs(feature_file_collection, exist_ok=True)
-page_screenshot_folder = os.path.join(Action_collection, "page_screenshot")
+page_screenshot_folder = os.path.join(Action_collection, "page_screenshot_valid")
+#page_screenshot_folder = os.path.join(Action_collection, "page_screenshot")
 os.makedirs(page_screenshot_folder, exist_ok=True)
 os.makedirs(Test_file_generator, exist_ok=True)
 
@@ -457,7 +458,7 @@ if st.session_state.checkbox3_state:
                     Action_data = merged_content
         elif option == 'Documents':
             # Show only document upload section
-            uploaded_file = st.file_uploader("Upload a PDF, Word, or Excel document", type=['pdf', 'docx', 'xlsx'])
+            uploaded_file = st.file_uploader("Upload a PDF,Text, Word, or Excel document", type=['pdf', 'docx', 'xlsx','txt'])
 
             if uploaded_file is not None:
                 if utils.allowed_file(uploaded_file.name, ['pdf']):
@@ -466,6 +467,8 @@ if st.session_state.checkbox3_state:
                     st.success("Word file uploaded successfully!")
                 elif utils.allowed_file(uploaded_file.name, ['xlsx']):
                     st.success("Excel file uploaded successfully!")
+                elif utils.allowed_file(uploaded_file.name, ['txt']):
+                    st.success("Text file uploaded successfully!")
                 else:
                     st.error("Unsupported file format.")
         if st.button("Generate Functional Test Cases"):
@@ -538,31 +541,31 @@ if st.session_state.checkbox3_state:
                     st.session_state.testcase_response = utils.get_queries_from_ai_updated(constructedprompt)
                     st.code(st.session_state.testcase_response)
                     #utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
-                    st.write("🧠 Test Case Accuracy Metrics...")
-
-                    # Initialize progress bar
-                    progress_bar = st.progress(0)
-                    progress_text = st.empty()
-
-                    # Step 1: Collect requirement details
-                    progress_text.text("🔍 Preparing Requirement Details...")
-                    st.session_state.requirements_details = navigation + image_data_processed + action_data_processed + prompt
-                    progress_bar.progress(25)
-
-                    # Step 2: Generate Accuracy Matrix using AI
-                    progress_text.text("🤖 Calling AI Model for Accuracy Matrix Evaluation...")
-                    accuracy_prompt = utils.generate_testcase_accuracy_matrix(
-                        "Test_case_accuracy",
-                        st.session_state.requirements_details,
-                        st.session_state.testcase_response
-                    )
-                    st.session_state.accuracy_response = utils.get_queries_from_ai_updated(accuracy_prompt)
-                    progress_bar.progress(90)
-
-                    # Step 3: Finalizing
-                    progress_text.text("✅ Finalizing Output...")
-                    progress_bar.progress(100)
-                    st.write(st.session_state.accuracy_response)
+                    # st.write("🧠 Test Case Accuracy Metrics...")
+                    #
+                    # # Initialize progress bar
+                    # progress_bar = st.progress(0)
+                    # progress_text = st.empty()
+                    #
+                    # # Step 1: Collect requirement details
+                    # progress_text.text("🔍 Preparing Requirement Details...")
+                    # st.session_state.requirements_details = navigation + image_data_processed + action_data_processed + prompt
+                    # progress_bar.progress(25)
+                    #
+                    # # Step 2: Generate Accuracy Matrix using AI
+                    # progress_text.text("🤖 Calling AI Model for Accuracy Matrix Evaluation...")
+                    # accuracy_prompt = utils.generate_testcase_accuracy_matrix(
+                    #     "Test_case_accuracy",
+                    #     st.session_state.requirements_details,
+                    #     st.session_state.testcase_response
+                    # )
+                    # st.session_state.accuracy_response = utils.get_queries_from_ai_updated(accuracy_prompt)
+                    # progress_bar.progress(90)
+                    #
+                    # # Step 3: Finalizing
+                    # progress_text.text("✅ Finalizing Output...")
+                    # progress_bar.progress(100)
+                    # st.write(st.session_state.accuracy_response)
 
             elif option == 'Documents' and uploaded_file is not None:
                 extracted_data = utils.extract_text_from_document(uploaded_file,uploaded_file.name)
@@ -582,75 +585,75 @@ if st.session_state.checkbox3_state:
                 #utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
                 #if st.button ("Calculate_Testcase_Accuracy"):
                 # Show message
-                st.write("🧠 Calculating Test Case Accuracy Matrix...")
+                # st.write("🧠 Calculating Test Case Accuracy Matrix...")
+                #
+                # # Initialize progress bar
+                # progress_bar = st.progress(0)
+                # progress_text = st.empty()
+                #
+                # # Step 1: Collect requirement details
+                # progress_text.text("🔍 Preparing Requirement Details...")
+                # st.session_state.requirements_details = extracted_data
+                # progress_bar.progress(25)
+                #
+                # # Step 2: Generate Accuracy Matrix using AI
+                # progress_text.text("🤖 Calling AI Model for Accuracy Matrix Evaluation...")
+                # accuracy_prompt = utils.generate_testcase_accuracy_matrix(
+                #     "Test_case_accuracy",
+                #     st.session_state.requirements_details,
+                #     st.session_state.testcase_response
+                # )
+                # st.session_state.accuracy_response=utils.get_queries_from_ai_updated(accuracy_prompt)
+                # progress_bar.progress(90)
+                #
+                # # Step 3: Finalizing
+                # progress_text.text("✅ Finalizing Output...")
+                # progress_bar.progress(100)
+                # st.code(st.session_state.accuracy_response)
+                # st.code(utils.clean_ai_testcase_output(st.session_state.accuracy_response))
+                # #st.code(st.session_state.accuracy_response)
+                # # Convert JSON string to dict (only if it's a string)
 
-                # Initialize progress bar
-                progress_bar = st.progress(0)
-                progress_text = st.empty()
-
-                # Step 1: Collect requirement details
-                progress_text.text("🔍 Preparing Requirement Details...")
-                st.session_state.requirements_details = extracted_data
-                progress_bar.progress(25)
-
-                # Step 2: Generate Accuracy Matrix using AI
-                progress_text.text("🤖 Calling AI Model for Accuracy Matrix Evaluation...")
-                accuracy_prompt = utils.generate_testcase_accuracy_matrix(
-                    "Test_case_accuracy",
-                    st.session_state.requirements_details,
-                    st.session_state.testcase_response
-                )
-                st.session_state.accuracy_response=utils.get_queries_from_ai_updated(accuracy_prompt)
-                progress_bar.progress(90)
-
-                # Step 3: Finalizing
-                progress_text.text("✅ Finalizing Output...")
-                progress_bar.progress(100)
-                st.code(st.session_state.accuracy_response)
-                st.code(utils.clean_ai_testcase_output(st.session_state.accuracy_response))
-                #st.code(st.session_state.accuracy_response)
-                # Convert JSON string to dict (only if it's a string)
-
-        if st.session_state.accuracy_response:
-            # if isinstance(st.session_state.accuracy_response, str):
-            #     accuracy_response = json.loads(st.session_state.accuracy_response)
-
-            # # Now it's safe to call .get()
-            st.session_state.overall_accuracy=utils.accuracy_collect(st.session_state.accuracy_response)
-            print("------------st.session_state.overall_accuracy----------")
-            print(st.session_state.overall_accuracy)
-            #st.session_state.overall_accuracy = accuracy_response.get("overall_accuracy", 0)
+        # if st.session_state.accuracy_response:
+        #     # if isinstance(st.session_state.accuracy_response, str):
+        #     #     accuracy_response = json.loads(st.session_state.accuracy_response)
+        #
+        #     # # Now it's safe to call .get()
+        #     st.session_state.overall_accuracy=utils.accuracy_collect(st.session_state.accuracy_response)
+        #     print("------------st.session_state.overall_accuracy----------")
+        #     print(st.session_state.overall_accuracy)
+        #     #st.session_state.overall_accuracy = accuracy_response.get("overall_accuracy", 0)
         if st.session_state.testcase_response:
             st.session_state.save_testcases = True
         if st.session_state.save_testcases and st.button("Save test cases"):
             utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
-        if st.session_state.overall_accuracy is not None and st.session_state.overall_accuracy < 90:
-            st.session_state.regenerate_clicked = True
-        if st.session_state.regenerate_clicked and st.button("Regenerate the test cases"):
-                st.session_state.accuracy_response=None
-                st.markdown("### 🔄 Regenerating test cases...")
-                regeneration_prompt = utils.generate_testcases_regeneration_doc(
-                    "Test_case_regeneration_accuracy_doc",
-                    st.session_state.requirements_details,
-                    st.session_state.testcase_response,
-                    st.session_state.accuracy_response
-                )
-                st.session_state.testcase_regeneration = utils.get_queries_from_ai_updated(
-                    regeneration_prompt)
-                #st.write(st.session_state.testcase_regeneration)
-
-                # ✅ Re-evaluate accuracy again
-                accuracy_prompt = utils.generate_testcase_accuracy_matrix(
-                    "Test_case_accuracy",
-                    st.session_state.requirements_details,
-                    st.session_state.testcase_regeneration
-                )
-                st.session_state.accuracy_response = utils.get_queries_from_ai_updated(accuracy_prompt)
-                st.write(st.session_state.accuracy_response)
-        if st.session_state.testcase_regeneration:
-            st.session_state.save_regenerated_testcases = True
-        if st.session_state.save_regenerated_testcases and st.button("Save regenerated test case"):
-            utils.covert_response_to_testcases(st.session_state.testcase_regeneration, Test_case_collection)
+        # if st.session_state.overall_accuracy is not None and st.session_state.overall_accuracy < 90:
+        #     st.session_state.regenerate_clicked = True
+        # if st.session_state.regenerate_clicked and st.button("Regenerate the test cases"):
+        #         st.session_state.accuracy_response=None
+        #         st.markdown("### 🔄 Regenerating test cases...")
+        #         regeneration_prompt = utils.generate_testcases_regeneration_doc(
+        #             "Test_case_regeneration_accuracy_doc",
+        #             st.session_state.requirements_details,
+        #             st.session_state.testcase_response,
+        #             st.session_state.accuracy_response
+        #         )
+        #         st.session_state.testcase_regeneration = utils.get_queries_from_ai_updated(
+        #             regeneration_prompt)
+        #         #st.write(st.session_state.testcase_regeneration)
+        #
+        #         # ✅ Re-evaluate accuracy again
+        #         accuracy_prompt = utils.generate_testcase_accuracy_matrix(
+        #             "Test_case_accuracy",
+        #             st.session_state.requirements_details,
+        #             st.session_state.testcase_regeneration
+        #         )
+        #         st.session_state.accuracy_response = utils.get_queries_from_ai_updated(accuracy_prompt)
+        #         st.write(st.session_state.accuracy_response)
+        # if st.session_state.testcase_regeneration:
+        #     st.session_state.save_regenerated_testcases = True
+        # if st.session_state.save_regenerated_testcases and st.button("Save regenerated test case"):
+        #     utils.covert_response_to_testcases(st.session_state.testcase_regeneration, Test_case_collection)
 if st.session_state.checkbox4_state:
     with st.expander("🔎 Locators 🧾 POM File Generator"):
         st.title("Locator Generator for Visible Elements")
