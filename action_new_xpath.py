@@ -94,6 +94,8 @@ if 'testcase_response' not in st.session_state:
     st.session_state.testcase_response = []
 if 'testcase_regeneration' not in st.session_state:
     st.session_state.testcase_regeneration = None
+# if 'st.session_state.all_responses' not in st.session_state:
+#     st.session_state.all_responses = []
 if 'overall_accuracy' not in st.session_state:
     st.session_state.overall_accuracy = None
 # Unique key for session state
@@ -238,9 +240,7 @@ if st.session_state.checkbox1_state:
                 st.success("Recording started. Please interact in the browser.")
         if st.session_state.recording_started and st.button("🛑 Stop Recording"):
             st.session_state.actions = action_utils.get_recorded_actions(
-                st.session_state.driver,
-                st.session_state.injected_windows
-            )
+                st.session_state.driver)
             st.session_state.recording_started = False
 
             # Signal all threads to stop
@@ -478,6 +478,7 @@ if st.session_state.checkbox3_state:
             st.session_state.save_testcases = False
             st.session_state.regenerate_clicked = False
             st.session_state.save_regenerated_testcases = False
+            #st.session_state.all_responses = []
             # st.write(Action_data)
             if option == 'Recorded_Details':
                 if st.session_state.selected_images and prompt:
@@ -527,18 +528,81 @@ if st.session_state.checkbox3_state:
                             else:
                                 st.error(f"Image not found in database: {image_key}")
                     image_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {image_data} """
+                    # image_prompt = f"""
+                    # Summarize the following UI context into a concise structured format (max 100 lines) for test case generation.
+                    # Include only:
+                    # - Page titles or URLs
+                    # - Field labels and types
+                    # - Mandatory fields
+                    # - Validations (length, format, required)
+                    # - Visibility/content info for UI elements
+                    # Group related fields logically per page. Avoid repetition. Context: {image_data}
+                    # """
                     print(image_prompt)
                     image_data_processed = utils.get_queries_from_ai_updated(image_prompt)
                     print(image_data_processed)
-                    action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
-                    action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
-                    print(action_data_processed)
-                    if not action_data_processed:
-                        action_data_processed = None
+                    #action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions and those urls, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
+                    # action_prompt = f"""
+                    # Summarize the following user actions into a concise structured format (max 100 lines) for test case generation.
+                    # Include only:
+                    # - Pages or windows involved (with URLs)
+                    # - All user actions (click, type, select, switch window/tab)
+                    # - Sequence/order of actions
+                    # - Input values if present (mask sensitive info)
+                    # Group related actions logically per page/window. Avoid repetition. Context: {Action_data}
+                    # """
+                    #action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
+                    #print(action_data_processed)
+                    if not Action_data:
+                        Action_data = None
+                    # testcase_split_requirements=utils.testcase_requirement_split("Test_case_regeneration_requirement_split",image_data_processed,action_data_processed)
+                    #
+                    # for chunk in testcase_split_requirements["chunks"]:
+                    #     action_chunk = chunk.get("action_chunk", [])
+                    #     image_chunk = chunk.get("image_chunk", [])
+                    #     # Skip empty chunks to avoid AI generating nothing
+                    #     if not action_chunk and not image_chunk:
+                    #         print(f"⚠️ Skipping empty chunk: {chunk['id']} - {chunk['title']}")
+                    #         continue
+                    #     # Convert chunk lists into JSON strings for prompt injection
+                    #     action_json = json.dumps(action_chunk, indent=2)
+                    #     image_json = json.dumps(image_chunk, indent=2)
+
+                    # constructedprompt = utils.generate_pom_from_excel_testcases(
+                    #         "Test_case_generation",
+                    #         navigation,
+                    #         image_chunk,  # pass chunk-specific image data
+                    #         action_chunk,  # pass chunk-specific action data
+                    #         prompt
+                    #     )
+                    #     print("Constructed prompt for chunk:", chunk["id"])
+                    #     print(constructedprompt)
                     constructedprompt = utils.generate_pom_from_excel_testcases("Test_case_generation", navigation,
-                                                                                image_data_processed, action_data_processed,
-                                                                                prompt)
-                    st.session_state.testcase_response = utils.get_queries_from_ai_updated(constructedprompt)
+                                                                              image_data_processed, Action_data,
+                                                                                 prompt)
+                    print("******final prompt *******")
+                    st.session_state.testcase_response = utils.generate_testcases_with_retries(constructedprompt)
+                    # st.session_state.testcase_response = utils.get_queries_from_ai_updated(constructedprompt)
+                    # st.session_state.testcase_response+=(utils.get_queries_from_ai_updated_again(constructedprompt,st.session_state.testcase_response))
+                    # first batch
+                    # part1 = utils.get_queries_from_ai_updated(constructedprompt)
+                    # st.session_state.testcase_response = part1
+                    #
+                    # # keep looping until we hit 20 test cases
+                    # while st.session_state.testcase_response.count("| Test Case") < 20:
+                    #     print("going inside the loop")
+                    #     next_part = utils.get_queries_from_ai_updated_again(
+                    #         constructedprompt,
+                    #         st.session_state.testcase_response
+                    #     )
+                    #     st.session_state.testcase_response += "\n" + next_part
+                    # st.session_state.all_responses.append({
+                        #     "chunk_id": chunk["id"],
+                        #     "title": chunk["title"],
+                        #     "response": st.session_state.testcase_response
+                        # })
+                        # st.code(st.session_state.all_responses)
+                        # st.session_state.testcase_response=[]
                     st.code(st.session_state.testcase_response)
                     #utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
                     # st.write("🧠 Test Case Accuracy Metrics...")
@@ -570,7 +634,8 @@ if st.session_state.checkbox3_state:
             elif option == 'Documents' and uploaded_file is not None:
                 extracted_data = utils.extract_text_from_document(uploaded_file,uploaded_file.name)
                 # chunks= utils.split_requirement_chunks(extracted_data)
-                st.session_state.testcase_response=[]
+                #st.session_state.testcase_response=[]
+
                 # for chunk in chunks:
                 #     print("iterating requirements")
                 #
@@ -626,6 +691,23 @@ if st.session_state.checkbox3_state:
         if st.session_state.testcase_response:
             st.session_state.save_testcases = True
         if st.session_state.save_testcases and st.button("Save test cases"):
+            # print("**************** final markdown ****************")
+            # print(st.session_state.all_responses)
+            # all_markdown_responses = []
+            #
+            # for chunk in st.session_state.all_responses:
+            #     response = chunk["response"]
+            #     # Remove code fences
+            #     if response.startswith("```markdown"):
+            #         response = response[len("```markdown"):].strip()
+            #     if response.endswith("```"):
+            #         response = response[:-3].strip()
+            #     all_markdown_responses.append(response)
+            # combined_response = "\n\n".join(all_markdown_responses)
+            # print("**************** final markdown ****************")
+            # print(all_markdown_responses)
+            # utils.covert_response_to_testcases(combined_response, Test_case_collection)
+
             utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
         # if st.session_state.overall_accuracy is not None and st.session_state.overall_accuracy < 90:
         #     st.session_state.regenerate_clicked = True

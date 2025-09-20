@@ -95,7 +95,8 @@ def load_prompt_from_file(prompt_type):
             prompt_file = os.path.join(config_folder, "Testcase_regeneration_accuracy.txt")
         elif prompt_type == "Test_case_regeneration_accuracy_doc":
             prompt_file = os.path.join(config_folder, "Testcase_regeneration_accuracy_doc.txt")
-
+        elif prompt_type == "Test_case_regeneration_requirement_split":
+            prompt_file = os.path.join(config_folder, "testcase_requirement_split_prompt.txt")
         else:
             raise ValueError(f"Invalid prompt type: {prompt_type}. Expected 'web' or 'powerBi'.")
 
@@ -870,105 +871,105 @@ def thread_focus_screenshot(driver,stop_flag,screenshot_folder,source="file"):
 import time
 from datetime import datetime
 
+# def thread_reinject_action_check(driver, stop_flag,
+#                                  last_urls=None, current_window_ref=None,
+#                                  injected_windows=None, idle_timeout=5):
+#     """
+#     Reinjection checker thread:
+#     - Monitors last action timestamp and action count in localStorage
+#     - Clears injected_windows only if:
+#         1. Idle time exceeded > idle_timeout
+#         2. New actions were recorded since last reinject
+#     - Updates last_action_ts after reinjection to prevent unnecessary clears
+#     """
+#     print("🧵 thread 3 started (idle reinject checker)")
+#
+#     # Track last known action count
+#     last_action_count = 0
+#
+#     while not stop_flag["stop"]:
+#         try:
+#             # Fetch from localStorage
+#             result = driver.execute_script("""
+#                 const actions = JSON.parse(localStorage.getItem('recordedActions') || '[]');
+#                 const lastReinject = localStorage.getItem('lastReinjectTime');
+#                 let lastActionTs = null;
+#
+#                 if (actions.length > 0) {
+#                     lastActionTs = actions[actions.length - 1].timestamp || null;
+#                 }
+#
+#                 return {
+#                     lastAction: lastActionTs,
+#                     lastReinject: lastReinject,
+#                     actionCount: actions.length
+#                 };
+#             """)
+#
+#             last_action = result.get("lastAction")
+#             last_reinject = result.get("lastReinject")
+#             action_count = result.get("actionCount", 0)
+#
+#             # Parse last action timestamp
+#             last_action_ts = None
+#             if last_action:
+#                 if isinstance(last_action, (int, float)):  # epoch millis
+#                     last_action_ts = float(last_action) / 1000.0
+#                 elif isinstance(last_action, str):
+#                     try:
+#                         dt = datetime.fromisoformat(last_action.replace("Z", "+00:00"))
+#                         last_action_ts = dt.timestamp()
+#                     except Exception as parse_err:
+#                         print(f"⚠️ Could not parse ISO timestamp: {last_action} ({parse_err})")
+#
+#             # Parse reinjection timestamp
+#             last_reinject_ts = None
+#             if last_reinject:
+#                 try:
+#                     last_reinject_ts = float(last_reinject)
+#                 except:
+#                     pass
+#
+#             if last_action_ts:
+#                 now_ts = time.time()
+#                 diff = now_ts - last_action_ts
+#
+#                 print("⏰ Current Time:", datetime.fromtimestamp(now_ts).strftime("%Y-%m-%d %H:%M:%S"))
+#                 print("📝 Last Action:", datetime.fromtimestamp(last_action_ts).strftime("%Y-%m-%d %H:%M:%S"))
+#                 if last_reinject_ts:
+#                     print("♻️ Last Reinjection:", datetime.fromtimestamp(last_reinject_ts).strftime("%Y-%m-%d %H:%M:%S"))
+#                 print("🔢 Action Count:", action_count)
+#
+#                 # ✅ MAIN CHECK: only reinject if new actions appeared after last reinject
+#                 if (not last_reinject_ts or last_action_ts > last_reinject_ts):
+#                     idle_condition = diff >= idle_timeout
+#                     new_actions_condition = action_count > last_action_count
+#
+#                     if idle_condition and new_actions_condition:
+#                         print(f"⏱️ Idle > {idle_timeout}s AND new actions detected. Clearing injected_windows…")
+#                         if injected_windows is not None:
+#                             injected_windows.clear()
+#
+#                         # Update reinjection time + last action time
+#                         driver.execute_script("""
+#                             localStorage.setItem('lastReinjectTime', Date.now() / 1000);
+#                         """)
+#                         last_action_ts = now_ts
+#                         last_action_count = action_count  # reset count reference
+#
+#                         time.sleep(1)
+#
+#             else:
+#                 print("ℹ️ No actions recorded yet.")
+#
+#         except Exception as e:
+#             print("Idle reinject monitor error:", e)
+#
+#         time.sleep(2)
+#
+#     print("🛑 thread 3 stopped (idle reinject checker)")
+
 def thread_reinject_action_check(driver, stop_flag,
-                                 last_urls=None, current_window_ref=None,
-                                 injected_windows=None, idle_timeout=5):
-    """
-    Reinjection checker thread:
-    - Monitors last action timestamp and action count in localStorage
-    - Clears injected_windows only if:
-        1. Idle time exceeded > idle_timeout
-        2. New actions were recorded since last reinject
-    - Updates last_action_ts after reinjection to prevent unnecessary clears
-    """
-    print("🧵 thread 3 started (idle reinject checker)")
-
-    # Track last known action count
-    last_action_count = 0
-
-    while not stop_flag["stop"]:
-        try:
-            # Fetch from localStorage
-            result = driver.execute_script("""
-                const actions = JSON.parse(localStorage.getItem('recordedActions') || '[]');
-                const lastReinject = localStorage.getItem('lastReinjectTime');
-                let lastActionTs = null;
-
-                if (actions.length > 0) {
-                    lastActionTs = actions[actions.length - 1].timestamp || null;
-                }
-
-                return {
-                    lastAction: lastActionTs,
-                    lastReinject: lastReinject,
-                    actionCount: actions.length
-                };
-            """)
-
-            last_action = result.get("lastAction")
-            last_reinject = result.get("lastReinject")
-            action_count = result.get("actionCount", 0)
-
-            # Parse last action timestamp
-            last_action_ts = None
-            if last_action:
-                if isinstance(last_action, (int, float)):  # epoch millis
-                    last_action_ts = float(last_action) / 1000.0
-                elif isinstance(last_action, str):
-                    try:
-                        dt = datetime.fromisoformat(last_action.replace("Z", "+00:00"))
-                        last_action_ts = dt.timestamp()
-                    except Exception as parse_err:
-                        print(f"⚠️ Could not parse ISO timestamp: {last_action} ({parse_err})")
-
-            # Parse reinjection timestamp
-            last_reinject_ts = None
-            if last_reinject:
-                try:
-                    last_reinject_ts = float(last_reinject)
-                except:
-                    pass
-
-            if last_action_ts:
-                now_ts = time.time()
-                diff = now_ts - last_action_ts
-
-                print("⏰ Current Time:", datetime.fromtimestamp(now_ts).strftime("%Y-%m-%d %H:%M:%S"))
-                print("📝 Last Action:", datetime.fromtimestamp(last_action_ts).strftime("%Y-%m-%d %H:%M:%S"))
-                if last_reinject_ts:
-                    print("♻️ Last Reinjection:", datetime.fromtimestamp(last_reinject_ts).strftime("%Y-%m-%d %H:%M:%S"))
-                print("🔢 Action Count:", action_count)
-
-                # ✅ MAIN CHECK: only reinject if new actions appeared after last reinject
-                if (not last_reinject_ts or last_action_ts > last_reinject_ts):
-                    idle_condition = diff >= idle_timeout
-                    new_actions_condition = action_count > last_action_count
-
-                    if idle_condition and new_actions_condition:
-                        print(f"⏱️ Idle > {idle_timeout}s AND new actions detected. Clearing injected_windows…")
-                        if injected_windows is not None:
-                            injected_windows.clear()
-
-                        # Update reinjection time + last action time
-                        driver.execute_script("""
-                            localStorage.setItem('lastReinjectTime', Date.now() / 1000);
-                        """)
-                        last_action_ts = now_ts
-                        last_action_count = action_count  # reset count reference
-
-                        time.sleep(1)
-
-            else:
-                print("ℹ️ No actions recorded yet.")
-
-        except Exception as e:
-            print("Idle reinject monitor error:", e)
-
-        time.sleep(2)
-
-    print("🛑 thread 3 stopped (idle reinject checker)")
-
-def thread_reinject_action_check_without_action_count(driver, stop_flag,
                                  last_urls=None, current_window_ref=None,
                                  injected_windows=None, idle_timeout=5):
     """
@@ -1216,7 +1217,121 @@ def select_and_read_text_files_xpath(type, folder_path):
 
     return file_contents
 
+import re
 
+import re
+
+
+def parse_testcases_from_markdown(md_text):
+    """
+    Parse a Markdown table into structured test case dicts.
+    Handles multi-line cells and extra pipes in descriptions.
+    Returns a list of dicts, each with test case name, step number, description, expected, status, type.
+    """
+    rows = []
+    md_text = md_text.strip()
+
+    # Remove header/separator lines
+    lines = [line for line in md_text.splitlines() if line.strip() and not re.match(r'^\|\s*-', line)]
+
+    # Collect multi-line rows
+    buffer = ""
+    for line in lines:
+        if line.startswith("|"):
+            buffer += line + "\n"
+            # Count pipes in the line; a full row should have 7 '|' for 6 columns
+            if buffer.count("|") >= 7:
+                # Extract cells safely, even if pipes appear in text
+                parts = re.split(r'\s*\|\s*', buffer.strip())
+                parts = [p.strip() for p in parts[1:-1]]  # skip first and last empty split
+                if len(parts) == 6:
+                    rows.append({
+                        "name": parts[0],
+                        "step_number": parts[1],
+                        "description": parts[2],
+                        "expected": parts[3],
+                        "status": parts[4],
+                        "type": parts[5],
+                    })
+                buffer = ""  # reset for next row
+    return rows
+
+
+def build_markdown_table(testcases):
+    """
+    Build a Markdown table from a list of test case dicts.
+    Groups by test case name automatically.
+    """
+    header = "| Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type |\n"
+    header += "|----------------|-------------|-----------------------|---------------------------|--------|------|\n"
+
+    body = ""
+    for case in testcases:
+        body += f"| {case['name']} | {case['step_number']} | {case['description']} | {case['expected']} | {case['status']} | {case['type']} |\n"
+
+    return header + body
+
+def generate_testcases_with_retries(constructed_prompt, retries=3, target_count=20):
+    all_testcase_output=[]
+    all_testcases = []
+    seen_steps = set()
+    all_raw_responses = ""
+
+    for i in range(retries):
+        print(f"***********Iteration {i}*****************")
+
+        # Build exclusion text for already generated cases
+        if all_testcases:
+            existing_names = set(c["name"] for c in all_testcases)
+            exclusion_text = (
+                "Already generated test cases:\n" + "\n".join(existing_names) +
+                "\nNow generate NEW test cases not in the above list. Continue numbering."
+            )
+            prompt = constructed_prompt + "\n\n" + exclusion_text
+        else:
+            prompt = constructed_prompt
+
+        # Call LLM
+        response = get_queries_from_ai_updated(prompt)
+        all_raw_responses += "\n" + response
+        all_testcase_output.append(response)
+        # Parse Markdown rows robustly
+        new_cases = parse_testcases_from_markdown(response)
+        for case in new_cases:
+            step_key = (case["name"], case["step_number"])
+            if step_key not in seen_steps:
+                seen_steps.add(step_key)
+                all_testcases.append(case)
+
+        if len(set(c["name"] for c in all_testcases)) >= target_count:
+            break
+
+    # Build Markdown table from all collected steps
+    #return build_markdown_table(all_testcases)
+    return all_testcase_output
+
+
+
+def get_queries_from_ai_updated_again(formatted_summary, previous_output):
+    # Access the variables
+    api_key = os.getenv("AZURE_OPENAI_API_KEY")
+    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+
+    # Set the environment variables explicitly if needed
+    os.environ["AZURE_OPENAI_API_KEY"] = api_key
+    os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
+
+    model = AzureChatOpenAI(
+        openai_api_version="2023-05-15",
+        azure_deployment="qepracticekey",
+        max_tokens=4000,  # adjust depending on your model quota
+        temperature=0
+    )
+    prompt=formatted_summary+"please review the below output and don't generate test cases for those scenarios /n"+previous_output
+    message = HumanMessage(content=prompt)
+    output_value = model([message])
+    print(output_value)
+    return output_value.content
 def get_queries_from_ai_updated(formatted_summary):
     # Access the variables
     api_key = os.getenv("AZURE_OPENAI_API_KEY")
@@ -1229,6 +1344,8 @@ def get_queries_from_ai_updated(formatted_summary):
     model = AzureChatOpenAI(
         openai_api_version="2023-05-15",
         azure_deployment="qepracticekey",
+        max_tokens=4000,  # adjust depending on your model quota
+        temperature=0
     )
     message = HumanMessage(content=formatted_summary)
     output_value = model([message])
@@ -2009,72 +2126,80 @@ def clean_ai_testcase_output(ai_response: str):
     return df_techniques, df_summary, overall_accuracy, overall_visual
 #### max test cases
 
-def split_requirement_chunks(requirement_text):
-    # Access the variables
+def testcase_requirement_split(prompt_type,image_data,action_data=None):
+    prompt_template = load_prompt_from_file(prompt_type)
+    # Conditionally inject Action Data section or leave it blank
+    if action_data:
+        action_section = f"- User Interaction Elements (Action Data): {action_data}"
+    else:
+        action_section = ""
+    final_prompt = prompt_template.format(ACTION_DATA=action_data,IMAGE_DATA=image_data)
+    print(final_prompt)
+    # Set environment variables (if needed)
+    api_key = os.getenv("AZURE_OPENAI_API_KEY")
+    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+    os.environ["AZURE_OPENAI_API_KEY"] = api_key
+    os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
+
+    # Initialize the model
+    model = AzureChatOpenAI(
+        openai_api_version="2023-05-15",
+        azure_deployment="qepracticekey",
+    )
+    message = HumanMessage(content=final_prompt)
+    response = model([message])
+    # Extract text from response
+    if hasattr(response, "content"):
+        response_text = response.content
+    elif isinstance(response, dict) and "content" in response:
+        response_text = response["content"]
+    else:
+        response_text = str(response)
+
+    # Parse as JSON
+    try:
+        result_json = json.loads(response_text)
+    except json.JSONDecodeError:
+        raise ValueError("Model did not return valid JSON. Raw output:\n" + response_text)
+
+    return result_json
+
+
+def get_full_testcases(formatted_summary):
     api_key = os.getenv("AZURE_OPENAI_API_KEY")
     endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
 
-    # Set the environment variables explicitly if needed
     os.environ["AZURE_OPENAI_API_KEY"] = api_key
     os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
 
     model = AzureChatOpenAI(
         openai_api_version="2023-05-15",
         azure_deployment="qepracticekey",
+        max_tokens=4000,   # allow long responses
+        temperature=0
     )
-    # prompt = f"""
-    # You are given a software requirement. Group related functional points into chunks.
-    # Each chunk should contain up to {max_scenarios_per_chunk} related scenarios.
-    # Ensure the requirement context is preserved in each chunk.
-    # Output JSON array in the format:
-    #
-    # [
-    #     {{ "chunk_id": 1, "text": "..." }},
-    #     {{ "chunk_id": 2, "text": "..." }},
-    #     ...
-    # ]
-    #
-    # Requirement:
-    # {requirement_text}
-    #
-    #  With this version, the model will only return the raw json — no ```json or any other wrapper.
-    #     """
-    prompt = f"""
-    You are an expert in requirement engineering and test case design. 
-    You are given a software requirement with multiple functional points. 
-    Your task is to intelligently split the requirement into well-structured chunks.
 
-    Rules for splitting:
-    1. Do NOT just split by length or token count.
-    2. Split based on:
-       - Logical connection between requirements
-       - Functional grouping (features, modules, or flows)
-       - Dependencies (steps that must happen together stay together)
-       - Level of importance (critical/high-risk requirements may need smaller, focused chunks)
-       - Similarity (similar requirements grouped to maximize coverage)
-    3. Each chunk should be complete and meaningful on its own, retaining enough context.
-    4. The purpose is to maximize test case generation coverage, so ensure chunks are designed 
-       to highlight different aspects of the requirement (positive flow, negative flow, edge cases).
-    5. Keep the number of chunks minimal but sufficient for maximum coverage. 
-       Some chunks can be large, some small — use your judgment.
-    6. Do not drop or simplify requirements. Preserve all details.
+    collected_output = ""
+    while True:
+        # Always provide original instructions + progress so far
+        messages = [
+            HumanMessage(content=formatted_summary),
+            HumanMessage(content="Progress so far:\n" + collected_output),
+            HumanMessage(content="Continue generating test cases from the last step. "
+                                 "Do not repeat previous cases. Do not summarize. "
+                                 "Keep the same Markdown table format.")
+        ]
 
-    Output only in raw JSON array format:
-    [
-      {{ "chunk_id": 1, "text": "..." }},
-      {{ "chunk_id": 2, "text": "..." }},
-      ...
-    ]
+        response = model(messages)
+        response_text = response.content.strip()
+        collected_output += "\n" + response_text
 
-    Requirement:
-    {requirement_text}
-    With this version, the model will only return the raw json — no ```json or any other wrapper.
-    """
+        # ✅ Stop once we see 20 complete test cases
+        if collected_output.count("| Test Case") >= 20:
+            break
 
-    message = HumanMessage(content=prompt)
-    output_value = model([message])
-    print("-----------------------chunks test--------------------")
-    print(output_value)
-    chunks = json.loads(output_value.content)
-    print(chunks)
-    return chunks
+        # ✅ Safety check: stop if model keeps looping
+        if "Continued in next response" not in response_text and len(response_text) < 50:
+            break
+
+    return collected_output

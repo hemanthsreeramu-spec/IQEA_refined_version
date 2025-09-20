@@ -1,6 +1,7 @@
 Switched to new window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
 Click on "Place an Alert"
 Change the value to "PLACE AN ALERT" in "Place an Alert"
+
 Switched to new window: [https://my.equifax.com/consumer-registration/UCSC/#/personal-info]
 Enter "test" in the "firstName" field
 Click on "ssn"
@@ -11,34 +12,21 @@ Click on "phoneNumber"
 Enter "876-876-****" in the "phoneNumber" field
 Click on "dateOfBirthMasked"
 Enter "04/22/1990" in the "dateOfBirthMasked" field
-Switched to window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
-Change the value to "PLACE AN ALERT" in "Place an Alert"
-Switched to window: [https://my.equifax.com/consumer-registration/UCSC/#/personal-info]
 Click on "addressLine1"
 Enter "t" in the "addressLine1" field
-Switched to window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
-Change the value to "PLACE AN ALERT" in "Place an Alert"
-Switched to window: [https://my.equifax.com/consumer-registration/UCSC/#/personal-info]
 Enter "test" in the "addressLine1" field
 Click on "Current address
 Address line 1
 Address line 2"
 Switched to window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
-Change the value to "PLACE AN ALERT" in "Place an Alert"
 Click on "learn"
-Change the value to "Learn" in "learn"
 Change the value to "Learn" in "learn"
 Click on "Business"
 Change the value to "Business" in "Business"
 Click on "API Developer Portal"
 Change the value to "API Developer Portal" in "API Developer Portal"
 Switched to new window: [https://developer.equifax.com/]
-Click on "mx-auto d-block"
 Change the value to "Become a Customer
-
-Set up your business to access Equifax APIs." in "Become a Customer
-
-Set up your business to access Equifax APIs."
 Click on "FAQS"
 Change the value to "FAQS" in "FAQS"
 Click on "User Guide"
@@ -49,7 +37,6 @@ Enter "test" in the "first_name[0][value]" field
 Click on "last_name[0][value]"
 Enter "test" in the "last_name[0][value]" field
 Switched to window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
-Change the value to "API Developer Portal" in "API Developer Portal"
 Click on "aboutus"
 Change the value to "About Us" in "aboutus"
 Click on "Leadership"

@@ -83,13 +83,13 @@ JS_action_listeners = """(function (statusKey) {
                       target.getAttribute('alt') || target.getAttribute('class');
         const value = (["input","change","input_others"].includes(type))
                         ? target.value || target.innerText || "" : "";
-
+        const currentUrl = window.location.href;
         const actionObj = {
             action: type,
             xpath,
             label: label?.trim(),
             value,
-            url: window.location.href,
+            url: currentUrl,
             windowId: window.name || statusKey,
             timestamp: new Date().toISOString()
         };
@@ -619,15 +619,15 @@ def get_new_actions(driver):
         window.__recordedActions = []; // clear after reading
         return actions;
     """)
-def get_recorded_actions(driver, injected_windows):
+def get_recorded_actions(driver):
     """
     Collect recorded actions from all windows, merge by timestamp.
     injected_windows: dict of {window_handle: True}
     """
     all_actions = []
-
+    handles = driver.window_handles
     # Iterate through all known windows
-    for handle in injected_windows.keys():
+    for handle in handles:
         try:
             driver.switch_to.window(handle)
 
@@ -770,11 +770,11 @@ def generate_workflow_manual(actions):
         # Human-readable action
         readable = humanize_action(act)
         if readable:
-            workflow_lines.append(readable)
+            workflow_lines.append(f'{readable} (URL: {url})')
     print("*********workflow_lines************")
     print(workflow_lines)
     print("*********workflow_lines ends************")
-    generate_workflow(workflow_lines)
+   # generate_workflow(workflow_lines)
     return workflow_lines
 
 
@@ -1018,4 +1018,3 @@ def humanize_action_old(action_dict):
         return f'{action_type.capitalize()} on "{display_label}"'
     else:
         return f'Perform action on "{display_label}"'
-

@@ -1,0 +1,16 @@
+Switched to new window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
+Click on "Place an Alert"
+Change the value to "PLACE AN ALERT" in "Place an Alert"
+Switched to new window: [https://signin.my.equifax.com/u/login/identifier?state=hKFo2SBWS2hYcWdReW9MQVBJOXNhV2drNEU5dUVwZVo4ZkdvaqFur3VuaXZlcnNhbC1sb2dpbqN0aWTZIEYwYmoySEF3Mmx4QlItTF9DNVlHRi10YTVvMENPX0Rao2NpZNkgSkFNQnpYOTZGSnRMQU1mVXFQQldmQjJPTVZ3R2x6Y0w]
+Click on "username"
+Enter "test" in the "username" field
+Click on "Sign In
+Continue
+Username or email address
+Continue
+
+Don't have a myEquifax account? Register Now
+
+Privacy Notice
+
+Need assistance? We're here to help! Please contact our Customer Care team at 1-888-EQUIFAX (1-888-378-4329) . The Customer Care team is available between 9am - 9pm M - F, 9am - 6pm Sat and Sun ET."
