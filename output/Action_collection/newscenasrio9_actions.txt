@@ -1,6 +1,0 @@
-Switched to new window: [https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/]
-Click on "Place an Alert"
-Change the value to "PLACE AN ALERT" in "Place an Alert"
-Switched to new window: [https://signin.my.equifax.com/u/login/identifier?state=hKFo2SBrem5JWXlNVFhLRVY3NlY3S0Y3TGxkRUV0WWpETzM4TaFur3VuaXZlcnNhbC1sb2dpbqN0aWTZIGpCRHhIUW5IYTIzbWtreHV6Z3RySHhQZi14Vkc1N3JIo2NpZNkgSkFNQnpYOTZGSnRMQU1mVXFQQldmQjJPTVZ3R2x6Y0w]
-Click on "username"
-Enter "test" in the "username" field

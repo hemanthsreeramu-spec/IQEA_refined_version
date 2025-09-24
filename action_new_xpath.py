@@ -42,8 +42,8 @@ os.makedirs(Page_collection, exist_ok=True)
 os.makedirs(Test_case_collection, exist_ok=True)
 os.makedirs(Action_collection, exist_ok=True)
 os.makedirs(feature_file_collection, exist_ok=True)
-page_screenshot_folder = os.path.join(Action_collection, "page_screenshot_valid")
-#page_screenshot_folder = os.path.join(Action_collection, "page_screenshot")
+page_screenshot_folder_new = os.path.join(Action_collection, "page_screenshot_valid")
+page_screenshot_folder = os.path.join(Action_collection, "page_screenshot")
 os.makedirs(page_screenshot_folder, exist_ok=True)
 os.makedirs(Test_file_generator, exist_ok=True)
 
@@ -372,9 +372,9 @@ if st.session_state.checkbox2_state:
                 st.success(f"feature file save in database for '{Feature_file_name}'")
 
 if st.session_state.checkbox3_state:
-    with st.expander("🧮 E2E Test Case Generator"):
+    with st.expander("🧮 E2E Scenario Based Test Case Generator"):
 
-        st.title("E2E Test Case Generation")
+        st.title("E2E Scenario Based Test Case Generation")
 
         option = st.radio(
             "Choose your Flow with:",
@@ -385,7 +385,7 @@ if st.session_state.checkbox3_state:
             # Show image selection and prompt box
             if source == "file":
                 st.markdown("**Select Images (Mandatory)** <span style='color:red;'>*</span>", unsafe_allow_html=True)
-                image_files = [f for f in os.listdir(page_screenshot_folder) if
+                image_files = [f for f in os.listdir(page_screenshot_folder_new) if
                                f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif'))]
                 cols = st.columns(5)
                 for idx, image_file in enumerate(image_files):
@@ -706,7 +706,7 @@ if st.session_state.checkbox3_state:
             # combined_response = "\n\n".join(all_markdown_responses)
             # print("**************** final markdown ****************")
             # print(all_markdown_responses)
-            # utils.covert_response_to_testcases(combined_response, Test_case_collection)
+            utils.covert_response_to_testcases_single_file(st.session_state.testcase_response, Test_case_collection)
 
             utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
         # if st.session_state.overall_accuracy is not None and st.session_state.overall_accuracy < 90:
@@ -838,12 +838,12 @@ if st.session_state.checkbox4_state:
                         else:
                             st.warning(f"⚠️ Could not load content for: {file}")
                     Action_data = merged_content
-            action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
-            action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
+            #action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
+            #action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
 
             if st.button("Generate Page File"):
                 st.session_state.prompt_response_page_file = ""
-                Prompt = utils.generate_pom_from_excel_with_action("Page_File_Action", page_name, language, action_data_processed)
+                Prompt = utils.generate_pom_from_excel_with_action("Page_File_Action", page_name, language, Action_data)
                 st.session_state.prompt_response_page_file = utils.get_queries_from_ai("Page_File", Prompt)
                 st.subheader("Generated Page Class")
                 if source == "file":
@@ -857,7 +857,11 @@ if st.session_state.checkbox4_state:
         # Handle the "Find XPath" button logic
         if st.session_state.driver:
             if st.button("Find XPath for new page"):
+                handles = st.session_state.driver.window_handles
+                if len(handles) > 1:
+                    st.session_state.driver.switch_to.window(handles[-1])
                 formatted_summary = None
+                st.session_state.selected_xpaths = []
                 st.session_state.selected_xpaths = []
                 print("going inside add excel")
                 print(st.session_state.selected_xpaths)
@@ -1029,10 +1033,10 @@ if st.session_state.checkbox4_state:
                         else:
                             st.warning(f"⚠️ Could not load content for: {file}")
                     Action_data = merged_content
-            action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
-            action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
+                # action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
+                # action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
             if st.button("Generate_Test_Script"):
-                Prompt = utils.generate_test_script("Test_File_Action", test_file_language, page_files_content,test_files_content,action_data_processed)
+                Prompt = utils.generate_test_script("Test_File_Action", test_file_language, page_files_content,test_files_content,Action_data)
                 test_script_response= utils.get_queries_from_ai_updated(Prompt)
                 #st.write(test_script_response)
                 if source == "file":

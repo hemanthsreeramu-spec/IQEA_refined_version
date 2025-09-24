@@ -189,7 +189,30 @@ def get_queries_from_ai(prompt, formatted_summary):
         # Combine all responses into one
         combined_response = "\n".join(all_responses)
         return combined_response
-    elif prompt == "Web":
+    elif prompt =="Web":
+        # print("formatted_summary:", {formatted_summary})
+        formatted_summary_json = json.dumps(formatted_summary, indent=2)
+        final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
+        print("Final prompt:", {final_prompt})
+        json_list = formatted_summary if isinstance(formatted_summary, list) else json.loads(formatted_summary)
+        chunk_size = 15
+        json_chunks = [json_list[i:i + chunk_size] for i in range(0, len(json_list), chunk_size)]
+        # Collecting responses for all JSON chunks
+        all_responses = []
+        for i, chunk in enumerate(json_chunks):
+            print(f"Processing JSON chunk {i + 1}/{len(json_chunks)}")
+            formatted_summary_json = json.dumps(chunk, indent=2)
+            final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
+
+            message = HumanMessage(content=final_prompt)
+            output_value = model([message])
+            print(f"Response for chunk {i + 1}: {output_value.content}")
+            all_responses.append(output_value.content)
+
+        # Combine all responses into one
+        combined_response = "\n".join(all_responses)
+        return combined_response
+    elif prompt == "Web1":
         print(formatted_summary)
         #final_prompt = prompt_template.format(formatted_summary=formatted_summary)
         prompt = f"""
@@ -712,7 +735,7 @@ def generate_pom_from_excel_with_action(prompt_type,page_name,language,action_da
 
     # Extract XPaths
     xpaths = "\n".join(filtered_df["XPath"].apply(clean_xpath).tolist())
-    final_prompt = prompt_template.format(language=language,xpaths=xpaths,Action_data=action_data)
+    final_prompt = prompt_template.format(language=language,xpaths=xpaths,Action_data=action_data,page_name=page_name)
     print(final_prompt)
     return final_prompt
 
@@ -826,6 +849,7 @@ def thread_new_window_checker(driver, injected_windows, last_urls, stop_flag, sc
                     injected_windows[handle] = True
                     last_urls[handle] = driver.current_url
                     current_window_ref["handle"] = handle
+
 
                     print(f"✅ JS injected in new window {handle} ({driver.current_url})")
                     # Optionally: take screenshot
@@ -1415,8 +1439,154 @@ def clean_table_lines(raw_markdown):
         if "|" in line and not set(line).issubset(set("|- ")) and line.count("|") >= 3:
             cleaned_lines.append(line.strip("|").strip())  # Remove leading/trailing pipes
     return cleaned_lines
+def covert_response_to_testcases(markdown_text, test_collection, output_file="SauceDemo.xlsx"):
+    print("\n🚀 Starting test case parsing...")
 
-def covert_response_to_testcases(markdown_text, test_collection):
+    # normalize input
+    if isinstance(markdown_text, list):
+        markdown_text = "\n".join(str(line) for line in markdown_text)
+    elif not isinstance(markdown_text, str):
+        markdown_text = str(markdown_text)
+
+    # remove triple-backtick wrapper if present
+    if markdown_text.startswith("```"):
+        markdown_text = "\n".join(
+            line for line in markdown_text.splitlines()
+            if not line.strip().startswith("```")
+        )
+
+    # helper: sanitize sheet name to be Excel-compatible (max 31 chars, no forbidden chars)
+    def _sanitize_sheet_name(name: str, fallback_prefix="Sheet"):
+        safe = re.sub(r'[\[\]\*:/\\\?]', '_', str(name).strip())
+        safe = safe[:31] if safe else fallback_prefix
+        if not safe:
+            safe = fallback_prefix
+        return safe
+
+    # Clean AI formatted table lines (user's helper)
+    table_lines = clean_table_lines(markdown_text)
+
+    writer = None
+    excel_path = None
+    parsed_any = False
+
+    # prepare file writer only if saving to file
+    if source == "file":
+        if not os.path.exists(test_collection):
+            os.makedirs(test_collection)
+            print(f"📁 Created output directory: {test_collection}")
+        excel_path = os.path.join(test_collection, output_file)
+        writer = pd.ExcelWriter(excel_path, engine="openpyxl")
+
+    try:
+        # STEP 1: Single table format
+        if len(table_lines) >= 2 and "Test Case Name" in table_lines[0]:
+            table_text = "\n".join(table_lines)
+            try:
+                df = pd.read_csv(StringIO(table_text), sep='|', engine='python', on_bad_lines='skip')
+                df = df.dropna(axis=1, how='all')
+                df.columns = [re.sub(r'\*+', '', col.strip()) for col in df.columns]
+                for col in df.select_dtypes(include='object').columns:
+                    df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+
+                if 'Test Case Name' not in df.columns:
+                    raise ValueError("'Test Case Name' column missing.")
+
+                df['Test Case Name'] = df['Test Case Name'].replace('', pd.NA).ffill()
+
+                for test_case, group in df.groupby('Test Case Name'):
+                    sheet_name = _sanitize_sheet_name(test_case)
+                    parsed_any = True
+                    if source == "file":
+                        group.to_excel(writer, sheet_name=sheet_name, index=False)
+                        print(f"✅ Added sheet: {sheet_name}")
+                    elif source == "database":
+                        db_handler.save_testcases_to_db(sheet_name, group, "sathanantham")
+                        print(f"✅ Saved to DB: {sheet_name}")
+
+                # If single-table parsed, finalize and return
+                if parsed_any:
+                    if source == "file" and writer:
+                        writer.close()
+                        print(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test cases in {excel_path}")
+                        st.write(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test cases in {excel_path}")
+                    elif source == "database":
+                        print(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test cases to the database.")
+                        st.write(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test cases to the database.")
+                    return
+
+            except Exception as e:
+                print(f"❌ Failed to parse single-table format: {e}")
+                print("🔁 Attempting markdown section fallback...")
+
+        # STEP 2: Fallback to splitting by markdown sections
+        test_cases = re.split(r'####\s+\*\*(.*?)\*\*', markdown_text)
+        if len(test_cases) < 3:
+            print("❌ No valid markdown headings found either. Exiting.")
+            return
+
+        for i in range(1, len(test_cases), 2):
+            test_case_name = test_cases[i].strip()
+            test_case_body = test_cases[i + 1]
+
+            lines = []
+            for line in test_case_body.strip().splitlines():
+                ln = line.strip()
+                if "|" in ln and not set(ln).issubset(set("|- ")):
+                    lines.append(ln)
+
+            if not lines:
+                print(f"⚠️ No valid table in: {test_case_name}")
+                continue
+
+            try:
+                df = pd.read_csv(StringIO("\n".join(lines)), sep='|', engine='python')
+                df = df.dropna(axis=1, how='all')
+                df.columns = [re.sub(r'\*+', '', col.strip()) for col in df.columns]
+
+                for col in df.select_dtypes(include='object').columns:
+                    df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+
+                if 'Test Case Name' not in df.columns:
+                    df.insert(0, 'Test Case Name', test_case_name)
+                else:
+                    df['Test Case Name'] = df['Test Case Name'].replace('', pd.NA).ffill()
+
+                for test_case, group in df.groupby('Test Case Name'):
+                    sheet_name = _sanitize_sheet_name(test_case)
+                    parsed_any = True
+                    if source == "file":
+                        group.to_excel(writer, sheet_name=sheet_name, index=False)
+                        print(f"✅ Added sheet: {sheet_name}")
+                    elif source == "database":
+                        db_handler.save_testcases_to_db(sheet_name, group, "sathanantham")
+                        print(f"✅ Saved to DB: {sheet_name}")
+
+            except Exception as e:
+                print(f"❌ Failed to parse section: {test_case_name}")
+                print(f"   Error: {e}")
+
+    finally:
+        # finalize based on source
+        if source == "file":
+            if writer:
+                try:
+                    writer.close()
+                except Exception:
+                    pass
+            if excel_path and parsed_any:
+                print(f"\n✅ Completed saving all test cases in one Excel: {excel_path}")
+                st.write(f"\n✅ Completed saving all test cases in one Excel: {excel_path}")
+            else:
+                print("\n⚠️ No test cases were parsed to save as Excel.")
+        elif source == "database":
+            if parsed_any:
+                print(f"\n✅ Completed saving all test cases to the database.")
+                st.write(f"\n✅ Completed saving all test cases to the database.")
+            else:
+                print("\n⚠️ No test cases were parsed to save to the database.")
+
+def covert_response_to_testcases_single_file(markdown_text, test_collection):
     print("\n🚀 Starting test case parsing...")
 
     if source == "file":

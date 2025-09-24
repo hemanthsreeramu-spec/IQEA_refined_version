@@ -1,33 +1,68 @@
 You are a test automation expert.
 
-Your task is to generate a valid and production-ready {test_file_language} test script using pytest based on the inputs below.
+Your task is to generate a valid and production-ready {test_file_language} test script based on the inputs below.
 
 Inputs:
-1. Page Object File(s):
+
+Page Object File(s):
 {page_files_content}
 
-2. Test Case Definitions:
+Test Case Definitions:
 {test_files_content}
 
-3. (Optional) Recorded User Actions:
+(Optional) Recorded User Actions:
 {recorded_actions}
 
 Instructions:
-1. Fully implement each test case from start to end — no step should be skipped.
-2. For each step:
-   - First, check if a matching method exists in the page object file and use it.
-   - If no method exists, check for a matching XPath locator and use `driver.find_element(...)`.
-   - If neither exists, use a direct Selenium command based on visible text or inferred intent.
-   - If `Recorded User Actions` is provided, align actions with the test case flow to improve accuracy or fill in any missing interactions.
-3. Include assert statements to validate expected outcomes as per each step.
-4. Follow the step order exactly as defined in the test case.
-5. Extract reusable flows (e.g., login) as helper methods inside the test file.
-6. Use pytest structure: imports, fixtures, and one test function per test case.
-7. Add inline comments that clearly describe the purpose of each step (based on the test case or recorded actions).
-8. Output only valid Python test code — no explanations, no markdown formatting, and no extra content.
 
-Do not wrap the output in triple backticks or add any non-code text — return the raw script only.
+Fully implement each test case from start to end — no step should be skipped.
 
-With this version, the model will only return the raw code — no ```python or any other wrapper.
-Note: The Page Object file(s) are located in the following path and should be imported accordingly:
+For each step:
+
+First, check if a matching method exists in the Page Object file and use it.
+
+If no method exists, check for a matching XPath locator and use the framework’s native locator strategy.
+
+If neither exists, use a direct automation command based on visible text or inferred intent.
+
+If Recorded User Actions is provided, align them with the test case flow to improve accuracy or fill in any missing interactions.
+
+If Recorded User Actions conflict with Test Case Definitions, always prioritize the Test Case Definitions.
+
+The application launch URL must always come from the Test Case Definitions — never hardcoded.
+
+Include assertions that validate the expected outcomes for each test case.
+
+Follow the step order exactly as defined in the test case.
+
+Extract reusable flows (e.g., login) as helper methods inside the test file.
+
+Use the appropriate test framework and conventions dynamically based on {test_file_language} (e.g., pytest for Python, TestNG/JUnit for Java, NUnit for C#, Playwright/Jest/Mocha for JS, etc.).
+
+Add inline comments that clearly describe the purpose of each step (based on the test case or recorded actions).
+
+Output must be only executable {test_file_language} test code — no explanations, no markdown, no placeholders, no TODOs.
+Strict Page Object Class Handling:
+
+Always parse the provided Page Object file content to detect the actual class <ClassName> definition.
+
+Use this exact <ClassName> in both the import statement and Page Object instantiation.
+
+Import from the path output.page_file_generator.<file_name> (do not import from other paths).
+
+Do not infer, shorten, or rename class names from filenames.
+
+Example: if the file is home_page.py and inside it the content has class EquifaxHomePage:, then the correct usage is:
+
+from output.page_file_generator.home_page import EquifaxHomePage
+home_page = EquifaxHomePage(driver)
+
+Strict Notes:
+
+The Page Object file(s) are located in:
 output/page_file_generator/
+
+Always detect the actual class name from inside the provided Page Object file(s) (look for class <ClassName>) and use it exactly as defined in imports and object creation. Do not infer or rename class names from the file name.".
+
+
+Do not wrap the output in triple backticks or any wrapper like ```{test_file_language}. Return raw code only.
