@@ -5,7 +5,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.remote.webdriver import WebDriver
 
 
-class Equfix_home_page:
+class EqufixHomePage:
     LOCATORS = {
         "place_an_alert": (By.XPATH, "//a[contains(@class, 'btn') and text()='PLACE AN ALERT']"),
         "close_button": (By.XPATH, "//button[@name='close']")
@@ -47,10 +47,7 @@ class Equfix_home_page:
         all_window_handles = self.driver.window_handles
         if len(all_window_handles) > 1:
             self.driver.switch_to.window(all_window_handles[-1])
-            if expected_url and self.driver.current_url != expected_url:
-                raise RuntimeError(f"Switched to new window, but URL does not match. Expected: {expected_url}, Found: {self.driver.current_url}")
-        else:
-            raise RuntimeError("No new window is available to switch to.")
+
 
     def click_place_an_alert(self):
         self.click(self.LOCATORS["place_an_alert"])

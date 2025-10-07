@@ -26,8 +26,9 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 #setting details - source either file or database
-from config.settings_reader import get_source, get_update_user
+from config.settings_reader import get_source, get_update_user,get_model
 source = get_source()
+model_type= get_model()
 
 # Setup output folder
 current_path = os.getcwd()
@@ -42,8 +43,8 @@ os.makedirs(Page_collection, exist_ok=True)
 os.makedirs(Test_case_collection, exist_ok=True)
 os.makedirs(Action_collection, exist_ok=True)
 os.makedirs(feature_file_collection, exist_ok=True)
-page_screenshot_folder_new = os.path.join(Action_collection, "page_screenshot_valid")
-page_screenshot_folder = os.path.join(Action_collection, "page_screenshot")
+#page_screenshot_folder_new = os.path.join(Action_collection, "page_screenshot_valid")
+page_screenshot_folder = os.path.join(Action_collection, "Equifix")
 os.makedirs(page_screenshot_folder, exist_ok=True)
 os.makedirs(Test_file_generator, exist_ok=True)
 
@@ -255,56 +256,6 @@ if st.session_state.checkbox1_state:
             st.session_state.monitor_threads = []
             st.success("Recording stopped. Performed actions are captured.")
             actions = []
-            # if st.session_state.driver:
-            #     st.session_state.workflow_text = []
-            #     st.session_state.actions = []
-            #     st.session_state.recording_started = True
-            #
-            #     # Store which windows are injected
-            #     st.session_state.injected_windows = {}
-            #
-            #     # # Inject for current window
-            #     # action_utils.start_recording(st.session_state.driver)
-            #     # st.session_state.injected_windows[st.session_state.driver.current_window_handle] = True
-            #
-            #     # Start thread to monitor windows
-            #     st.session_state.stop_monitor = {"stop": False}
-            #     st.session_state.monitor_thread = threading.Thread(
-            #         target=utils.monitor_windows_and_inject_fixed,
-            #         args=(st.session_state.driver, st.session_state.injected_windows, st.session_state.stop_monitor,page_screenshot_folder),
-            #         daemon=True
-            #     )
-            #     st.session_state.monitor_thread.start()
-            #
-            #     st.success("Recording started. Please interact in the browser.")
-        # if not st.session_state.recording_started and st.button("🎥 Start Recording"):
-        #     if st.session_state.driver:
-        #         st.session_state.workflow_text = []
-        #         st.session_state.actions = [] # reset if previously recorded
-        #         action_utils.start_recording(st.session_state.driver)
-        #         st.session_state.recording_started = True
-        #
-        #         # Start thread to monitor URL and take screenshots
-        #         st.session_state.stop_monitor = {"stop": False}
-        #         st.session_state.monitor_thread = threading.Thread(
-        #             target=utils.monitor_url_changes_for_each_nav,
-        #             args=(st.session_state.driver, page_screenshot_folder, st.session_state.stop_monitor),
-        #             daemon=True
-        #         )
-        #         st.session_state.monitor_thread.start()
-        #         st.success("Recording started. Please interact in the browser.")
-
-        # 3. Stop Recording
-        # if st.session_state.recording_started and st.button("🛑 Stop Recording"):
-        #     st.session_state.actions = action_utils.get_recorded_actions(st.session_state.driver,st.session_state.injected_windows)
-        #     st.session_state.recording_started = False
-        #     #st.session_state.actions = actions
-        #     # Stop the monitoring thread
-        #     st.session_state.stop_monitor["stop"] = True
-        #     if st.session_state.monitor_thread:
-        #         st.session_state.monitor_thread.join()
-        #     st.success(f"Recording stopped. performed actions are captured.")
-        #     actions=[]
 
         # 4. Show and Save Actions
         if st.session_state.actions:
@@ -385,7 +336,7 @@ if st.session_state.checkbox3_state:
             # Show image selection and prompt box
             if source == "file":
                 st.markdown("**Select Images (Mandatory)** <span style='color:red;'>*</span>", unsafe_allow_html=True)
-                image_files = [f for f in os.listdir(page_screenshot_folder_new) if
+                image_files = [f for f in os.listdir(page_screenshot_folder) if
                                f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif'))]
                 cols = st.columns(5)
                 for idx, image_file in enumerate(image_files):
@@ -528,214 +479,46 @@ if st.session_state.checkbox3_state:
                             else:
                                 st.error(f"Image not found in database: {image_key}")
                     image_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {image_data} """
-                    # image_prompt = f"""
-                    # Summarize the following UI context into a concise structured format (max 100 lines) for test case generation.
-                    # Include only:
-                    # - Page titles or URLs
-                    # - Field labels and types
-                    # - Mandatory fields
-                    # - Validations (length, format, required)
-                    # - Visibility/content info for UI elements
-                    # Group related fields logically per page. Avoid repetition. Context: {image_data}
-                    # """
                     print(image_prompt)
                     image_data_processed = utils.get_queries_from_ai_updated(image_prompt)
                     print(image_data_processed)
-                    #action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions and those urls, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
-                    # action_prompt = f"""
-                    # Summarize the following user actions into a concise structured format (max 100 lines) for test case generation.
-                    # Include only:
-                    # - Pages or windows involved (with URLs)
-                    # - All user actions (click, type, select, switch window/tab)
-                    # - Sequence/order of actions
-                    # - Input values if present (mask sensitive info)
-                    # Group related actions logically per page/window. Avoid repetition. Context: {Action_data}
-                    # """
-                    #action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
-                    #print(action_data_processed)
                     if not Action_data:
                         Action_data = None
-                    # testcase_split_requirements=utils.testcase_requirement_split("Test_case_regeneration_requirement_split",image_data_processed,action_data_processed)
-                    #
-                    # for chunk in testcase_split_requirements["chunks"]:
-                    #     action_chunk = chunk.get("action_chunk", [])
-                    #     image_chunk = chunk.get("image_chunk", [])
-                    #     # Skip empty chunks to avoid AI generating nothing
-                    #     if not action_chunk and not image_chunk:
-                    #         print(f"⚠️ Skipping empty chunk: {chunk['id']} - {chunk['title']}")
-                    #         continue
-                    #     # Convert chunk lists into JSON strings for prompt injection
-                    #     action_json = json.dumps(action_chunk, indent=2)
-                    #     image_json = json.dumps(image_chunk, indent=2)
-
-                    # constructedprompt = utils.generate_pom_from_excel_testcases(
-                    #         "Test_case_generation",
-                    #         navigation,
-                    #         image_chunk,  # pass chunk-specific image data
-                    #         action_chunk,  # pass chunk-specific action data
-                    #         prompt
-                    #     )
-                    #     print("Constructed prompt for chunk:", chunk["id"])
-                    #     print(constructedprompt)
-                    constructedprompt = utils.generate_pom_from_excel_testcases("Test_case_generation", navigation,
+                    if model_type == "azureopenai":
+                        print("Model Type is AzureOpenAi")
+                        constructedprompt = utils.generate_pom_from_excel_testcases("Test_case_generation", navigation,
                                                                               image_data_processed, Action_data,
-                                                                                 prompt)
-                    print("******final prompt *******")
+                                                                               prompt)
+                    else:
+                        print("Model Type is gimini")
+                        constructedprompt = utils.generate_pom_from_excel_testcases("Test_case_generation_gemini", navigation,
+                                                                                    image_data_processed, Action_data,
+                                                                                    prompt)
+                        print("******final prompt *******")
                     st.session_state.testcase_response = utils.generate_testcases_with_retries(constructedprompt)
-                    # st.session_state.testcase_response = utils.get_queries_from_ai_updated(constructedprompt)
-                    # st.session_state.testcase_response+=(utils.get_queries_from_ai_updated_again(constructedprompt,st.session_state.testcase_response))
-                    # first batch
-                    # part1 = utils.get_queries_from_ai_updated(constructedprompt)
-                    # st.session_state.testcase_response = part1
-                    #
-                    # # keep looping until we hit 20 test cases
-                    # while st.session_state.testcase_response.count("| Test Case") < 20:
-                    #     print("going inside the loop")
-                    #     next_part = utils.get_queries_from_ai_updated_again(
-                    #         constructedprompt,
-                    #         st.session_state.testcase_response
-                    #     )
-                    #     st.session_state.testcase_response += "\n" + next_part
-                    # st.session_state.all_responses.append({
-                        #     "chunk_id": chunk["id"],
-                        #     "title": chunk["title"],
-                        #     "response": st.session_state.testcase_response
-                        # })
-                        # st.code(st.session_state.all_responses)
-                        # st.session_state.testcase_response=[]
                     st.code(st.session_state.testcase_response)
-                    #utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
-                    # st.write("🧠 Test Case Accuracy Metrics...")
-                    #
-                    # # Initialize progress bar
-                    # progress_bar = st.progress(0)
-                    # progress_text = st.empty()
-                    #
-                    # # Step 1: Collect requirement details
-                    # progress_text.text("🔍 Preparing Requirement Details...")
-                    # st.session_state.requirements_details = navigation + image_data_processed + action_data_processed + prompt
-                    # progress_bar.progress(25)
-                    #
-                    # # Step 2: Generate Accuracy Matrix using AI
-                    # progress_text.text("🤖 Calling AI Model for Accuracy Matrix Evaluation...")
-                    # accuracy_prompt = utils.generate_testcase_accuracy_matrix(
-                    #     "Test_case_accuracy",
-                    #     st.session_state.requirements_details,
-                    #     st.session_state.testcase_response
-                    # )
-                    # st.session_state.accuracy_response = utils.get_queries_from_ai_updated(accuracy_prompt)
-                    # progress_bar.progress(90)
-                    #
-                    # # Step 3: Finalizing
-                    # progress_text.text("✅ Finalizing Output...")
-                    # progress_bar.progress(100)
-                    # st.write(st.session_state.accuracy_response)
 
             elif option == 'Documents' and uploaded_file is not None:
                 extracted_data = utils.extract_text_from_document(uploaded_file,uploaded_file.name)
-                # chunks= utils.split_requirement_chunks(extracted_data)
-                #st.session_state.testcase_response=[]
-
-                # for chunk in chunks:
-                #     print("iterating requirements")
-                #
-                #     constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document",
-                #                                                                      chunk)
-                #     st.session_state.testcase_response.append(utils.get_queries_from_ai_updated(constructedprompt))
-                #     st.code(st.session_state.testcase_response)
-                constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document",
+                st.session_state.testcase_response = []
+                if model_type == "azureopenai":
+                    print("Model Type is AzureOpenAi")
+                    constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document",
+                                                                                     extracted_data)
+                else:
+                    print("Model Type is gimini")
+                    constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document_gemini",
                                                                                  extracted_data)
-                st.session_state.testcase_response.append(utils.get_queries_from_ai_updated(constructedprompt))
+                st.session_state.testcase_response = utils.generate_testcases_with_retries(constructedprompt)
                 st.code(st.session_state.testcase_response)
-                #utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
-                #if st.button ("Calculate_Testcase_Accuracy"):
-                # Show message
-                # st.write("🧠 Calculating Test Case Accuracy Matrix...")
-                #
-                # # Initialize progress bar
-                # progress_bar = st.progress(0)
-                # progress_text = st.empty()
-                #
-                # # Step 1: Collect requirement details
-                # progress_text.text("🔍 Preparing Requirement Details...")
-                # st.session_state.requirements_details = extracted_data
-                # progress_bar.progress(25)
-                #
-                # # Step 2: Generate Accuracy Matrix using AI
-                # progress_text.text("🤖 Calling AI Model for Accuracy Matrix Evaluation...")
-                # accuracy_prompt = utils.generate_testcase_accuracy_matrix(
-                #     "Test_case_accuracy",
-                #     st.session_state.requirements_details,
-                #     st.session_state.testcase_response
-                # )
-                # st.session_state.accuracy_response=utils.get_queries_from_ai_updated(accuracy_prompt)
-                # progress_bar.progress(90)
-                #
-                # # Step 3: Finalizing
-                # progress_text.text("✅ Finalizing Output...")
-                # progress_bar.progress(100)
-                # st.code(st.session_state.accuracy_response)
-                # st.code(utils.clean_ai_testcase_output(st.session_state.accuracy_response))
-                # #st.code(st.session_state.accuracy_response)
-                # # Convert JSON string to dict (only if it's a string)
-
-        # if st.session_state.accuracy_response:
-        #     # if isinstance(st.session_state.accuracy_response, str):
-        #     #     accuracy_response = json.loads(st.session_state.accuracy_response)
-        #
-        #     # # Now it's safe to call .get()
-        #     st.session_state.overall_accuracy=utils.accuracy_collect(st.session_state.accuracy_response)
-        #     print("------------st.session_state.overall_accuracy----------")
-        #     print(st.session_state.overall_accuracy)
-        #     #st.session_state.overall_accuracy = accuracy_response.get("overall_accuracy", 0)
         if st.session_state.testcase_response:
             st.session_state.save_testcases = True
         if st.session_state.save_testcases and st.button("Save test cases"):
-            # print("**************** final markdown ****************")
-            # print(st.session_state.all_responses)
-            # all_markdown_responses = []
-            #
-            # for chunk in st.session_state.all_responses:
-            #     response = chunk["response"]
-            #     # Remove code fences
-            #     if response.startswith("```markdown"):
-            #         response = response[len("```markdown"):].strip()
-            #     if response.endswith("```"):
-            #         response = response[:-3].strip()
-            #     all_markdown_responses.append(response)
-            # combined_response = "\n\n".join(all_markdown_responses)
-            # print("**************** final markdown ****************")
-            # print(all_markdown_responses)
+
             utils.covert_response_to_testcases_single_file(st.session_state.testcase_response, Test_case_collection)
 
             utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
-        # if st.session_state.overall_accuracy is not None and st.session_state.overall_accuracy < 90:
-        #     st.session_state.regenerate_clicked = True
-        # if st.session_state.regenerate_clicked and st.button("Regenerate the test cases"):
-        #         st.session_state.accuracy_response=None
-        #         st.markdown("### 🔄 Regenerating test cases...")
-        #         regeneration_prompt = utils.generate_testcases_regeneration_doc(
-        #             "Test_case_regeneration_accuracy_doc",
-        #             st.session_state.requirements_details,
-        #             st.session_state.testcase_response,
-        #             st.session_state.accuracy_response
-        #         )
-        #         st.session_state.testcase_regeneration = utils.get_queries_from_ai_updated(
-        #             regeneration_prompt)
-        #         #st.write(st.session_state.testcase_regeneration)
-        #
-        #         # ✅ Re-evaluate accuracy again
-        #         accuracy_prompt = utils.generate_testcase_accuracy_matrix(
-        #             "Test_case_accuracy",
-        #             st.session_state.requirements_details,
-        #             st.session_state.testcase_regeneration
-        #         )
-        #         st.session_state.accuracy_response = utils.get_queries_from_ai_updated(accuracy_prompt)
-        #         st.write(st.session_state.accuracy_response)
-        # if st.session_state.testcase_regeneration:
-        #     st.session_state.save_regenerated_testcases = True
-        # if st.session_state.save_regenerated_testcases and st.button("Save regenerated test case"):
-        #     utils.covert_response_to_testcases(st.session_state.testcase_regeneration, Test_case_collection)
+
 if st.session_state.checkbox4_state:
     with st.expander("🔎 Locators 🧾 POM File Generator"):
         st.title("Locator Generator for Visible Elements")
@@ -869,7 +652,7 @@ if st.session_state.checkbox4_state:
                 st.session_state.prompt_response_page_file = ""
                 st.session_state.show_popup = False
                 st.session_state.show_form = False
-                utils.loading_newpage(st.session_state.driver)
+                #utils.loading_newpage(st.session_state.driver)
                 page_identifier = st.session_state.driver.current_url
 
                 if "PowerBi" in selected_app:

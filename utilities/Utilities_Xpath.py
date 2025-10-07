@@ -1,6 +1,7 @@
 import os
 import base64
 from typing import Union, IO
+import openai
 import re
 import time
 from datetime import datetime
@@ -39,9 +40,10 @@ import os
 import utilities.db_utils.handler as db_handler
 
 #setting details - source
-from config.settings_reader import get_source
+from config.settings_reader import get_source,get_model
 
 source = get_source()
+model_type=get_model()
 
 load_dotenv()
 current_path = os.getcwd()
@@ -54,7 +56,17 @@ os.makedirs(xpath_generator_folder, exist_ok=True)
 os.makedirs(Page_file_generator, exist_ok=True)
 os.makedirs(Test_file_generator, exist_ok=True)
 
+os.environ["OPENAI_API_KEY"] = os.getenv("GEMINI_API_KEY")
+os.environ["OPENAI_API_BASE"] = os.getenv("GEMINI_ENDPOINT")
+client = openai.OpenAI(api_key =  os.environ["OPENAI_API_KEY"],
+                       base_url = os.environ["OPENAI_API_BASE"])
+# Access the variables
+api_key = os.getenv("AZURE_OPENAI_API_KEY")
+endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
 
+# Set the environment variables explicitly if needed
+os.environ["AZURE_OPENAI_API_KEY"] = api_key
+os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
 # Check if the Excel file exists
 if not os.path.exists(xpath_file):
     # Just create an empty Excel file (without headers)
@@ -81,8 +93,12 @@ def load_prompt_from_file(prompt_type):
             prompt_file = os.path.join(config_folder, "test_script_prompt.txt")
         elif prompt_type== "Test_case_generation":
             prompt_file = os.path.join(config_folder, "testcase_generation_final_prompt.txt")
+        elif prompt_type== "Test_case_generation_gemini":
+            prompt_file = os.path.join(config_folder, "testcase_generation_final_prompt_gemini.txt")
         elif prompt_type== "Test_case_generation_document":
             prompt_file = os.path.join(config_folder, "Testcase_generate_prompt_with_document.txt")
+        elif prompt_type== "Test_case_generation_document_gemini":
+            prompt_file = os.path.join(config_folder, "Testcase_generate_prompt_with_document_gemini.txt")
         elif prompt_type== "Test_case_generation_withaction":
             prompt_file = os.path.join(config_folder, "Testcase_generate_prompt_with_action.txt")
         elif prompt_type == "featureaction":
@@ -158,6 +174,8 @@ def get_queries_from_ai(prompt, formatted_summary):
     # Set the environment variables explicitly if needed
     os.environ["AZURE_OPENAI_API_KEY"] = api_key
     os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
+
+
 
     model = AzureChatOpenAI(
         openai_api_version="2023-05-15",
@@ -1294,8 +1312,60 @@ def build_markdown_table(testcases):
         body += f"| {case['name']} | {case['step_number']} | {case['description']} | {case['expected']} | {case['status']} | {case['type']} |\n"
 
     return header + body
-
 def generate_testcases_with_retries(constructed_prompt, retries=3, target_count=20):
+    all_testcase_output = []
+    all_testcases = []
+    seen_steps = set()
+    all_raw_responses = ""
+
+    attempt = 0
+    while attempt < retries:
+        print(f"***********Iteration {attempt + 1}*****************")
+
+        # Build exclusion text for already generated cases
+        if all_testcases:
+            existing_names = set(c["name"] for c in all_testcases)
+            exclusion_text = (
+                "Already generated test cases:\n" + "\n".join(existing_names) +
+                "\nNow generate NEW test cases not in the above list. Continue numbering."
+            )
+            prompt = constructed_prompt + "\n\n" + exclusion_text
+        else:
+            prompt = constructed_prompt
+
+        # Call LLM
+        if model_type == "azureopenai":
+            print("Model Type is AzureOpenAi - tc generation")
+            response = get_queries_from_ai_updated(prompt)
+        else:
+            print("Model Type is gemini - tc generation")
+            response = get_queries_from_ai_updated_gemini(prompt)
+
+        all_raw_responses += "\n" + response
+        all_testcase_output.append(response)
+
+        # Parse Markdown rows robustly
+        new_cases = parse_testcases_from_markdown(response)
+        for case in new_cases:
+            step_key = (case["name"], case["step_number"])
+            if step_key not in seen_steps:
+                seen_steps.add(step_key)
+                all_testcases.append(case)
+
+        # Check if enough test cases are generated
+        if len(set(c["name"] for c in all_testcases)) >= target_count:
+            print(f"✅ Target count {target_count} reached.")
+            break
+        else:
+            attempt += 1
+            if attempt == retries:
+                # Extend retries dynamically
+                print("⚠️ Not enough test cases yet — extending retries by 1.")
+                retries += 1
+
+    return all_testcase_output
+
+def generate_testcases_with_retries_backup(constructed_prompt, retries=3, target_count=20):
     all_testcase_output=[]
     all_testcases = []
     seen_steps = set()
@@ -1316,7 +1386,12 @@ def generate_testcases_with_retries(constructed_prompt, retries=3, target_count=
             prompt = constructed_prompt
 
         # Call LLM
-        response = get_queries_from_ai_updated(prompt)
+        if model_type =="azureopenai":
+            print("Model Type is AzureOpenAi - tc genertaion")
+            response = get_queries_from_ai_updated(prompt)
+        else:
+            print("Model Type is gemini - tc genertaion")
+            response = get_queries_from_ai_updated_gemini(prompt)
         all_raw_responses += "\n" + response
         all_testcase_output.append(response)
         # Parse Markdown rows robustly
@@ -1329,6 +1404,8 @@ def generate_testcases_with_retries(constructed_prompt, retries=3, target_count=
 
         if len(set(c["name"] for c in all_testcases)) >= target_count:
             break
+        else:
+            retries += 1
 
     # Build Markdown table from all collected steps
     #return build_markdown_table(all_testcases)
@@ -1356,14 +1433,22 @@ def get_queries_from_ai_updated_again(formatted_summary, previous_output):
     output_value = model([message])
     print(output_value)
     return output_value.content
-def get_queries_from_ai_updated(formatted_summary):
+def get_queries_from_ai_updated_gemini(formatted_summary):
     # Access the variables
-    api_key = os.getenv("AZURE_OPENAI_API_KEY")
-    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+    model = "gemini-2.5-pro"
 
-    # Set the environment variables explicitly if needed
-    os.environ["AZURE_OPENAI_API_KEY"] = api_key
-    os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
+
+
+    response = client.chat.completions.create(model=model,
+                                          messages=[{"role": "user",
+                                                     "content": formatted_summary
+                                                     }
+                                                    ])
+
+    print(response)
+    return response.choices[0].message.content
+def get_queries_from_ai_updated(formatted_summary):
+
 
     model = AzureChatOpenAI(
         openai_api_version="2023-05-15",
@@ -1439,7 +1524,7 @@ def clean_table_lines(raw_markdown):
         if "|" in line and not set(line).issubset(set("|- ")) and line.count("|") >= 3:
             cleaned_lines.append(line.strip("|").strip())  # Remove leading/trailing pipes
     return cleaned_lines
-def covert_response_to_testcases(markdown_text, test_collection, output_file="SauceDemo.xlsx"):
+def covert_response_to_testcases(markdown_text, test_collection, output_file="SauceDemo"+generate_random_prefix()+".xlsx"):
     print("\n🚀 Starting test case parsing...")
 
     # normalize input

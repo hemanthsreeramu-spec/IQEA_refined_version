@@ -3,11 +3,11 @@ from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 
-class Equfix_Place_On_Alert:
+class EqufixPlaceOnAlert:
     LOCATORS = {
         "continue_button": (By.XPATH, "//button[@id='continue-button']"),
         "zip": (By.XPATH, "//input[@id='zip']"),
-        "state_dropdown": (By.XPATH, "//button[@id='efx-dropdown-label-753393']"),
+        "state_dropdown": (By.XPATH, "//button[contains(@id,'efx-dropdown')]"),
         "city": (By.XPATH, "//input[@id='city']"),
         "address_line_2": (By.XPATH, "//input[@id='addressLine2Id']"),
         "address": (By.XPATH, "//input[@id='address']"),
@@ -16,7 +16,7 @@ class Equfix_Place_On_Alert:
         "dob": (By.XPATH, "//input[@id='dob']"),
         "last_name": (By.XPATH, "//input[@id='lastName']"),
         "first_name": (By.XPATH, "//input[@id='firstNameId']"),
-        "state_option": (By.XPATH, "//li[text()='Alaska']")
+        "state_option": (By.XPATH, "//a[contains(@id,'AK')]")
     }
 
     def __init__(self, driver):

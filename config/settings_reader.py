@@ -8,7 +8,8 @@ config.read(config_path)
 
 def get_source():
     return config.get('GENERAL', 'source')  # source can be 'file' or 'database'
-
+def get_model():
+    return config.get('GENERAL', 'model')
 def get_db_url():
     DB_USER = config.get('DATABASE', 'DB_USER')
     DB_PASS = config.get('DATABASE', 'DB_PASS_1') # ensure to choose the valid postgres db password
