@@ -36,7 +36,6 @@ User stories, acceptance criteria, and business rules governing the application 
 * **QUANTITY:** Generate **EXACTLY 20** unique test cases.
 * **JOURNEY:** Each Test Case must represent **one complete, repeatable user journey** (positive or negative). Do not mix positive and negative scenarios.
 * **STEP COUNT:** Each test case MUST have a minimum of **6 steps**.
-* **Step 0 Purpose:** Step 0 is for Prerequisite/Background context only (e.g., test data available, environment state). **The actual navigation flow MUST begin at Step 1.**
 
 ### 2. Full End-to-End Flow ENFORCEMENT:
 **This rule OVERRIDES all others:** For every test case from TC01 to TC20, the detailed steps (Step 1 onwards) **MUST** include the following full, explicit flow:
@@ -56,27 +55,21 @@ User stories, acceptance criteria, and business rules governing the application 
 Use **ONLY** these patterns. Ensure the expected result for clicks that change the URL includes the new URL.
 
 | Action Type | Required Pattern | URL Rule |
-| :--- | :--- | :--- |
 | **Launch/Start (Step 1)** | `Launch the application and open <URL>` | **MUST** be the first action step (Step 1) of **every TC**. |
 | **Click/Action** | `Click on "<UI label>"` | Include the new URL in the **Expected Result** ONLY if the click changes the URL. |
 | **Window Switch** | `Switch to window with URL "<URL>"` | MUST include the target URL in the step description. |
 | **Input/Select** | `Enter "<value>" in "<field>" field` OR `Select "<option>" from "<dropdown>"` | NO URL needed. |
 | **Validation (Negative)**| `Leave "<field>" empty and click "<button>"` | Expected Result must state the expected error message/description. |
 
----
-
 # FINAL OUTPUT FORMAT (STRICT CONSTRAINT)
 
 **The entire output MUST be a single Markdown table. ADHERE TO THIS HEADER EXACTLY.**
-
 | Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| TC01 - Successful Login | 0 | Prerequisite: Ensure user credentials are valid. | Credentials available for use. | New | Manual |
 | TC01 - Successful Login | 1 | Launch the application and open <URL> | Application loads successfully. | New | Manual |
 | TC01 - Successful Login | 2 | Click on "Sign In" button | The user is redirected to the login page. URL is <new URL>. | New | Manual |
-| ... | ... | ... | ... | New | Manual |
+
 
 **STRICT GENERATION RULES:**
-* Step numbers must restart for each test case (0, 1, 2, ...).
+* Step numbers must restart for each test case (1, 2, ...).
 * **Status** MUST be `New`. **Type** MUST be `Manual` for every single row.
 * The final output MUST be a **single, complete Markdown table** containing exactly 20 test cases.

@@ -44,7 +44,7 @@ os.makedirs(Test_case_collection, exist_ok=True)
 os.makedirs(Action_collection, exist_ok=True)
 os.makedirs(feature_file_collection, exist_ok=True)
 #page_screenshot_folder_new = os.path.join(Action_collection, "page_screenshot_valid")
-page_screenshot_folder = os.path.join(Action_collection, "Equifix")
+page_screenshot_folder = os.path.join(Action_collection, "page_screenshot")
 os.makedirs(page_screenshot_folder, exist_ok=True)
 os.makedirs(Test_file_generator, exist_ok=True)
 
@@ -84,7 +84,7 @@ if 'prompt_response_page_file' not in st.session_state:
 if 'last_page' not in st.session_state:
     st.session_state.last_page = None
 if 'selected_tags' not in st.session_state:
-        st.session_state.selected_tags = []
+        st.session_state.selected_tags = ["input", "button"]
 if 'selected_app' not in st.session_state:
     st.session_state.selected_app = []
 if 'requirements_details' not in st.session_state:
@@ -128,6 +128,16 @@ if 'workflow_text' not in st.session_state:
     st.session_state.workflow_text = []
 if 'injected_windows' not in st.session_state:
     st.session_state.injected_windows= {}
+
+if "xpath_for_new_page" not in st.session_state:
+    st.session_state.xpath_for_new_page = False
+if "xpath_for_new_page_user_info" not in st.session_state:
+    st.session_state.xpath_for_new_page_user_info = False
+
+# --- Track expander state only for collection ---
+if "open_expander_collection" not in st.session_state:
+    st.session_state.open_expander_collection = False
+
 st.title(" 🤖 TigerQE AI Platform - iQEA (Intelligent QE Assistant)")
 
 # 1. Open the browser
@@ -520,8 +530,9 @@ if st.session_state.checkbox3_state:
             utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
 
 if st.session_state.checkbox4_state:
-    with st.expander("🔎 Locators 🧾 POM File Generator"):
+    with st.expander("🔎 Locators 🧾 POM File Generator",expanded=st.session_state.open_expander_collection):
         st.title("Locator Generator for Visible Elements")
+
         # page_url = st.text_input("Enter the URL of the page:")
         selected_app = st.multiselect(
             "Select application type:",
@@ -532,16 +543,28 @@ if st.session_state.checkbox4_state:
             selected_tags = tags_placeholder.multiselect(
                 "Select element types to extract:",
                 ["input", "button", "a", "select", "textarea", "div", "span", "All"],
-                default=["input", "button"]
+                default= st.session_state.selected_tags ,
+                key="selected_tags_multiselect"
             )
         else:
             tags_placeholder.empty()  # Hides the tag selection for PowerBi only
             selected_tags = []  # No tags for PowerBi
-        st.session_state.selected_tags = selected_tags
+
         st.session_state.selected_app = selected_app
         st.markdown("<a name='top-button'></a>", unsafe_allow_html=True)
         collect_clicked = st.button("Collecting Elements", key="collect_btn")
+
         if collect_clicked:
+            # --- Reset all previous session states before collecting new elements ---
+            st.session_state.selected_tags = selected_tags
+            handles = st.session_state.driver.window_handles
+            if len(handles) > 1:
+                st.session_state.driver.switch_to.window(handles[-1])
+
+            for key in ["prompt_response", "selected_xpaths", "prompt_response_page_file", "show_popup", "show_form"]:
+                if key in st.session_state:
+                    st.session_state[key] = "" if "response" in key else False
+
             formatted_summary = None
             st.session_state.selected_xpaths = []
             st.session_state.prompt_response = ""
@@ -565,15 +588,17 @@ if st.session_state.checkbox4_state:
                     print("OPen Ai response" + st.session_state.prompt_response)
             else:
                 st.info("No elements found in selected tag")
-            # Simulate the AI response for demonstration
-
+        # Simulate the AI response for demonstration
         # Display the XPath selection UI only after receiving a prompt response
         if st.session_state.prompt_response:
-            xpath_dict = utils.filter_duplicate_xpaths(utils.selecting_xpath(st.session_state.prompt_response))
+            xpath_dict = utils.filter_duplicate_xpaths(
+                utils.selecting_xpath(st.session_state.prompt_response))
             print(xpath_dict)
             st.title("Select XPath Expressions to Add to Excel")
-
-            st.session_state.selected_xpaths = utils.adding_xapth_user_view(xpath_dict)
+            # Define a persistent placeholder at the top of the expander
+            xpath_output_placeholder = st.empty()
+            with xpath_output_placeholder.container():
+                st.session_state.selected_xpaths = utils.adding_xapth_user_view(xpath_dict)
             page_name = st.text_input("Enter the Page Name:")
             # Show "Add Selected XPaths to Excel" button only after XPaths are displayed
             if st.button("Add Selected XPaths to Excel"):
@@ -585,177 +610,88 @@ if st.session_state.checkbox4_state:
                     st.session_state.show_popup = True
                     st.session_state.show_form = False  # Reset form visibility
                 # Show popup only if the flag is set
-        if st.session_state.show_popup and not st.session_state.show_form:
-            st.write("**Do you want to generate the page file?**")
+            if st.session_state.show_popup and not st.session_state.show_form:
+                st.write("**Do you want to generate the page file?**")
 
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("Yes"):
-                    st.session_state.show_popup = False  # Hide popup
-                    st.session_state.show_form = True  # Show form for page file generation
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("Yes"):
+                        st.session_state.show_popup = False  # Hide popup
+                        st.session_state.show_form = True  # Show form for page file generation
 
-            with col2:
-                if st.button("No"):
-                    st.session_state.show_popup = False
-                    st.session_state.show_form = False
-                    st.write("Page file generation skipped.")
-        # Show popup only if the flag is set
-        if st.session_state.show_form:
-            st.header("Generating Page File")
-            page_name = st.text_input("Enter Page Name (same as xpath details)", value=page_name)
-            language = st.selectbox("Select Language", ["java", "python", "c#", "javascript"])
-            Action_data = ""
-            if source == "file":
-                Action_data = utils.select_and_read_text_files_xpath("xpath", Action_collection)
-            elif source == "database":
-                all_files = db_handler.get_all_action_names()
-                selected_files = st.multiselect("Select saved action files from database for pagefile", all_files)
-
-                if selected_files:
-                    merged_content = ""
-
-                    for file in selected_files:
-                        content = db_handler.get_action_content_by_name(file,"action")
-                        if content:
-                            merged_content += f"\n### {file} ###\n{content}\n"
-                        else:
-                            st.warning(f"⚠️ Could not load content for: {file}")
-                    Action_data = merged_content
-            #action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
-            #action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
-
-            if st.button("Generate Page File"):
-                st.session_state.prompt_response_page_file = ""
-                Prompt = utils.generate_pom_from_excel_with_action("Page_File_Action", page_name, language, Action_data)
-                st.session_state.prompt_response_page_file = utils.get_queries_from_ai("Page_File", Prompt)
-                st.subheader("Generated Page Class")
+                with col2:
+                    if st.button("No"):
+                        for _ in range(2):
+                            st.session_state.show_popup = False
+                            st.session_state.show_form = False
+                            st.session_state.prompt_response = ""
+                            xpath_output_placeholder = st.empty()
+                            #st.write("Page file generation skipped.")
+                            st.session_state.xpath_for_new_page_user_info = True
+                            st.rerun()
+                        st.info(
+                            "Page file generation skipped..Please change to the new page in the browser and click 'Collecting Elements' again.")
+            # Show popup only if the flag is set
+            if st.session_state.show_form:
+                st.header("Generating Page File")
+                page_name = st.text_input("Enter Page Name (same as xpath details)", value=page_name)
+                language = st.selectbox("Select Language", ["java", "python", "c#", "javascript"])
+                Action_data = ""
                 if source == "file":
-                    utils.create_java_file(page_name, language, st.session_state.prompt_response_page_file)
-                    st.success(f"Page file generated for '{page_name}' in '{language}' language.")
+                    Action_data = utils.select_and_read_text_files_xpath("xpath", Action_collection)
                 elif source == "database":
-                    db_handler.save_pagefile_to_db(page_name,st.session_state.prompt_response_page_file,get_update_user(),language)
-                    st.success(f"Page file save in database for '{page_name}' in '{language}' language.")
+                    all_files = db_handler.get_all_action_names()
+                    selected_files = st.multiselect("Select saved action files from database for pagefile",
+                                                    all_files)
 
+                    if selected_files:
+                        merged_content = ""
 
-        # Handle the "Find XPath" button logic
-        if st.session_state.driver:
-            if st.button("Find XPath for new page"):
-                handles = st.session_state.driver.window_handles
-                if len(handles) > 1:
-                    st.session_state.driver.switch_to.window(handles[-1])
-                formatted_summary = None
-                st.session_state.selected_xpaths = []
-                st.session_state.selected_xpaths = []
-                print("going inside add excel")
-                print(st.session_state.selected_xpaths)
-                st.session_state.prompt_response = ""
+                        for file in selected_files:
+                            content = db_handler.get_action_content_by_name(file, "action")
+                            if content:
+                                merged_content += f"\n### {file} ###\n{content}\n"
+                            else:
+                                st.warning(f"⚠️ Could not load content for: {file}")
+                        Action_data = merged_content
+                # action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
+                # action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
+
+                if st.button("Generate Page File"):
+                    st.session_state.prompt_response_page_file = ""
+                    Prompt = utils.generate_pom_from_excel_with_action("Page_File_Action", page_name, language,
+                                                                       Action_data)
+                    st.session_state.prompt_response_page_file = utils.get_queries_from_ai("Page_File", Prompt)
+                    st.subheader("Generated Page Class")
+                    if source == "file":
+                        utils.create_java_file(page_name, language, st.session_state.prompt_response_page_file)
+                        st.success(f"Page file generated for '{page_name}' in '{language}' language.")
+                        st.session_state.xpath_for_new_page=True
+                    elif source == "database":
+                        db_handler.save_pagefile_to_db(page_name, st.session_state.prompt_response_page_file,
+                                                       get_update_user(), language)
+                        st.success(f"Page file save in database for '{page_name}' in '{language}' language.")
+                        st.session_state.xpath_for_new_page = True
+
+                    # --- Add new button to continue for new page ---
+        if st.session_state.xpath_for_new_page and st.button("Continue for New Page"):
+            for _ in range(2):
+                xpath_output_placeholder = st.empty()
                 st.session_state.prompt_response_page_file = ""
+                st.session_state.prompt_response = ""
+                st.session_state.selected_xpaths = []
                 st.session_state.show_popup = False
                 st.session_state.show_form = False
-                #utils.loading_newpage(st.session_state.driver)
-                page_identifier = st.session_state.driver.current_url
+                st.session_state.xpath_for_new_page = False
+                # Clear the previous XPath selection in the UI
+                xpath_output_placeholder.empty()
+                st.session_state.xpath_for_new_page_user_info=True
+                st.rerun()
 
-                if "PowerBi" in selected_app:
-                    formatted_summary = utils.get_visible_element_powerBi(st.session_state.driver, page_identifier)
-                if "Web" in selected_app:
-                    formatted_summary = utils.get_visible_element_iframe(st.session_state.driver, page_identifier,
-                                                                        selected_tags)
-                # Ensure current_elements is always defined (even if empty)
-                if formatted_summary is None:
-                    formatted_summary = []
-                if formatted_summary:
-                    if "PowerBi" in selected_app:
-                        # prompt = f"Generate multiple XPath expressions for the input and button elements based on the following details. Consider various attributes, hierarchy levels, and text content to create comprehensive XPath variations for each element: {formatted_summary}"
-                        st.session_state.prompt_response = utils.get_queries_from_ai("PowerBi", formatted_summary)
-                        print("OPen Ai response" + st.session_state.prompt_response)
-                    if "Web" in selected_app:
-                        # prompt = f"Generate multiple XPath expressions for the input and button elements based on the following details. Consider various attributes, hierarchy levels, and text content to create comprehensive XPath variations for each element: {formatted_summary}"
-                        st.session_state.prompt_response = utils.get_queries_from_ai("Web", formatted_summary)
-                        print("OPen Ai response" + st.session_state.prompt_response)
-                    # prompt = f"Generate multiple XPath expressions for the input and button elements based on the following details. Consider various attributes, hierarchy levels, and text content to create comprehensive XPath variations for each element: {current_elements}"
-                    # st.session_state.prompt_response = get_queries_from_ai(prompt)
-                    # print("open Ai Reponse" + st.session_state.prompt_response)
-                else:
-                    st.info("No elements found in selected tag")
-
-                # Display the XPath selection UI only after receiving a prompt response
-                if st.session_state.prompt_response:
-                    xpath_dict = utils.filter_duplicate_xpaths(utils.selecting_xpath(st.session_state.prompt_response))
-                    print(xpath_dict)
-
-                    st.title("Select XPath Expressions from new page to Add to Excel")
-                    try:
-                        st.session_state.selected_xpaths =utils.adding_xapth_user_view(xpath_dict)
-                        print("going inside add excel")
-                        print(st.session_state.selected_xpaths)
-                    except (Exception) as e:
-                        print(e)
-                    new_page_name = st.text_input("Enter the New Page Name:", key="new_page_name")
-                    # new_page_name = st.text_input("Enter the New Page Name:")
-                    # Show "Add Selected XPaths to Excel" button only after XPaths are displayed
-                    Add_to_excel = st.button("Add Selected XPaths to Excel", key="add_to_excel_new")
-                    if Add_to_excel:
-                        if st.session_state.selected_xpaths:
-                            utils.adding_selected_xapth_excel(new_page_name)
-                            st.session_state.show_popup = True
-                            st.session_state.show_form = False  # Reset form visibility
-                        # Show popup only if the flag is set
-                        if st.session_state.show_popup and not st.session_state.show_form:
-                            st.write("**Do you want to generate the page file?**")
-
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                if st.button("Yes"):
-                                    st.session_state.show_popup = False  # Hide popup
-                                    st.session_state.show_form = True  # Show form for page file generation
-
-                            with col2:
-                                if st.button("No"):
-                                    st.session_state.show_popup = False
-                                    st.session_state.show_form = False
-                                    st.write("Page file generation skipped.")
-                        # Show popup only if the flag is set
-                        if st.session_state.show_form:
-                            st.write("Generating Page File")
-                            page_name = st.text_input("Enter Page Name", value=page_name)
-                            language = st.selectbox("Select Language", ["java", "python", "c#", "javascript"])
-                            Action_data=""
-                            if source == "file":
-                                Action_data = utils.select_and_read_text_files_xpath("xpath", Action_collection)
-                            elif source == "database":
-                                all_files = db_handler.get_all_action_names()
-                                selected_files = st.multiselect("Select saved action files from database", all_files)
-
-                                if selected_files:
-                                    merged_content = ""
-
-                                    for file in selected_files:
-                                        content = db_handler.get_action_file_by_name(file)
-                                        if content:
-                                            merged_content += f"\n### {file} ###\n{content}\n"
-                                        else:
-                                            st.warning(f"⚠️ Could not load content for: {file}")
-                                    Action_data = merged_content
-                            if st.button("Generate Page File"):
-                                st.session_state.prompt_response_page_file = ""
-                                Prompt = utils.generate_pom_from_excel_with_action("Page_File_Action", page_name, language,Action_data)
-                                st.session_state.prompt_response_page_file = utils.get_queries_from_ai("Page_File", Prompt)
-                                st.subheader("Generated Page Class")
-                                if source == "file":
-                                    utils.create_java_file(page_name, language,
-                                                           st.session_state.prompt_response_page_file)
-                                    st.success(f"Page file generated for '{page_name}' in '{language}' language.")
-                                elif source == "database":
-                                    db_handler.save_pagefile_to_db(page_name,
-                                                                   st.session_state.prompt_response_page_file,
-                                                                   get_update_user(), language)
-                                    st.success(
-                                        f"Page file save in database for '{page_name}' in '{language}' language.")
-                                st.session_state.show_popup = False
-                                st.session_state.show_form = False
-                                st.success(f"Page file generated for '{page_name}' in '{language}' language.")
-
-
+        if st.session_state.xpath_for_new_page_user_info:
+            st.info(
+                "Please change to the new page in the browser and click 'Collecting Elements' again.")
+            st.session_state.xpath_for_new_page_user_info = False
     if st.session_state.checkbox5_state:
         st.session_state.failed_files = []
         with st.expander("🧾 Test Automation Script Generator"):
