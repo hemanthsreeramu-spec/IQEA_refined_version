@@ -137,6 +137,8 @@ if "xpath_for_new_page_user_info" not in st.session_state:
 # --- Track expander state only for collection ---
 if "open_expander_collection" not in st.session_state:
     st.session_state.open_expander_collection = False
+if "recorded_actions_history" not in st.session_state:
+    st.session_state.recorded_actions_history = False
 
 st.title(" 🤖 TigerQE AI Platform - iQEA (Intelligent QE Assistant)")
 
@@ -184,12 +186,13 @@ if st.session_state.checkbox1_state:
                 st.session_state.current_window_ref = {"handle": None}
                 st.session_state.stop_monitor = {"stop": False}
                 st.session_state.monitor_threads = []
+                # --- CLEAR action buffers so this recording starts fresh ---
+                st.session_state.actions = []
+                st.session_state.workflow_text = []
                 handle=st.session_state.driver.current_window_handle
                 st.session_state.driver.execute_script(action_utils.injection_script_updated_fixed())
                 print(f"✅ JS injected in new window {handle} ({st.session_state.driver.current_url})")
                 st.session_state.injected_windows[handle] = True
-
-
 
 
                 # --- Thread 1: New windows checker ---
@@ -289,11 +292,21 @@ if st.session_state.checkbox1_state:
                         st.success(f"✅ Workflow saved: {filename}")
                         st.download_button("⬇ Download Workflow", data="\n".join(st.session_state.workflow_text ),
                                         file_name=f"{page_name}_actions.txt")
-                        st.session_state.actions = []  # clear after save
+
+                        st.session_state.actions = []
+                        st.session_state.workflow_text = []
+
+
                         st.session_state.show_popup = True
                         st.session_state.show_form = False  # Reset form visibility
                     else:
                         st.warning("⚠ Please enter a name for the workflow.")
+        if  st.session_state.workflow_text:
+            st.session_state.recorded_actions_history = True
+        if st.session_state.recorded_actions_history:
+            st.session_state.actions = []
+            st.session_state.workflow_text = []
+            st.session_state.recorded_actions_history = False
 if st.session_state.checkbox2_state:
     with st.expander("🧾 BDD Feature File Generator"):
         st.title("Feature file Generator using recorded actions")
