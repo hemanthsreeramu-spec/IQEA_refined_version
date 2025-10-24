@@ -5,8 +5,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-from output.page_file_generator.Equfix_home_page import Equfix_home_page
-from output.page_file_generator.Equfix_Place_On_Alert import Equfix_Place_On_Alert
+from output.page_file_generator.EqufixHomepage import Equfix_home_page
+from output.page_file_generator.EqufixPlaceOnAlert import Equfix_Place_On_Alert
 
 
 @pytest.fixture(scope="function")

@@ -1,6 +1,7 @@
 import subprocess
 from github import Github, GithubException  # Make sure GithubException is imported
 from gitlab import Gitlab
+import re
 from github import Github
 from selenium.webdriver.chrome.service import Service
 import streamlit as st
@@ -44,7 +45,7 @@ os.makedirs(Test_case_collection, exist_ok=True)
 os.makedirs(Action_collection, exist_ok=True)
 os.makedirs(feature_file_collection, exist_ok=True)
 #page_screenshot_folder_new = os.path.join(Action_collection, "page_screenshot_valid")
-page_screenshot_folder = os.path.join(Action_collection, "page_screenshot")
+page_screenshot_folder = os.path.join(Action_collection, "Equifix")
 os.makedirs(page_screenshot_folder, exist_ok=True)
 os.makedirs(Test_file_generator, exist_ok=True)
 
@@ -93,6 +94,10 @@ if 'accuracy_response' not in st.session_state:
     st.session_state.accuracy_response = None
 if 'testcase_response' not in st.session_state:
     st.session_state.testcase_response = []
+if 'scenario_response' not in st.session_state:
+    st.session_state.scenario_response = []
+if 'all_testcases' not in st.session_state:
+    st.session_state.all_testcases = []
 if 'testcase_regeneration' not in st.session_state:
     st.session_state.testcase_regeneration = None
 # if 'st.session_state.all_responses' not in st.session_state:
@@ -248,11 +253,13 @@ if st.session_state.checkbox1_state:
                 t2.start()
                 t3.start()
                 t4.start()
+
                 st.session_state.monitor_threads = [t1, t2,t3,t4]
 
                 st.session_state.recording_started = True
                 st.success("Recording started. Please interact in the browser.")
         if st.session_state.recording_started and st.button("🛑 Stop Recording"):
+
             st.session_state.actions = action_utils.get_recorded_actions(
                 st.session_state.driver)
             st.session_state.recording_started = False
@@ -269,17 +276,18 @@ if st.session_state.checkbox1_state:
             st.session_state.monitor_threads = []
             st.success("Recording stopped. Performed actions are captured.")
             actions = []
-
+            st.session_state.injected_windows.clear()
         # 4. Show and Save Actions
         if st.session_state.actions:
             st.session_state.workflow_text = []
             page_name = st.text_input("Enter Page Name for Saving the Workflow:")
             if st.button("💾 Save Workflow"):
-                st.session_state.workflow_text = action_utils.generate_workflow_manual(st.session_state.actions)
-                print("****************workflowtext**************")
-                print( st.session_state.workflow_text )
-                print("****************workflowtext end**************")
-                if page_name:
+
+                if not page_name:
+                    st.warning("⚠ Please enter a name for the workflow.")
+                else:
+                    st.session_state.workflow_text = action_utils.generate_workflow_manual(st.session_state.actions)
+                    workflow_saved = False
                     if source == "database":
                         action_id = db_handler.save_action_to_db(page_name,st.session_state.workflow_text , get_update_user())
                         st.success(f"✅ Action saved to database (ID: {action_id})")
@@ -290,23 +298,22 @@ if st.session_state.checkbox1_state:
                             f.write("\n".join(st.session_state.workflow_text ))  # ✅ FIXED
                              #f.write(st.session_state.workflow_text)
                         st.success(f"✅ Workflow saved: {filename}")
+                        #action_utils.reinject_clear_local_storage(st.session_state.driver)
                         st.download_button("⬇ Download Workflow", data="\n".join(st.session_state.workflow_text ),
                                         file_name=f"{page_name}_actions.txt")
-
-                        st.session_state.actions = []
-                        st.session_state.workflow_text = []
-
-
+                        workflow_saved = True
+                    if  workflow_saved:
+                        clear_actions = """(function() {
+                                        window.__recordedActions = [];
+                                        localStorage.removeItem("recordedActions");
+                                        console.log("🧹 Cleared previous recorded actions before new recording session.");
+                                    })();"""
+                        st.session_state.driver.execute_script(clear_actions)
+                        st.session_state.actions.clear()
+                        st.session_state.workflow_text.clear()
                         st.session_state.show_popup = True
-                        st.session_state.show_form = False  # Reset form visibility
-                    else:
-                        st.warning("⚠ Please enter a name for the workflow.")
-        if  st.session_state.workflow_text:
-            st.session_state.recorded_actions_history = True
-        if st.session_state.recorded_actions_history:
-            st.session_state.actions = []
-            st.session_state.workflow_text = []
-            st.session_state.recorded_actions_history = False
+                        st.session_state.show_form = False
+
 if st.session_state.checkbox2_state:
     with st.expander("🧾 BDD Feature File Generator"):
         st.title("Feature file Generator using recorded actions")
@@ -346,7 +353,7 @@ if st.session_state.checkbox2_state:
                 st.success(f"feature file save in database for '{Feature_file_name}'")
 
 if st.session_state.checkbox3_state:
-    with st.expander("🧮 E2E Scenario Based Test Case Generator"):
+    with (st.expander("🧮 E2E Scenario Based Test Case Generator")):
 
         st.title("E2E Scenario Based Test Case Generation")
 
@@ -432,21 +439,69 @@ if st.session_state.checkbox3_state:
                     Action_data = merged_content
         elif option == 'Documents':
             # Show only document upload section
-            uploaded_file = st.file_uploader("Upload a PDF,Text, Word, or Excel document", type=['pdf', 'docx', 'xlsx','txt'])
+            uploaded_file = st.file_uploader(
+                "Upload a PDF, Text, Word, or Excel document",
+                type=['pdf', 'docx', 'xlsx', 'txt']
+            )
+
+            Document_image_data = ""
 
             if uploaded_file is not None:
-                if utils.allowed_file(uploaded_file.name, ['pdf']):
+                filename = uploaded_file.name.lower()
+
+                if filename.endswith(".pdf"):
                     st.success("PDF file uploaded successfully!")
-                elif utils.allowed_file(uploaded_file.name, ['docx']):
+                    # Call your PDF extraction logic here
+                    # extracted_text = utils.extract_text_from_document(uploaded_file, filename)
+
+                elif filename.endswith(".docx"):
                     st.success("Word file uploaded successfully!")
-                elif utils.allowed_file(uploaded_file.name, ['xlsx']):
+                    # Call your DOCX extraction logic here
+
+                elif filename.endswith(".xlsx"):
                     st.success("Excel file uploaded successfully!")
-                elif utils.allowed_file(uploaded_file.name, ['txt']):
+                    # Call your Excel extraction logic here
+
+                elif filename.endswith(".txt"):
                     st.success("Text file uploaded successfully!")
+                    try:
+                        text_content = uploaded_file.read().decode("utf-8", errors="ignore")
+                        Document_image_data += re.sub(r'\W+', ' ', text_content)
+                    except Exception as e:
+                        st.error(f"Error reading TXT file: {e}")
+
                 else:
+                    # This branch should rarely hit because file_uploader already restricts type
                     st.error("Unsupported file format.")
+
+            image_uploaded_files = st.file_uploader(
+                "📁 Upload one or more image files (Optional)",
+                type=["jpg", "jpeg", "png", "bmp", "tiff", "webp"],
+                accept_multiple_files=True
+            )
+            if image_uploaded_files:
+                st.info("📸 Image processed.")
+                for uploaded_file in image_uploaded_files:
+                    try:
+                        image = Image.open(uploaded_file)
+                        #st.image(image, caption=uploaded_file.name, use_container_width=True)
+
+                        # Extract text using pytesseract
+                        extracted_text = pytesseract.image_to_string(image)
+                        if extracted_text.strip():
+                            Document_image_data += f"\nImage: {uploaded_file.name}\nExtracted Text:\n{extracted_text.strip()}\n"
+                        else:
+                            Document_image_data += f"\nImage: {uploaded_file.name}\nExtracted Text: No text found\n"
+
+                    except Exception as e:
+                        st.error(f"Error processing {uploaded_file.name}: {e}")
+            st.markdown("Enter the navigation details (Optional)",
+                        unsafe_allow_html=True)
+            Navigation_details = st.text_area('', '')
         if st.button("Generate Functional Test Cases"):
             st.session_state.testcase_response = None
+            st.session_state.scenario_response = None
+            st.session_state.all_testcases= None
             st.session_state.overall_accuracy = None
             st.session_state.testcase_regeneration = None
             st.session_state.save_testcases = False
@@ -518,30 +573,51 @@ if st.session_state.checkbox3_state:
                                                                                     image_data_processed, Action_data,
                                                                                     prompt)
                         print("******final prompt *******")
+                    # count_prompt=utils.generate_pom_from_excel_testcases("Testcase_coverage_plan_recorded_details_flow", navigation,
+                    #                                                           image_data_processed, Action_data,
+                    #                                                            prompt)
+                    # coverage_counts=utils.estimate_testcase_coverage(count_prompt)
+                    # st.info(coverage_counts)
+                    # # Safely get RecommendedTotal, fallback to 50 if key missing
+                    # target_count = coverage_counts.get("RecommendedTotal", 50)
+                    #
+                    # print(f"✅ Recommended total test cases for generation: {target_count}")
                     st.session_state.testcase_response = utils.generate_testcases_with_retries(constructedprompt)
                     st.code(st.session_state.testcase_response)
 
             elif option == 'Documents' and uploaded_file is not None:
                 extracted_data = utils.extract_text_from_document(uploaded_file,uploaded_file.name)
+                image_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Document_image_data} """
+
+                Document_image_data_processed = utils.get_queries_from_ai_updated(image_prompt)
+                print(Document_image_data_processed)
+
                 st.session_state.testcase_response = []
+                st.session_state.scenario_response = []
+                st.session_state.all_testcases = []
+                # scenarios_prompt=utils.generate_excel_testcases_with_document("Test_scenarios_finder",extracted_data,Document_image_data_processed,Navigation_details)
+                # st.session_state.scenario_response=utils.get_queries_from_ai_updated(scenarios_prompt)
+                # st.write(st.session_state.scenario_response)
                 if model_type == "azureopenai":
                     print("Model Type is AzureOpenAi")
                     constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document",
-                                                                                     extracted_data)
+                                                                                     extracted_data,Document_image_data_processed,Navigation_details)
                 else:
                     print("Model Type is gimini")
                     constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document_gemini",
                                                                                  extracted_data)
-                st.session_state.testcase_response = utils.generate_testcases_with_retries(constructedprompt)
-                st.code(st.session_state.testcase_response)
+                st.session_state.testcase_response,st.session_state.all_testcases  = utils.generate_testcases_with_dynamic_stop(constructedprompt)
+                #st.code(st.session_state.testcase_response)
+                test_categories=utils.categorize_testcases_with_full_requirements(st.session_state.all_testcases  , extracted_data,Document_image_data_processed,Navigation_details)
+                ui_display=utils.format_categories_for_ui(test_categories)
+
         if st.session_state.testcase_response:
             st.session_state.save_testcases = True
         if st.session_state.save_testcases and st.button("Save test cases"):
 
             utils.covert_response_to_testcases_single_file(st.session_state.testcase_response, Test_case_collection)
-
             utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
-
+            utils.covert_response_to_testcases_single_sheet(st.session_state.testcase_response, Test_case_collection)
 if st.session_state.checkbox4_state:
     with st.expander("🔎 Locators 🧾 POM File Generator",expanded=st.session_state.open_expander_collection):
         st.title("Locator Generator for Visible Elements")
@@ -615,14 +691,20 @@ if st.session_state.checkbox4_state:
             page_name = st.text_input("Enter the Page Name:")
             # Show "Add Selected XPaths to Excel" button only after XPaths are displayed
             if st.button("Add Selected XPaths to Excel"):
-                print("going inside add excel")
-                print(st.session_state.selected_xpaths)
-                if st.session_state.selected_xpaths:
+                if page_name and st.session_state.selected_xpaths:
                     print("going inside add excel")
-                    utils.adding_selected_xapth_excel(page_name)
-                    st.session_state.show_popup = True
-                    st.session_state.show_form = False  # Reset form visibility
-                # Show popup only if the flag is set
+                    print(st.session_state.selected_xpaths)
+                    if st.session_state.selected_xpaths:
+                        print("going inside add excel")
+                        utils.adding_selected_xapth_excel(page_name)
+                        st.session_state.show_popup = True
+                        st.session_state.show_form = False  # Reset form visibility
+                    # Show popup only if the flag is set
+                elif not st.session_state.selected_xpaths:
+                    st.error("Select at-least one xpath to add")
+                elif not page_name:
+                    st.error("Enter the Page name to add the selected xpath")
+
             if st.session_state.show_popup and not st.session_state.show_form:
                 st.write("**Do you want to generate the page file?**")
 

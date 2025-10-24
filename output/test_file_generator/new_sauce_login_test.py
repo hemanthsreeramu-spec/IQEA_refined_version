@@ -6,8 +6,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from output.page_file_generator.Equfix_home_page import Equfix_home_page
-from output.page_file_generator.Equfix_Place_On_Alert import Equfix_Place_On_Alert
+from output.page_file_generator.EqufixHomepage import Equfix_home_page
+from output.page_file_generator.EqufixPlaceOnAlert import Equfix_Place_On_Alert
 
 # Constants
 BASE_URL = "https://www.equifax.com/personal/credit-report-services/credit-fraud-alerts/"

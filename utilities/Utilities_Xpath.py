@@ -113,8 +113,14 @@ def load_prompt_from_file(prompt_type):
             prompt_file = os.path.join(config_folder, "Testcase_regeneration_accuracy_doc.txt")
         elif prompt_type == "Test_case_regeneration_requirement_split":
             prompt_file = os.path.join(config_folder, "testcase_requirement_split_prompt.txt")
+        elif prompt_type == "Testcase_coverage_plan_recorded_details_flow":
+            prompt_file = os.path.join(config_folder, "testcase_coverage_plan_recorded_details_flow.txt")
+        elif prompt_type == "Testcase_coverage_plan_document_flow":
+            prompt_file = os.path.join(config_folder, "testcase_coverage_plan_document_flow.txt")
+        elif prompt_type == "Test_scenarios_finder":
+            prompt_file = os.path.join(config_folder, "Test_scenarios_finder.txt")
         else:
-            raise ValueError(f"Invalid prompt type: {prompt_type}. Expected 'web' or 'powerBi'.")
+            raise ValueError(f"Invalid prompt type: {prompt_type}")
 
         if not os.path.exists(prompt_file):
             raise FileNotFoundError(f"Prompt file not found at: {prompt_file}")
@@ -656,10 +662,10 @@ def clean_xpath(xpath):
     match = re.search(r'(//[^\]]+\])', xpath)  # Find everything starting with // until the first ]
     return match.group(1) if match else xpath  # Return extracted XPath or original if not found
 
-def generate_excel_testcases_with_document(prompt_type,extracted_data):
+def generate_excel_testcases_with_document(prompt_type,extracted_data,Document_image_data_processed=None,navigation=None):
     prompt_template = load_prompt_from_file(prompt_type)
     # Conditionally inject Action Data section or leave it blank
-    final_prompt = prompt_template.format(requirements=extracted_data)
+    final_prompt = prompt_template.format(requirements=extracted_data,image_data=Document_image_data_processed,navigation=navigation)
     print(final_prompt)
     return final_prompt
 
@@ -846,8 +852,6 @@ def get_window_statuses(driver):
         """)
     except Exception:
         return {}
-
-
 
 def thread_new_window_checker(driver, injected_windows, last_urls, stop_flag, screenshot_folder, current_window_ref):
     """
@@ -1312,7 +1316,7 @@ def build_markdown_table(testcases):
         body += f"| {case['name']} | {case['step_number']} | {case['description']} | {case['expected']} | {case['status']} | {case['type']} |\n"
 
     return header + body
-def generate_testcases_with_retries(constructed_prompt, retries=3, target_count=20):
+def generate_testcases_with_retries(constructed_prompt, retries=5,target_count=20 ):
     all_testcase_output = []
     all_testcases = []
     seen_steps = set()
@@ -1365,6 +1369,147 @@ def generate_testcases_with_retries(constructed_prompt, retries=3, target_count=
 
     return all_testcase_output
 
+
+def generate_testcases_dynamically(constructed_prompt, initial_retries=5, max_no_new_iterations=3):
+    """
+    Generate test cases dynamically using LLM until no new unique test cases are produced.
+
+    Args:
+        constructed_prompt (str): The base prompt for test case generation.
+        initial_retries (int): Initial number of retries if LLM does not produce enough cases.
+        max_no_new_iterations (int): Stop if no new test cases are generated after these many iterations.
+
+    Returns:
+        list: All unique test cases generated.
+        str: Concatenated raw responses from LLM.
+    """
+    all_testcases = []
+    seen_steps = set()
+    all_raw_responses = ""
+
+    attempt = 0
+    no_new_count = 0
+    retries = initial_retries
+
+    while True:
+        print(f"***********Iteration {attempt + 1}*****************")
+
+        # Build exclusion text for already generated cases
+        if all_testcases:
+            existing_names = set(c["name"] for c in all_testcases)
+            exclusion_text = (
+                    "Already generated test cases:\n" + "\n".join(existing_names) +
+                    "\nNow generate NEW test cases not in the above list. Continue numbering."
+            )
+            prompt = constructed_prompt + "\n\n" + exclusion_text
+        else:
+            prompt = constructed_prompt
+
+        # Call LLM
+        if model_type == "azureopenai":
+            response = get_queries_from_ai_updated(prompt)
+        else:
+            response = get_queries_from_ai_updated_gemini(prompt)
+
+        all_raw_responses += "\n" + response
+
+        # Parse Markdown rows robustly
+        new_cases = parse_testcases_from_markdown(response)
+
+        # Track how many new cases are added
+        new_added = 0
+        for case in new_cases:
+            step_key = (case["name"], case["step_number"])
+            if step_key not in seen_steps:
+                seen_steps.add(step_key)
+                all_testcases.append(case)
+                new_added += 1
+
+        print(f"New unique test cases added: {new_added}")
+
+        # Stop if no new cases generated for consecutive iterations
+        if new_added == 0:
+            no_new_count += 1
+            print(f"No new test cases this iteration ({no_new_count}/{max_no_new_iterations}).")
+            if no_new_count >= max_no_new_iterations:
+                print("✅ No new test cases generated in consecutive iterations — stopping.")
+                break
+        else:
+            no_new_count = 0
+
+        # Adaptive retry mechanism
+        attempt += 1
+        if attempt >= retries:
+            print("⚠️ Maximum attempts reached — extending retries by 1.")
+            retries += 1
+
+    return all_testcases
+
+
+def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases=120,
+                                         max_attempts=50, min_new_threshold=10):
+    """
+    Generate test cases dynamically, stopping when new unique test cases are too few.
+
+    Args:
+        constructed_prompt (str): Base prompt.
+        max_testcases (int): Safety cap to avoid infinite generation.
+        max_attempts (int): Maximum AI calls allowed.
+        min_new_threshold (int): Minimum new test cases required to continue generation.
+
+    Returns:
+        list: All unique test cases.
+        str: Concatenated raw responses.
+    """
+    all_testcases = []
+    seen_steps = set()
+    all_raw_responses = ""
+    attempt = 0
+
+    while attempt < max_attempts:
+        print(f"***********Iteration {attempt + 1}*****************")
+
+        # Build exclusion prompt
+        if all_testcases:
+            existing_names = set(c["name"] for c in all_testcases)
+            exclusion_text = (
+                    "Already generated test cases:\n" + "\n".join(existing_names) +
+                    "\nNow generate NEW test cases not in the above list. Continue numbering."
+            )
+            prompt = constructed_prompt + "\n\n" + exclusion_text
+        else:
+            prompt = constructed_prompt
+
+        # Call LLM
+        response = get_queries_from_ai_updated(prompt) if model_type == "azureopenai" \
+            else get_queries_from_ai_updated_gemini(prompt)
+        all_raw_responses += "\n" + response
+
+        # Parse test cases
+        new_cases = parse_testcases_from_markdown(response)
+        new_added = 0
+        for case in new_cases:
+            key = (case["name"], case["step_number"])
+            if key not in seen_steps:
+                seen_steps.add(key)
+                all_testcases.append(case)
+                new_added += 1
+
+        print(f"New unique test cases added: {new_added} | Total: {len(all_testcases)}")
+
+        # Stop conditions
+        if new_added < min_new_threshold:
+            print(f"✅ Stopping: less than {min_new_threshold} new test cases generated.")
+            break
+        if len(all_testcases) >= max_testcases:
+            print(f"✅ Stopping: reached max_testcases limit ({max_testcases}).")
+            break
+
+        attempt += 1
+
+    return all_raw_responses,all_testcases
+
+
 def generate_testcases_with_retries_backup(constructed_prompt, retries=3, target_count=20):
     all_testcase_output=[]
     all_testcases = []
@@ -1411,6 +1556,148 @@ def generate_testcases_with_retries_backup(constructed_prompt, retries=3, target
     #return build_markdown_table(all_testcases)
     return all_testcase_output
 
+
+import json
+import re
+
+def categorize_testcases_with_full_requirements(
+    testcases, requirements=None, image_data=None, navigation=None
+):
+    """
+    Categorize test cases into Positive, Negative, Edge, UI, and Workflow using AI.
+    Ensures total_testcases matches input test case count by adding missing TCs to a category.
+    """
+
+    # --- Build requirement context ---
+    req_text = ""
+    if requirements:
+        req_text += "Textual Requirements:\n"
+        for idx, req in enumerate(requirements, 1):
+            truncated_req = req if len(req) < 200 else req[:200] + "..."
+            req_text += f"{idx}. {truncated_req}\n"
+
+    if image_data:
+        req_text += "\nImage Data:\n"
+        for idx, img in enumerate(image_data, 1):
+            truncated_img = img if len(img) < 200 else img[:200] + "..."
+            req_text += f"{idx}. {truncated_img}\n"
+
+    if navigation:
+        req_text += "\nNavigation Details:\n"
+        for idx, nav in enumerate(navigation, 1):
+            truncated_nav = nav if len(nav) < 200 else nav[:200] + "..."
+            req_text += f"{idx}. {truncated_nav}\n"
+
+    # --- Build test case text ---
+    testcase_text = "\n".join([f"- {t['name']}: {t.get('description', '')[:200]}" for t in testcases])
+
+    # --- AI Prompt ---
+    classification_prompt = f"""
+You are a QA test design classifier.
+
+⚠️ IMPORTANT: Respond ONLY with valid JSON.
+Return JSON exactly in this format:
+
+{{
+    "Positive": {{"count": <number>, "testcases": [{{"name": "...", "description": "..."}}]}},
+    "Negative": {{"count": <number>, "testcases": [{{"name": "...", "description": "..."}}]}},
+    "Edge": {{"count": <number>, "testcases": [{{"name": "...", "description": "..."}}]}},
+    "UI": {{"count": <number>, "testcases": [{{"name": "...", "description": "..."}}]}},
+    "Workflow": {{"count": <number>, "testcases": [{{"name": "...", "description": "..."}}]}},
+    "total_testcases": <total count>
+}}
+
+Information for AI:
+
+{req_text}
+
+Test cases:
+{testcase_text}
+"""
+
+    # --- Call LLM ---
+    if model_type == "azureopenai":
+        response = get_queries_from_ai_updated(classification_prompt)
+    else:
+        response = get_queries_from_ai_updated_gemini(classification_prompt)
+
+    # --- Safely extract JSON ---
+    try:
+        json_str = re.search(r'\{.*\}', response, re.DOTALL).group()
+        categories = json.loads(json_str)
+    except Exception:
+        print("⚠️ AI response not valid JSON — fallback to empty structure.")
+        categories = {
+            "Positive": {"count": 0, "testcases": []},
+            "Negative": {"count": 0, "testcases": []},
+            "Edge": {"count": 0, "testcases": []},
+            "UI": {"count": 0, "testcases": []},
+            "Workflow": {"count": 0, "testcases": []},
+            "total_testcases": 0
+        }
+
+    # --- Ensure total matches input test cases ---
+    input_tc_names = set(t["name"] for t in testcases)
+    categorized_tc_names = set()
+    for cat in ["Positive", "Negative", "Edge", "UI", "Workflow"]:
+        categorized_tc_names.update(tc["name"] for tc in categories.get(cat, {}).get("testcases", []))
+
+    missing_tcs = input_tc_names - categorized_tc_names
+    if missing_tcs:
+        # Add missing test cases to Positive category
+        for name in missing_tcs:
+            categories["Positive"]["testcases"].append({"name": name, "description": ""})
+        categories["Positive"]["count"] += len(missing_tcs)
+        print(f"⚠️ Added {len(missing_tcs)} missing test cases to Positive category")
+
+    # Update total_testcases
+    categories["total_testcases"] = sum(categories[cat]["count"] for cat in ["Positive", "Negative", "Edge", "UI", "Workflow"])
+
+    return categories
+
+
+import streamlit as st
+import pandas as pd
+
+
+def format_categories_for_ui(categories, sample_limit=3):
+    """
+    Convert full AI category output to a Streamlit-friendly format.
+    Shows total count but only a few sample test case names per category.
+
+    Args:
+        categories (dict): Output from AI categorization.
+        sample_limit (int): Max number of test case names to display per category.
+    """
+    simple_output = {}
+    total = 0
+
+    # Build simplified output with sample test cases
+    for cat in ["Positive", "Negative", "Edge", "UI", "Workflow"]:
+        cat_data = categories.get(cat, {"count": 0, "testcases": []})
+        count = cat_data.get("count", 0)
+        tcs = [tc["name"] for tc in cat_data.get("testcases", [])] if isinstance(cat_data.get("testcases", []),
+                                                                                 list) else []
+        sample_tcs = tcs[:sample_limit]  # Take only first few for display
+        simple_output[cat] = (count, sample_tcs)
+        total += count
+
+    simple_output["total_testcases"] = total
+
+    # Convert to DataFrame for display
+    rows = []
+    for cat in ["Positive", "Negative", "Edge", "UI", "Workflow"]:
+        count, tcs = simple_output.get(cat, (0, []))
+        rows.append({"Category": cat, "Count": count, "Test Cases": ", ".join(tcs)})
+
+    # Add total row
+    rows.append({"Category": "Total", "Count": simple_output["total_testcases"], "Test Cases": ""})
+
+    df = pd.DataFrame(rows)
+
+    # Streamlit display
+    st.title("Test Case Categories Overview")
+    st.table(df)
 
 
 def get_queries_from_ai_updated_again(formatted_summary, previous_output):
@@ -1594,10 +1881,10 @@ def covert_response_to_testcases(markdown_text, test_collection, output_file="Sa
                     if source == "file" and writer:
                         writer.close()
                         print(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test cases in {excel_path}")
-                        st.write(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test cases in {excel_path}")
+                        #st.write(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test cases in {excel_path}")
                     elif source == "database":
                         print(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test cases to the database.")
-                        st.write(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test cases to the database.")
+                        #st.write(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test cases to the database.")
                     return
 
             except Exception as e:
@@ -1671,6 +1958,104 @@ def covert_response_to_testcases(markdown_text, test_collection, output_file="Sa
             else:
                 print("\n⚠️ No test cases were parsed to save to the database.")
 
+
+def covert_response_to_testcases_single_sheet(markdown_text, test_collection, output_file="SauceDemo"+generate_random_prefix()+".xlsx"):
+    print("\n🚀 Starting test case parsing (Single Sheet Version)...")
+
+    # Normalize input
+    if isinstance(markdown_text, list):
+        markdown_text = "\n".join(str(line) for line in markdown_text)
+    elif not isinstance(markdown_text, str):
+        markdown_text = str(markdown_text)
+
+    # Remove code block wrapper if present
+    if markdown_text.startswith("```"):
+        markdown_text = "\n".join(
+            line for line in markdown_text.splitlines()
+            if not line.strip().startswith("```")
+        )
+
+    all_dfs = []  # collect all dataframes here
+
+    # Clean AI formatted table lines
+    table_lines = clean_table_lines(markdown_text)
+
+    # STEP 1: Try single-table format
+    if len(table_lines) >= 2 and "Test Case Name" in table_lines[0]:
+        try:
+            df = pd.read_csv(StringIO("\n".join(table_lines)), sep='|', engine='python', on_bad_lines='skip')
+            df = df.dropna(axis=1, how='all')
+            df.columns = [re.sub(r'\*+', '', col.strip()) for col in df.columns]
+            for col in df.select_dtypes(include='object').columns:
+                df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+            all_dfs.append(df)
+        except Exception as e:
+            print(f"❌ Failed to parse single-table format: {e}")
+            print("🔁 Attempting markdown section fallback...")
+
+    # STEP 2: Fallback - multiple markdown sections
+    if not all_dfs:
+        test_cases = re.split(r'####\s+\*\*(.*?)\*\*', markdown_text)
+        if len(test_cases) < 3:
+            print("❌ No valid markdown headings found. Exiting.")
+            return
+
+        for i in range(1, len(test_cases), 2):
+            test_case_name = test_cases[i].strip()
+            test_case_body = test_cases[i + 1]
+
+            lines = []
+            for line in test_case_body.strip().splitlines():
+                ln = line.strip()
+                if "|" in ln and not set(ln).issubset(set("|- ")):
+                    lines.append(ln)
+
+            if not lines:
+                print(f"⚠️ No valid table in: {test_case_name}")
+                continue
+
+            try:
+                df = pd.read_csv(StringIO("\n".join(lines)), sep='|', engine='python')
+                df = df.dropna(axis=1, how='all')
+                df.columns = [re.sub(r'\*+', '', col.strip()) for col in df.columns]
+
+                for col in df.select_dtypes(include='object').columns:
+                    df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+
+                if 'Test Case Name' not in df.columns:
+                    df.insert(0, 'Test Case Name', test_case_name)
+                else:
+                    df['Test Case Name'] = df['Test Case Name'].replace('', pd.NA).ffill()
+
+                all_dfs.append(df)
+
+            except Exception as e:
+                print(f"❌ Failed to parse section: {test_case_name}")
+                print(f"   Error: {e}")
+
+    # Merge all dataframes
+    if not all_dfs:
+        print("⚠️ No valid test cases to save.")
+        return
+
+    final_df = pd.concat(all_dfs, ignore_index=True)
+
+    # Save logic
+    if source == "file":
+        if not os.path.exists(test_collection):
+            os.makedirs(test_collection)
+            print(f"📁 Created output directory: {test_collection}")
+
+        excel_path = os.path.join(test_collection, output_file)
+        final_df.to_excel(excel_path, index=False, sheet_name="All_Test_Cases")
+        print(f"✅ Saved all test cases in single sheet: {excel_path}")
+        st.write(f"✅ Saved all test cases in single sheet: {excel_path}")
+
+    elif source == "database":
+        db_handler.save_testcases_to_db("All_Test_Cases", final_df, "sathanantham")
+        print("✅ Saved all test cases in single sheet to DB")
+        st.write("✅ Saved all test cases in single sheet to DB")
+
 def covert_response_to_testcases_single_file(markdown_text, test_collection):
     print("\n🚀 Starting test case parsing...")
 
@@ -1721,7 +2106,8 @@ def covert_response_to_testcases_single_file(markdown_text, test_collection):
                     print(f"✅ Saved to DB: {safe_file_name}")
 
             print(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test case files.")
-            st.write(f"\n✅ Successfully saved {df['Test Case Name'].nunique()} test case files.")
+            #st.write(f"\n✅ Individual test cases are Successfully saved {df['Test Case Name'].nunique()} test case files.")
+            st.write(f"\n✅ Individual test cases are successfully saved.")
             return
 
         except Exception as e:
@@ -1781,10 +2167,10 @@ def covert_response_to_testcases_single_file(markdown_text, test_collection):
 
     if source == "file":
         print(f"\n✅ Completed saving all test cases to folder: {test_collection}")
-        st.write(f"\n✅ Completed saving all test cases to folder: {test_collection}")
+        st.write(f"\n✅ Completed saving all individual test cases to folder: {test_collection}")
     elif source == "database":
         print(f"\n✅ Completed saving all test cases to the database.")
-        st.write(f"\n✅ Completed saving all test cases to the database.")
+        st.write(f"\n✅ Completed saving all individual test cases to the database.")
 
 def covert_response_to_testcases_1(markdown_text, test_collection):
     print("\n🚀 Starting test case parsing...")
@@ -1972,31 +2358,72 @@ def extract_text_from_pdf(uploaded_pdf):
     return text
 
 
+# def extract_text_from_document(uploaded_file, filename):
+#     text = ""
+#
+#     if filename.lower().endswith(".pdf"):
+#         # PDF Extraction
+#         pdf_reader = PyPDF2.PdfReader(uploaded_file)
+#         for page in pdf_reader.pages:
+#             extracted = page.extract_text()
+#             if extracted:
+#                 text += re.sub(r'\W+', ' ', extracted)
+#
+#     elif filename.lower().endswith(".docx"):
+#         # Word Document Extraction
+#         text_content = docx2txt.process(uploaded_file)
+#         text += re.sub(r'\W+', ' ', text_content)
+#
+#     elif filename.lower().endswith(".txt"):
+#         # Plain Text File Extraction
+#         text_content = uploaded_file.read().decode("utf-8", errors="ignore")
+#         text += re.sub(r'\W+', ' ', text_content)
+#
+#     else:
+#         raise ValueError("Unsupported file type. Only PDF, DOCX, and TXT are supported.")
+#
+#     print("✅ Text extracted:", text)
+#     return text
 def extract_text_from_document(uploaded_file, filename):
     text = ""
 
-    if filename.lower().endswith(".pdf"):
-        # PDF Extraction
-        pdf_reader = PyPDF2.PdfReader(uploaded_file)
-        for page in pdf_reader.pages:
-            extracted = page.extract_text()
-            if extracted:
-                text += re.sub(r'\W+', ' ', extracted)
+    filename_lower = filename.lower()
 
-    elif filename.lower().endswith(".docx"):
-        # Word Document Extraction
-        text_content = docx2txt.process(uploaded_file)
-        text += re.sub(r'\W+', ' ', text_content)
+    try:
+        if filename_lower.endswith(".pdf"):
+            # PDF Extraction
+            pdf_reader = PyPDF2.PdfReader(uploaded_file)
+            for page in pdf_reader.pages:
+                extracted = page.extract_text()
+                if extracted:
+                    text += re.sub(r'\W+', ' ', extracted)
 
-    elif filename.lower().endswith(".txt"):
-        # Plain Text File Extraction
-        text_content = uploaded_file.read().decode("utf-8", errors="ignore")
-        text += re.sub(r'\W+', ' ', text_content)
+        elif filename_lower.endswith(".docx"):
+            # Word Document Extraction
+            text_content = docx2txt.process(uploaded_file)
+            text += re.sub(r'\W+', ' ', text_content)
 
-    else:
-        raise ValueError("Unsupported file type. Only PDF, DOCX, and TXT are supported.")
+        elif filename_lower.endswith(".txt"):
+            # Plain Text File Extraction
+            text_content = uploaded_file.read().decode("utf-8", errors="ignore")
+            text += re.sub(r'\W+', ' ', text_content)
 
-    print("✅ Text extracted:", text)
+        elif filename_lower.endswith((".xlsx", ".xls")):
+            # Excel Extraction (all sheets, all cells)
+            df_dict = pd.read_excel(uploaded_file, sheet_name=None)
+            for sheet_name, df in df_dict.items():
+                for col in df.columns:
+                    for cell in df[col]:
+                        if pd.notna(cell):
+                            text += re.sub(r'\W+', ' ', str(cell)) + " "
+        else:
+            # Unsupported file type
+            return ""
+
+    except Exception as e:
+        print(f"❌ Error extracting text from {filename}: {e}")
+
+    print("✅ Text extracted:", text[:200], "...")  # Show only first 200 chars
     return text
 
 
@@ -2458,3 +2885,45 @@ def get_full_testcases(formatted_summary):
             break
 
     return collected_output
+
+def estimate_testcase_coverage(formatted_summary):
+    """
+    Estimate the number of test cases required for full coverage.
+
+    Args:
+        formatted_summary (str): Pre-built prompt including requirements, images, navigation, and instructions for JSON output.
+
+    Returns:
+        dict: JSON with counts for Positive, Negative, Edge, Workflow, RecommendedTotal
+    """
+    model = AzureChatOpenAI(
+        openai_api_version="2023-05-15",
+        azure_deployment="qepracticekey",
+        max_tokens=4000,
+        temperature=0
+    )
+
+    message = HumanMessage(content=formatted_summary)
+    output_value = model([message])
+
+    # Extract raw text from AIMessage
+    raw_text = output_value.content.strip()  # remove leading/trailing whitespace
+
+    # Clean markdown fences if accidentally returned
+    if raw_text.startswith("```"):
+        raw_text = "\n".join(line for line in raw_text.splitlines() if not line.startswith("```"))
+
+    # Attempt JSON parsing
+    try:
+        coverage_counts = json.loads(raw_text)
+    except Exception as e:
+        print(f"⚠️ Failed to parse JSON from AI output: {e}")
+        coverage_counts = {
+            "Positive": 0,
+            "Negative": 0,
+            "Edge": 0,
+            "Workflow": 0,
+            "RecommendedTotal": 50  # fallback default
+        }
+
+    return coverage_counts

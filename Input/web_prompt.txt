@@ -8,7 +8,7 @@ Output Format:
 
 Requirements:
 1. Use tag, id, class, name, text, and other attributes in different combinations to generate multiple XPaths per element.
-2. Use axes like parent::, child::, following-sibling::, preceding-sibling:: where required to handle nested or complex elements.
+2. Use axes like parent::, child::, following-sibling::, preceding-sibling:: where required to handle nested or complex elements.[Must be findable xpath]
 3. For elements with multiple layers of hierarchy, generate both absolute paths (from root) and relative paths (from parents or siblings).
 4. Include robust and reliable options so the XPaths are less likely to break if minor UI changes occur.
 5. Do not include any explanations, markdown, or extra text — return only headers and XPath strings.

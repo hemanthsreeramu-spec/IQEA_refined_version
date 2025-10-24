@@ -4,8 +4,8 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from output.page_file_generator.Equfix_home_page import EqufixHomePage
-from output.page_file_generator.Equfix_Place_On_Alert import EqufixPlaceOnAlert
+from output.page_file_generator.EqufixHomepage import EqufixHomePage
+from output.page_file_generator.EqufixPlaceOnAlert import EqufixPlaceOnAlert
 
 @pytest.fixture(scope="function")
 def setup_driver():
