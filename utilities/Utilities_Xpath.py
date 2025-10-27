@@ -1571,8 +1571,8 @@ def generate_testcases_dynamically(constructed_prompt, initial_retries=5, max_no
     return all_testcases
 
 
-def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases=120,
-                                         max_attempts=50, min_new_threshold=10):
+def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases,
+                                         min_new_threshold,max_attempts=50):
     """
     Generate test cases dynamically, stopping when new unique test cases are too few.
 
@@ -1633,7 +1633,7 @@ def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases=120,
 
         attempt += 1
 
-    return all_raw_responses,all_testcases
+    return all_raw_responses
 
 
 def generate_testcases_with_retries_backup(constructed_prompt, retries=3, target_count=20):

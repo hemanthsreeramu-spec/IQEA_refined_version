@@ -51,8 +51,8 @@ Coverage:
 Output Format:
 
 - A single Markdown table with this exact header:
-  | Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type |
-- Status = New; Type = Manual for every row.
+  | Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type | Category
+- Status = New; Type = Manual for every row;Category = "Positive"/"Negative"/"Workflow"/"Edge case"/"UI" [first row of the each test case]- test cases must fall under any one of this category
 - Step numbers restart for each test case (0,1,2,…). Step 0 = Prerequisite/Background.
 - Each test case must have at least 6 steps.
 
