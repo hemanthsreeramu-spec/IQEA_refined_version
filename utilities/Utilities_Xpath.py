@@ -1272,25 +1272,24 @@ def parse_testcases_from_markdown(md_text):
     """
     Parse a Markdown table into structured test case dicts.
     Handles multi-line cells and extra pipes in descriptions.
-    Returns a list of dicts, each with test case name, step number, description, expected, status, type.
+    Returns a list of dicts, each with test case name, step number, description, expected, status, type, category.
     """
+    import re
     rows = []
     md_text = md_text.strip()
 
     # Remove header/separator lines
     lines = [line for line in md_text.splitlines() if line.strip() and not re.match(r'^\|\s*-', line)]
 
-    # Collect multi-line rows
     buffer = ""
     for line in lines:
         if line.startswith("|"):
             buffer += line + "\n"
-            # Count pipes in the line; a full row should have 7 '|' for 6 columns
-            if buffer.count("|") >= 7:
-                # Extract cells safely, even if pipes appear in text
+            # Count pipes in the line; a full row should have 8 '|' for 7 columns
+            if buffer.count("|") >= 8:
                 parts = re.split(r'\s*\|\s*', buffer.strip())
                 parts = [p.strip() for p in parts[1:-1]]  # skip first and last empty split
-                if len(parts) == 6:
+                if len(parts) == 7:
                     rows.append({
                         "name": parts[0],
                         "step_number": parts[1],
@@ -1298,10 +1297,136 @@ def parse_testcases_from_markdown(md_text):
                         "expected": parts[3],
                         "status": parts[4],
                         "type": parts[5],
+                        "category": parts[6],
                     })
                 buffer = ""  # reset for next row
+
     return rows
 
+def parse_and_display_testcases_categorywise(md_text):
+    import streamlit as st
+    import re
+    from collections import defaultdict
+
+    # --- Parse Markdown Table ---
+    rows = []
+    md_text = md_text.strip()
+    lines = [line for line in md_text.splitlines() if line.strip() and not re.match(r'^\|\s*-', line)]
+    buffer = ""
+
+    for line in lines:
+        if line.startswith("|"):
+            buffer += line + "\n"
+            if buffer.count("|") >= 8:  # expecting 7 columns
+                parts = re.split(r'\s*\|\s*', buffer.strip())
+                parts = [p.strip() for p in parts[1:-1]]
+                if len(parts) == 7:
+                    # ✅ Parse only "category", ignore "type"
+                    rows.append({
+                        "name": parts[0],
+                        "step_number": parts[1],
+                        "description": parts[2],
+                        "expected": parts[3],
+                        "status": parts[4],
+                        "category": parts[6],  # <-- use only category column
+                    })
+                buffer = ""
+
+    # --- Group test cases by category (ignore 'type') ---
+    category_to_cases = defaultdict(list)
+    for row in rows:
+        name = row["name"].strip()
+        category = row["category"].strip().lower()
+        if category.lower() != "category" and name.lower() != "category":
+            if name not in category_to_cases[category]:
+                category_to_cases[category].append(name)
+        else:
+            print("Skipped header row or invalid category")
+
+    category_counts = {cat: len(names) for cat, names in category_to_cases.items()}
+    total = sum(category_counts.values())
+    category_counts["total"] = total
+
+    # --- Define colors ---
+    color_map = {
+        "positive": "#27ae60",
+        "negative": "#e74c3c",
+        "workflow": "#2980b9",
+        "ui": "#f1c40f",
+        "edge case": "#8e44ad",
+        "total": "#7f8c8d"
+    }
+
+    # --- CSS for uniform boxes ---
+    st.markdown("""
+        <style>
+            .testcase-container {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+                margin-top: 10px;
+            }
+            .testcase-box {
+                width: 150px;
+                height: 70px;
+                border-radius: 10px;
+                color: white;
+                padding: 6px;
+                text-align: center;
+                position: relative;
+                box-shadow: 1px 2px 6px rgba(0,0,0,0.15);
+                transition: transform 0.2s ease-in-out;
+                font-family: 'Segoe UI', sans-serif;
+            }
+            .testcase-box:hover { transform: scale(1.05); }
+            .testcase-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+            .testcase-count { font-size: 20px; font-weight: 700; margin: 0; }
+            .tooltip {
+                visibility: hidden;
+                background-color: rgba(0, 0, 0, 0.85);
+                color: #fff;
+                text-align: left;
+                padding: 6px;
+                border-radius: 6px;
+                position: absolute;
+                z-index: 1;
+                bottom: 110%;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 220px;
+                font-size: 11px;
+                line-height: 1.3;
+            }
+            .testcase-box:hover .tooltip { visibility: visible; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("### 🧾 Category-wise Test Case Summary")
+
+    # --- Build boxes (no HTML spacing) ---
+    boxes = []
+    for cat, count in category_counts.items():
+        color = color_map.get(cat, "#34495e")
+        sample_cases = category_to_cases.get(cat, [])
+        sample_text = "<br>".join(sample_cases[:3]) if sample_cases else "No sample cases"
+        if len(sample_cases) > 3:
+            sample_text += f"<br><span style='color:#ccc;'>...and {len(sample_cases)-3} more</span>"
+
+        box_html = (
+            f"<div class='testcase-box' style='background-color:{color};'>"
+            f"<div class='testcase-title'>{cat.capitalize()}</div>"
+            f"<div class='testcase-count'>{count}</div>"
+            f"<div class='tooltip'>{sample_text}</div>"
+            f"</div>"
+        )
+        boxes.append(box_html)
+
+    html = "<div class='testcase-container'>" + "".join(boxes) + "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+    # 🔹 Add one line space after the result
+    st.write(" ")
+
+    return category_counts
 
 def build_markdown_table(testcases):
     """
@@ -1489,7 +1614,8 @@ def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases=120,
         new_cases = parse_testcases_from_markdown(response)
         new_added = 0
         for case in new_cases:
-            key = (case["name"], case["step_number"])
+            # key = (case["name"], case["step_number"])
+            key = case["name"].strip().lower()
             if key not in seen_steps:
                 seen_steps.add(key)
                 all_testcases.append(case)

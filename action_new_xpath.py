@@ -584,6 +584,8 @@ if st.session_state.checkbox3_state:
                     # print(f"✅ Recommended total test cases for generation: {target_count}")
                     st.session_state.testcase_response = utils.generate_testcases_with_retries(constructedprompt)
                     st.code(st.session_state.testcase_response)
+                    utils.parse_and_display_testcases_categorywise(st.session_state.testcase_response)
+                    st.write(" ")
 
             elif option == 'Documents' and uploaded_file is not None:
                 extracted_data = utils.extract_text_from_document(uploaded_file,uploaded_file.name)
@@ -608,15 +610,16 @@ if st.session_state.checkbox3_state:
                                                                                  extracted_data)
                 st.session_state.testcase_response,st.session_state.all_testcases  = utils.generate_testcases_with_dynamic_stop(constructedprompt)
                 #st.code(st.session_state.testcase_response)
-                test_categories=utils.categorize_testcases_with_full_requirements(st.session_state.all_testcases  , extracted_data,Document_image_data_processed,Navigation_details)
-                ui_display=utils.format_categories_for_ui(test_categories)
+                # test_categories=utils.categorize_testcases_with_full_requirements(st.session_state.all_testcases  , extracted_data,Document_image_data_processed,Navigation_details)
+                # ui_display=utils.format_categories_for_ui(test_categories)
+                utils.parse_and_display_testcases_categorywise(st.session_state.testcase_response)
 
         if st.session_state.testcase_response:
             st.session_state.save_testcases = True
         if st.session_state.save_testcases and st.button("Save test cases"):
 
-            utils.covert_response_to_testcases_single_file(st.session_state.testcase_response, Test_case_collection)
-            utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
+            # utils.covert_response_to_testcases_single_file(st.session_state.testcase_response, Test_case_collection)
+            # utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
             utils.covert_response_to_testcases_single_sheet(st.session_state.testcase_response, Test_case_collection)
 if st.session_state.checkbox4_state:
     with st.expander("🔎 Locators 🧾 POM File Generator",expanded=st.session_state.open_expander_collection):
