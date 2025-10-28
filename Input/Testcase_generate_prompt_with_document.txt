@@ -56,8 +56,8 @@ Use both the textual and (if available) image-derived requirements to ensure com
      | Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type |Category
    - **Status** = "New"
    - **Type** = "Manual"
-   - **Category** = "Positive"/"Negative"/"Workflow"/"Edge case"/"UI" - test cases must fall under any one of this category
-
+   - Category = "Positive" / "Negative" / "Workflow" / "Edge case" / "UI" / etc.
+      - Each test case must belong to exactly one category based on its overall intent or behavior (not step-wise).
    - Do **not** include explanations, extra notes, or text outside the table.
 ---
 ### Task

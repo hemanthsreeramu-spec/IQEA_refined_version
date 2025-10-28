@@ -1321,6 +1321,12 @@ def parse_and_display_testcases_categorywise(md_text):
                 parts = re.split(r'\s*\|\s*', buffer.strip())
                 parts = [p.strip() for p in parts[1:-1]]
                 if len(parts) == 7:
+                    name = parts[0].strip().lower()
+                    category = parts[6].strip().lower()
+                    # --- ✅ Skip header or invalid row early ---
+                    if name == "name" or category == "category" or not parts[0]:
+                        buffer = ""
+                        continue
                     # ✅ Parse only "category", ignore "type"
                     rows.append({
                         "name": parts[0],
@@ -1336,12 +1342,14 @@ def parse_and_display_testcases_categorywise(md_text):
     category_to_cases = defaultdict(list)
     for row in rows:
         name = row["name"].strip()
-        category = row["category"].strip().lower()
-        if category.lower() != "category" and name.lower() != "category":
-            if name not in category_to_cases[category]:
-                category_to_cases[category].append(name)
-        else:
-            print("Skipped header row or invalid category")
+        category = row["category"].strip().lower() if row["category"].strip() else "others"
+        # if category.lower() != "category" and name.lower() != "category":
+        #     if name not in category_to_cases[category]:
+        #         category_to_cases[category].append(name)
+        # else:
+        #     print("Skipped header row or invalid category")
+        if name not in category_to_cases[category]:
+            category_to_cases[category].append(name)
 
     category_counts = {cat: len(names) for cat, names in category_to_cases.items()}
     total = sum(category_counts.values())
@@ -1354,6 +1362,7 @@ def parse_and_display_testcases_categorywise(md_text):
         "workflow": "#2980b9",
         "ui": "#f1c40f",
         "edge case": "#8e44ad",
+        "others": "#95a5a6",
         "total": "#7f8c8d"
     }
 
@@ -1605,32 +1614,43 @@ def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases,
         else:
             prompt = constructed_prompt
 
-        # Call LLM
-        response = get_queries_from_ai_updated(prompt) if model_type == "azureopenai" \
-            else get_queries_from_ai_updated_gemini(prompt)
-        all_raw_responses += "\n" + response
 
-        # Parse test cases
-        new_cases = parse_testcases_from_markdown(response)
-        new_added = 0
-        for case in new_cases:
-            # key = (case["name"], case["step_number"])
-            key = case["name"].strip().lower()
-            if key not in seen_steps:
-                seen_steps.add(key)
-                all_testcases.append(case)
-                new_added += 1
+        try:
+            response = get_queries_from_ai_updated(prompt) if model_type == "azureopenai" \
+                else get_queries_from_ai_updated_gemini(prompt)
+            all_raw_responses += "\n" + response
 
-        print(f"New unique test cases added: {new_added} | Total: {len(all_testcases)}")
+            # Parse test cases
+            try:
+                new_cases = parse_testcases_from_markdown(response)
+            except Exception as parse_err:
+                print(f"⚠️ Parsing error: {parse_err}. Skipping this response.")
+                attempt += 1
+                continue
+            new_added = 0
+            for case in new_cases:
+                # key = (case["name"], case["step_number"])
+                key = case["name"].strip().lower()
+                if key not in seen_steps:
+                    seen_steps.add(key)
+                    all_testcases.append(case)
+                    new_added += 1
 
-        # Stop conditions
-        if new_added < min_new_threshold:
-            print(f"✅ Stopping: less than {min_new_threshold} new test cases generated.")
-            break
-        if len(all_testcases) >= max_testcases:
-            print(f"✅ Stopping: reached max_testcases limit ({max_testcases}).")
-            break
+            print(f"New unique test cases added: {new_added} | Total: {len(all_testcases)}")
 
+            # Stop conditions
+            if new_added < min_new_threshold:
+                print(f"✅ Stopping: less than {min_new_threshold} new test cases generated.")
+                break
+            if len(all_testcases) >= max_testcases:
+                print(f"✅ Stopping: reached max_testcases limit ({max_testcases}).")
+                break
+        except Exception as e:
+            # Handle any AI or unexpected runtime exception
+            print(f"⚠️ Exception during AI call or processing: {e}. Skipping this iteration.")
+            # Optionally, you could also log it to a file
+            attempt += 1
+            continue
         attempt += 1
 
     return all_raw_responses
