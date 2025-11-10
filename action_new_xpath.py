@@ -45,7 +45,7 @@ os.makedirs(Test_case_collection, exist_ok=True)
 os.makedirs(Action_collection, exist_ok=True)
 os.makedirs(feature_file_collection, exist_ok=True)
 #page_screenshot_folder_new = os.path.join(Action_collection, "page_screenshot_valid")
-page_screenshot_folder = os.path.join(Action_collection, "Equifix")
+page_screenshot_folder = os.path.join(Action_collection, "page_screenshot")
 os.makedirs(page_screenshot_folder, exist_ok=True)
 os.makedirs(Test_file_generator, exist_ok=True)
 
@@ -583,7 +583,7 @@ if st.session_state.checkbox3_state:
                     #
                     # print(f"✅ Recommended total test cases for generation: {target_count}")
                     #st.session_state.testcase_response = utils.generate_testcases_with_retries(constructedprompt)
-                    st.session_state.testcase_response = utils.generate_testcases_with_dynamic_stop(constructedprompt,25,5)
+                    st.session_state.testcase_response = utils.generate_testcases_with_dynamic_stop(constructedprompt,25,1)
                     #st.code(st.session_state.testcase_response)
                     utils.parse_and_display_testcases_categorywise(st.session_state.testcase_response)
                     st.write(" ")
@@ -619,8 +619,8 @@ if st.session_state.checkbox3_state:
             st.session_state.save_testcases = True
         if st.session_state.save_testcases and st.button("Save test cases"):
 
-            # utils.covert_response_to_testcases_single_file(st.session_state.testcase_response, Test_case_collection)
-            #utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
+            utils.covert_response_to_testcases_single_file(st.session_state.testcase_response, Test_case_collection)
+            utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
             utils.covert_response_to_testcases_single_sheet(st.session_state.testcase_response, Test_case_collection)
 if st.session_state.checkbox4_state:
     with st.expander("🔎 Locators 🧾 POM File Generator",expanded=st.session_state.open_expander_collection):

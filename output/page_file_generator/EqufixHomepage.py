@@ -48,9 +48,15 @@ class EqufixHomePage:
         if len(all_window_handles) > 1:
             self.driver.switch_to.window(all_window_handles[-1])
 
-
     def click_place_an_alert(self):
+        # Click the 'Place an Alert' button
         self.click(self.LOCATORS["place_an_alert"])
+
+        # Wait for the new tab/window or page load to complete
+        WebDriverWait(self.driver, 15).until(
+            lambda d: len(d.window_handles) > 1 or d.execute_script("return document.readyState") == "complete"
+        )
+
 
     def click_close_button(self):
         self.click(self.LOCATORS["close_button"])

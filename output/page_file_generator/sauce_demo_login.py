@@ -1,7 +1,6 @@
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.remote.webdriver import WebDriver
 
 class Sauce_demo_login:
     LOCATORS = {
@@ -10,12 +9,12 @@ class Sauce_demo_login:
         "login_button": (By.XPATH, "//input[@id='login-button']"),
     }
 
-    def __init__(self, driver: WebDriver, timeout: int = 10):
+    def __init__(self, driver):
         self.driver = driver
-        self.wait = WebDriverWait(driver, timeout)
+        self.wait = WebDriverWait(driver, 10)
 
     def wait_for_element(self, locator):
-        return self.wait.until(EC.visibility_of_element_located(locator))
+        return self.wait.until(EC.presence_of_element_located(locator))
 
     def click(self, locator):
         element = self.wait_for_element(locator)
@@ -31,28 +30,29 @@ class Sauce_demo_login:
         if index < len(handles):
             self.driver.switch_to.window(handles[index])
         else:
-            raise RuntimeError(f"Window index {index} is out of range.")
+            raise RuntimeError("Invalid window index specified.")
 
     def switch_to_window_by_handle(self, handle):
-        self.driver.switch_to.window(handle)
+        if handle in self.driver.window_handles:
+            self.driver.switch_to.window(handle)
+        else:
+            raise RuntimeError("Window handle not found.")
 
     def switch_to_window_matching_url(self, url):
         for handle in self.driver.window_handles:
             self.driver.switch_to.window(handle)
             if self.driver.current_url == url:
                 return
-        raise RuntimeError(f"No window found with URL: {url}")
+        raise RuntimeError("No window found matching the specified URL.")
 
     def switch_to_new_window(self, url=None):
         handles = self.driver.window_handles
-        if len(handles) < 2:
-            raise RuntimeError("No new window to switch to.")
-        self.driver.switch_to.window(handles[-1])
-        if url and self.driver.current_url != url:
-            raise RuntimeError(f"Switched to a window, but URL does not match. Expected: {url}, Found: {self.driver.current_url}")
-
-    def switch_to_sauce_demo_window(self):
-        self.switch_to_new_window("https://www.saucedemo.com/")
+        if len(handles) > 1:
+            self.driver.switch_to.window(handles[-1])
+            if url and self.driver.current_url != url:
+                raise RuntimeError("The new window does not have the expected URL.")
+        else:
+            raise RuntimeError("No new window detected to switch.")
 
     def enter_user_name(self, username):
         self.wait_for_element(self.LOCATORS["user_name"])

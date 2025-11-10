@@ -23,6 +23,7 @@ import re
 import pandas
 from io import StringIO
 from langchain_core.messages import HumanMessage
+
 from selenium import webdriver
 from selenium.common import StaleElementReferenceException, NoSuchElementException
 from selenium.webdriver.chrome.service import Service
@@ -915,105 +916,80 @@ def thread_focus_screenshot(driver,stop_flag,screenshot_folder,source="file"):
             print("Error during URL monitoring:", e)
         time.sleep(1)  # check every second
 import time
-from datetime import datetime
+import hashlib
+from PIL import Image
+import io
 
-# def thread_reinject_action_check(driver, stop_flag,
-#                                  last_urls=None, current_window_ref=None,
-#                                  injected_windows=None, idle_timeout=5):
-#     """
-#     Reinjection checker thread:
-#     - Monitors last action timestamp and action count in localStorage
-#     - Clears injected_windows only if:
-#         1. Idle time exceeded > idle_timeout
-#         2. New actions were recorded since last reinject
-#     - Updates last_action_ts after reinjection to prevent unnecessary clears
-#     """
-#     print("🧵 thread 3 started (idle reinject checker)")
-#
-#     # Track last known action count
-#     last_action_count = 0
-#
-#     while not stop_flag["stop"]:
-#         try:
-#             # Fetch from localStorage
-#             result = driver.execute_script("""
-#                 const actions = JSON.parse(localStorage.getItem('recordedActions') || '[]');
-#                 const lastReinject = localStorage.getItem('lastReinjectTime');
-#                 let lastActionTs = null;
-#
-#                 if (actions.length > 0) {
-#                     lastActionTs = actions[actions.length - 1].timestamp || null;
-#                 }
-#
-#                 return {
-#                     lastAction: lastActionTs,
-#                     lastReinject: lastReinject,
-#                     actionCount: actions.length
-#                 };
-#             """)
-#
-#             last_action = result.get("lastAction")
-#             last_reinject = result.get("lastReinject")
-#             action_count = result.get("actionCount", 0)
-#
-#             # Parse last action timestamp
-#             last_action_ts = None
-#             if last_action:
-#                 if isinstance(last_action, (int, float)):  # epoch millis
-#                     last_action_ts = float(last_action) / 1000.0
-#                 elif isinstance(last_action, str):
-#                     try:
-#                         dt = datetime.fromisoformat(last_action.replace("Z", "+00:00"))
-#                         last_action_ts = dt.timestamp()
-#                     except Exception as parse_err:
-#                         print(f"⚠️ Could not parse ISO timestamp: {last_action} ({parse_err})")
-#
-#             # Parse reinjection timestamp
-#             last_reinject_ts = None
-#             if last_reinject:
-#                 try:
-#                     last_reinject_ts = float(last_reinject)
-#                 except:
-#                     pass
-#
-#             if last_action_ts:
-#                 now_ts = time.time()
-#                 diff = now_ts - last_action_ts
-#
-#                 print("⏰ Current Time:", datetime.fromtimestamp(now_ts).strftime("%Y-%m-%d %H:%M:%S"))
-#                 print("📝 Last Action:", datetime.fromtimestamp(last_action_ts).strftime("%Y-%m-%d %H:%M:%S"))
-#                 if last_reinject_ts:
-#                     print("♻️ Last Reinjection:", datetime.fromtimestamp(last_reinject_ts).strftime("%Y-%m-%d %H:%M:%S"))
-#                 print("🔢 Action Count:", action_count)
-#
-#                 # ✅ MAIN CHECK: only reinject if new actions appeared after last reinject
-#                 if (not last_reinject_ts or last_action_ts > last_reinject_ts):
-#                     idle_condition = diff >= idle_timeout
-#                     new_actions_condition = action_count > last_action_count
-#
-#                     if idle_condition and new_actions_condition:
-#                         print(f"⏱️ Idle > {idle_timeout}s AND new actions detected. Clearing injected_windows…")
-#                         if injected_windows is not None:
-#                             injected_windows.clear()
-#
-#                         # Update reinjection time + last action time
-#                         driver.execute_script("""
-#                             localStorage.setItem('lastReinjectTime', Date.now() / 1000);
-#                         """)
-#                         last_action_ts = now_ts
-#                         last_action_count = action_count  # reset count reference
-#
-#                         time.sleep(1)
-#
-#             else:
-#                 print("ℹ️ No actions recorded yet.")
-#
-#         except Exception as e:
-#             print("Idle reinject monitor error:", e)
-#
-#         time.sleep(2)
-#
-#     print("🛑 thread 3 stopped (idle reinject checker)")
+def thread_focus_screenshot_old(driver, stop_flag, screenshot_folder, source="file"):
+    """
+    Takes a screenshot whenever:
+    1. The URL changes, OR
+    2. The visible UI (DOM or visual) changes significantly, even if the URL remains the same.
+    """
+    print("📸 Screenshot thread started")
+    last_url = ""
+    last_dom_hash = ""
+    last_visual_hash = ""
+
+    while not stop_flag["stop"]:
+        try:
+            current_url = driver.current_url
+            ui_changed = False
+
+            # --- Condition 1: URL Changed ---
+            if current_url != last_url:
+                ui_changed = True
+                last_url = current_url
+
+            # --- Condition 2: DOM Changed ---
+            try:
+                # Capture the visible DOM structure (simplified to avoid large payloads)
+                dom_snapshot = driver.execute_script(
+                    "return document.body.innerText.slice(0, 2000);"
+                )
+                current_dom_hash = hashlib.md5(dom_snapshot.encode("utf-8")).hexdigest()
+                if current_dom_hash != last_dom_hash:
+                    ui_changed = True
+                    last_dom_hash = current_dom_hash
+            except Exception:
+                pass
+
+            # --- Optional Condition 3: Visual Change Detection ---
+            # (lightweight pixel hash approach)
+            try:
+                png = driver.get_screenshot_as_png()
+                img_hash = hashlib.md5(png[:50000]).hexdigest()  # hash first part only for performance
+                if img_hash != last_visual_hash:
+                    ui_changed = True
+                    last_visual_hash = img_hash
+            except Exception:
+                pass
+
+            # --- If any change detected, take screenshot ---
+            if ui_changed:
+                for _ in range(50):  # Wait for page load or DOM stability
+                    state = driver.execute_script("return document.readyState")
+                    if state == "complete":
+                        break
+                    time.sleep(0.1)
+
+                if source == "file":
+                    filepath = action_utils.take_screenshot(driver, screenshot_folder)
+                elif source == "database":
+                    filepath = db_handler.take_screenshot_db(driver, "sathanantham")
+                else:
+                    filepath = None
+
+                print(f"✅ Screenshot captured for: {current_url} => {filepath}")
+
+            time.sleep(2)  # recheck every 2 seconds
+
+        except Exception as e:
+            print("⚠️ Error during screenshot monitoring:", e)
+            time.sleep(2)
+
+    print("🛑 Screenshot thread ended")
+
 
 def thread_reinject_action_check(driver, stop_flag,
                                  last_urls=None, current_window_ref=None,
@@ -1302,8 +1278,146 @@ def parse_testcases_from_markdown(md_text):
                 buffer = ""  # reset for next row
 
     return rows
-
 def parse_and_display_testcases_categorywise(md_text):
+    import streamlit as st
+    import re
+    from collections import defaultdict
+
+    # --- Parse Markdown Table ---
+    rows = []
+    md_text = md_text.strip()
+    lines = [line for line in md_text.splitlines() if line.strip() and not re.match(r'^\|\s*-', line)]
+    buffer = ""
+
+    for line in lines:
+        if line.startswith("|"):
+            buffer += line + "\n"
+            if buffer.count("|") >= 8:  # expecting 7 columns
+                parts = re.split(r'\s*\|\s*', buffer.strip())
+                parts = [p.strip() for p in parts[1:-1]]
+                if len(parts) == 7:
+                    name = parts[0].strip().lower()
+                    category = parts[6].strip().lower()
+                    if name == "name" or category == "category" or not parts[0]:
+                        buffer = ""
+                        continue
+                    rows.append({
+                        "name": parts[0],
+                        "step_number": parts[1],
+                        "description": parts[2],
+                        "expected": parts[3],
+                        "status": parts[4],
+                        "category": parts[6],
+                    })
+                buffer = ""
+
+    # --- Group test cases by category ---
+    category_to_cases = defaultdict(list)
+    for row in rows:
+        name = row["name"].strip()
+        category = row["category"].strip().lower() if row["category"].strip() else "others"
+        if name not in category_to_cases[category]:
+            category_to_cases[category].append(name)
+
+    category_counts = {cat: len(names) for cat, names in category_to_cases.items()}
+    total = sum(category_counts.values())
+    category_counts["total"] = total
+
+    # --- Define colors ---
+    color_map = {
+        "positive": "#27ae60",
+        "negative": "#e74c3c",
+        "workflow": "#2980b9",
+        "ui": "#f1c40f",
+        "edge case": "#8e44ad",
+        "others": "#95a5a6",
+        "backend": "#16a085",  # Teal Green (new)
+        "performance": "#d35400",  # Orange (new)
+        "accessibility": "#c0392b",  # Deep Red (new)
+        "total": "#7f8c8d"
+    }
+
+    # --- Define category definitions ---
+    category_meanings = {
+        "positive": "Covers standard and expected user behavior ensuring the application works as intended.",
+        "negative": "Tests invalid inputs or unexpected user actions to confirm the system handles errors gracefully.",
+        "workflow": "Validates complete end-to-end business processes that span multiple functionalities.",
+        "ui": "Ensures the user interface components (labels, buttons, alignment, responsiveness) meet design standards.",
+        "edge case": "Focuses on extreme or boundary conditions that test the robustness and limits of the system.",
+        "backend": "Validates APIs, data transformations, integrations, and server-side logic without UI involvement.",
+        "performance": "Measures response time, scalability, and system stability under different load conditions.",
+        "accessibility": "Ensures the application is usable by all users, including those with disabilities (WCAG compliance).",
+        "others": "Represents miscellaneous or uncategorized test cases not fitting into other specific groups.",
+        "total": "Sum of all test cases across categories."
+    }
+
+    # --- CSS styling ---
+    st.markdown("""
+        <style>
+            .testcase-container {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+                margin-top: 10px;
+            }
+            .testcase-box {
+                width: 150px;
+                height: 70px;
+                border-radius: 10px;
+                color: white;
+                padding: 6px;
+                text-align: center;
+                position: relative;
+                box-shadow: 1px 2px 6px rgba(0,0,0,0.15);
+                transition: transform 0.2s ease-in-out;
+                font-family: 'Segoe UI', sans-serif;
+            }
+            .testcase-box:hover { transform: scale(1.05); }
+            .testcase-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+            .testcase-count { font-size: 20px; font-weight: 700; margin: 0; }
+            .tooltip {
+                visibility: hidden;
+                background-color: rgba(0, 0, 0, 0.85);
+                color: #fff;
+                text-align: left;
+                padding: 6px;
+                border-radius: 6px;
+                position: absolute;
+                z-index: 1;
+                bottom: 110%;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 220px;
+                font-size: 11px;
+                line-height: 1.3;
+            }
+            .testcase-box:hover .tooltip { visibility: visible; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("### 🧾 Category-wise Test Case Summary")
+
+    # --- Build category summary boxes ---
+    boxes = []
+    for cat, count in category_counts.items():
+        color = color_map.get(cat, "#34495e")
+        meaning = category_meanings.get(cat, "No description available.")
+        box_html = (
+            f"<div class='testcase-box' style='background-color:{color};'>"
+            f"<div class='testcase-title'>{cat.capitalize()}</div>"
+            f"<div class='testcase-count'>{count}</div>"
+            f"<div class='tooltip'>{meaning}</div>"
+            f"</div>"
+        )
+        boxes.append(box_html)
+
+    html = "<div class='testcase-container'>" + "".join(boxes) + "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+    st.write(" ")
+
+    return category_counts
+
+def parse_and_display_testcases_categorywise_old(md_text):
     import streamlit as st
     import re
     from collections import defaultdict

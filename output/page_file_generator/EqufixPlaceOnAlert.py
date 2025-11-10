@@ -1,3 +1,5 @@
+import time
+
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
@@ -66,7 +68,17 @@ class EqufixPlaceOnAlert:
                 raise RuntimeError(f"Switched to a new window, but URL does not match expected {url}.")
 
     def click_continue_button(self):
-        self.click(self.LOCATORS["continue_button"])
+        time.sleep(10)
+        self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        scrollable_elements = self.driver.find_elements("xpath",
+                                                        "//*[contains(@style,'overflow') or contains(@class,'scroll')]")
+        for el in scrollable_elements:
+            try:
+                self.driver.execute_script("arguments[0].scrollTop = arguments[0].scrollHeight;", el)
+                time.sleep(1)
+            except Exception:
+                continue
+        self.driver.find_element(*self.LOCATORS["continue_button"]).click()
 
     def enter_zip_code(self, zip_code):
         self.enter_text(self.LOCATORS["zip"], zip_code)
