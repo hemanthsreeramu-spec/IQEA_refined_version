@@ -1,6 +1,7 @@
 import random
 import re
 import string
+import uuid
 from io import StringIO
 import pandas as pd
 from datetime import datetime
@@ -11,6 +12,63 @@ from langchain_openai import AzureChatOpenAI
 import os
 import time
 #############
+conversation_prompt_template ="""
+You are an expert AI prompt engineer specializing in creating realistic, logically connected **multi-turn conversation prompts** to evaluate an LLM’s reasoning depth.
+
+---
+### Input
+**Functional Requirement Text:**
+{requirements}
+
+**Category:**
+{category}
+
+**Subcategory:**
+{subcategory}
+
+---
+### Objective
+Generate a conversation that simulates a **natural, progressive dialogue** between a human evaluator and an LLM.  
+Each follow-up question **must logically depend** on the previous **answer**, exploring deeper nuances or implications of that answer.
+
+---
+### Rules
+1. Start with a **broad introductory question** directly tied to the requirement.
+2. After each answer, imagine how a human would naturally ask a **follow-up** question that digs deeper into:
+   - A term or concept mentioned in the LLM’s previous answer.
+   - A scenario, limitation, or implication raised by the previous response.
+3. Maintain **strong contextual continuity** — every question should make sense only if the previous answer existed.
+4. Include exactly **5 rounds** of Q&A.
+5. Provide the output strictly as a Markdown table with columns:
+
+| Category | Subcategory | Conversation Step | Question | Assumed LLM Answer |
+
+6. Ensure:
+   - Step 1 introduces the topic clearly.
+   - Step 2 clarifies or explores a detail from Step 1’s answer.
+   - Step 3 compares or challenges a concept from Step 2.
+   - Step 4 deepens with an exception, risk, or limitation.
+   - Step 5 concludes with a reflective or strategic insight.
+7. Maintain **realistic conversational flow** — avoid topic jumps.
+8. Keep responses short but rich in explanation.
+9. Do not include meta text, notes, or explanations outside the table.
+
+---
+### Example Format
+
+| Conversation Step | Question | Assumed LLM Answer |
+|------------------|-----------|--------------------|
+| 1 | Can you explain the primary difference between comprehensive major medical plans and critical illness plans? | Comprehensive plans pay providers for actual medical expenses; critical illness plans pay a fixed cash amount upon diagnosis. |
+| 2 | Since the cash benefit isn’t linked to bills, how do people usually use it? | Typically to cover lost income or non-medical expenses like rent or travel for treatment. |
+| 3 | So, would someone benefit from having both types of plans? | Yes, they are complementary—one covers medical costs, the other helps with financial gaps. |
+| 4 | You mentioned “pre-defined illnesses.” What happens if an illness isn’t on that list? | The plan won’t pay; coverage is restricted to explicitly listed conditions. |
+| 5 | Given those restrictions, how does underwriting differ from major medical plans? | Critical illness plans involve full medical underwriting, unlike guaranteed-issue comprehensive plans. |
+
+---
+### Task
+Based on the input requirement, generate a **contextually coherent 5-turn conversation** following the above pattern.
+"""
+
 prompt_template = """You are an expert Prompt Engineer tasked with generating **validation question prompts** to thoroughly test an LLM chatbot that has been fed the provided requirement document(s).
 
 OBJECTIVE:
@@ -84,59 +142,7 @@ Return **only** a Markdown table with EXACT columns and header below (no prelude
 ### Task
 Using the `requirements`, `category`, and `subcategory` create a **large, diverse list** of question prompts (as specified above). Output them strictly in the Markdown table format requested. Begin now.
 """
-prompt_template_1= """
-You are an expert AI Prompt Engineer specialized in generating domain-specific LLM prompts.
-Your task is to analyze the given functional requirements and the provided Category and Subcategory to craft a **highly detailed, self-contained, and reusable LLM prompt**.
-Each generated prompt should follow professional prompt-engineering principles:
-- Define the *role* of the AI clearly.
-- Specify *input structure* (what data the model receives).
-- Specify *output format* (table, text, JSON, Markdown, etc.).
-- Provide *strict instructions* for behavior and constraints.
-- Include *realistic variations or dimensions* relevant to the Category/Subcategory.
-- Ensure deep understanding of the **entire functional requirements** before generating prompts.
-- Derive a **clear conceptual picture** of the Category and Subcategory relationships before constructing the prompt.
----
-### Input
-**Functional Requirement Text:**
-{requirements}
-**Category:**
-{category}
-**Subcategory:**
-{subcategory}
----
-### Instructions (Strict)
-1. Begin by **fully understanding the given requirements** — identify core objectives, workflows, user actions, validations, and dependencies.
-2. Build a **clear mental model** of the relationship between the Category and Subcategory in context to these requirements before writing the prompt.
-3. Write the prompt as if it will be directly used by another LLM.
-4. Begin with a clear **role definition**, e.g., “You are an expert QA Test Case Generator…” or “You are a Data Validation Assistant…”
-5. The prompt should:
-   - Guide the LLM on what to generate (e.g., test cases, SQL checks, requirement insights, or validations).
-   - Include structured sections for *Input*, *Instructions*, and *Output Format*.
-6. Ensure the generated prompt uses **the same consistency and structure** as this sample:
-   - Intro (role + context)
-   - Input placeholders
-   - Stepwise instructions
-   - Output format
-   - Example (if applicable)
-7. The final prompt must be **ready to copy-paste** and directly usable by a QA, Analyst, or Developer.
-8. The generated prompt must be **domain-aware**:
-   - If Category = “UI Validation”, include user interactions and expected UI feedback.
-   - If Category = “Data Validation”, include schema, transformation, and data integrity checks.
-   - If Category = “Performance”, include load, concurrency, and threshold validations.
-   - If Category = “Security”, include authentication, authorization, encryption, and input sanitization.
-   - If Category = “Accessibility”, include screen reader, keyboard navigation, and ARIA compliance validation.
-   - If Category = “Backend”, include API, database, and service-level verification.
-9. Return the output strictly in **Markdown table format**:
 
-| Category | Subcategory | Prompt Description | Prompt |
-|-----------|--------------|--------------------|---------|
-| <category> | <subcategory> | <one-line purpose of prompt> | <full generated prompt text> |
-
-Do **not** include any text outside this table.
----
-### Task
-Analyze the requirements, understand the Category and Subcategory context completely, and generate a **high-quality, reusable LLM prompt** that aligns perfectly with the intended testing or validation domain.
-"""
 ###################
 category_prompt = """
 You are an expert business analyst specializing in requirement classification.
@@ -252,6 +258,8 @@ def load_prompt_from_file(prompt_type):
         return category_prompt
     elif prompt_type== "prompt_generation":
         return prompt_template
+    elif prompt_type== "conversation_prompt":
+        return conversation_prompt_template
     else:
         raise ValueError(f"Invalid prompt type: {prompt_type}")
 
@@ -265,8 +273,7 @@ def generate_category_prompt(prompt_type,requirements=""):
     final_prompt = prompt_template.format(requirements=requirements)
     print(final_prompt)
     return final_prompt
-import re
-import pandas as pd
+
 
 def parse_category_subcategory_from_response(llm_response):
     """
@@ -894,77 +901,82 @@ def parse_testcases_from_markdown(md_text):
     return rows
 
 def generate_random_prefix(length=8):
-    """Generate a random alphanumeric prefix."""
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
-def clean_table_lines(markdown_text):
-    """Extracts all markdown table lines (even across multiple tables)."""
-    lines = markdown_text.splitlines()
-    table_lines = []
-    current_table = []
+    """
+        Returns a compact unique suffix based on timestamp (microseconds) + 6 hex chars from uuid.
+        Example: 20251110_212845_123456_a1b2c3
+        """
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")  # includes microseconds
+    rand = uuid.uuid4().hex[:6]
+    return f"{ts}_{rand}"
+# def clean_table_lines(markdown_text):
+#     """Extracts all markdown table lines (even across multiple tables)."""
+#     lines = markdown_text.splitlines()
+#     table_lines = []
+#     current_table = []
+#
+#     for line in lines:
+#         if "|" in line.strip():  # part of a markdown table
+#             current_table.append(line)
+#         else:
+#             if current_table:  # table ended, store it
+#                 table_lines.extend(current_table)
+#                 current_table = []
+#
+#     # capture the last table if markdown ends with one
+#     if current_table:
+#         table_lines.extend(current_table)
+#
+#     # remove empty lines and ensure alignment pipes exist
+#     return [ln for ln in table_lines if ln.strip() and "|" in ln]
 
-    for line in lines:
-        if "|" in line.strip():  # part of a markdown table
-            current_table.append(line)
-        else:
-            if current_table:  # table ended, store it
-                table_lines.extend(current_table)
-                current_table = []
 
-    # capture the last table if markdown ends with one
-    if current_table:
-        table_lines.extend(current_table)
-
-    # remove empty lines and ensure alignment pipes exist
-    return [ln for ln in table_lines if ln.strip() and "|" in ln]
-
-
-def covert_response_to_testcases_single_sheet(markdown_text, test_collection, output_file="prompt_LLM_validator"+generate_random_prefix()+".xlsx"):
-    print("\n🚀 Starting test case parsing (Single Sheet Version)...")
-    # --- Normalize input ---
-    if isinstance(markdown_text, list):
-        markdown_text = "\n".join(str(line) for line in markdown_text)
-    elif not isinstance(markdown_text, str):
-        markdown_text = str(markdown_text)
-
-    # --- Remove code block wrapper ---
-    if markdown_text.startswith("```"):
-        markdown_text = "\n".join(
-            line for line in markdown_text.splitlines()
-            if not line.strip().startswith("```")
-        )
-
-    all_dfs = []
-
-    # --- Clean table lines ---
-    table_lines = clean_table_lines(markdown_text)
-
-    # ✅ Accept any markdown table (don’t depend on “Test Case Name”)
-    if len(table_lines) >= 2 and "|" in table_lines[0]:
-        try:
-            df = pd.read_csv(StringIO("\n".join(table_lines)), sep="|", engine="python", on_bad_lines="skip")
-            df = df.dropna(axis=1, how="all")
-            df.columns = [re.sub(r"\*+", "", col.strip()) for col in df.columns]
-            for col in df.select_dtypes(include="object").columns:
-                df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
-            all_dfs.append(df)
-        except Exception as e:
-            print(f"❌ Failed to parse markdown table: {e}")
-
-    if not all_dfs:
-        print("⚠️ No valid table found to save.")
-        return
-
-    final_df = pd.concat(all_dfs, ignore_index=True)
-
-    # --- Save to Excel ---
-    if not os.path.exists(test_collection):
-        os.makedirs(test_collection)
-        print(f"📁 Created output directory: {test_collection}")
-
-    excel_path = os.path.join(test_collection, output_file)
-    final_df.to_excel(excel_path, index=False, sheet_name="All_Prompts")
-    print(f"✅ Saved all generated questions to: {excel_path}")
-    return output_file
+# def covert_response_to_testcases_single_sheet(markdown_text, test_collection, output_file="prompt_LLM_validator"+generate_random_prefix()+".xlsx"):
+#     print("\n🚀 Starting test case parsing (Single Sheet Version)...")
+#     # --- Normalize input ---
+#     if isinstance(markdown_text, list):
+#         markdown_text = "\n".join(str(line) for line in markdown_text)
+#     elif not isinstance(markdown_text, str):
+#         markdown_text = str(markdown_text)
+#
+#     # --- Remove code block wrapper ---
+#     if markdown_text.startswith("```"):
+#         markdown_text = "\n".join(
+#             line for line in markdown_text.splitlines()
+#             if not line.strip().startswith("```")
+#         )
+#
+#     all_dfs = []
+#
+#     # --- Clean table lines ---
+#     table_lines = clean_table_lines(markdown_text)
+#
+#     # ✅ Accept any markdown table (don’t depend on “Test Case Name”)
+#     if len(table_lines) >= 2 and "|" in table_lines[0]:
+#         try:
+#             df = pd.read_csv(StringIO("\n".join(table_lines)), sep="|", engine="python", on_bad_lines="skip")
+#             df = df.dropna(axis=1, how="all")
+#             df.columns = [re.sub(r"\*+", "", col.strip()) for col in df.columns]
+#             for col in df.select_dtypes(include="object").columns:
+#                 df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+#             all_dfs.append(df)
+#         except Exception as e:
+#             print(f"❌ Failed to parse markdown table: {e}")
+#
+#     if not all_dfs:
+#         print("⚠️ No valid table found to save.")
+#         return
+#
+#     final_df = pd.concat(all_dfs, ignore_index=True)
+#
+#     # --- Save to Excel ---
+#     if not os.path.exists(test_collection):
+#         os.makedirs(test_collection)
+#         print(f"📁 Created output directory: {test_collection}")
+#
+#     excel_path = os.path.join(test_collection, output_file)
+#     final_df.to_excel(excel_path, index=False, sheet_name="All_Prompts")
+#     print(f"✅ Saved all generated questions to: {excel_path}")
+#     return output_file
 def extract_text_from_document_streamlit(uploaded_file, filename):
     text = ""
 
@@ -1006,3 +1018,92 @@ def extract_text_from_document_streamlit(uploaded_file, filename):
 
     print("✅ Text extracted:", text[:200], "...")  # Show only first 200 chars
     return text
+
+def clean_table_lines(markdown_text):
+    """Clean markdown table lines: remove empty lines, separators, and stray headers."""
+    lines = [line.strip() for line in markdown_text.splitlines() if line.strip()]
+    cleaned = []
+    for line in lines:
+        # Skip markdown code fences
+        if line.startswith("```"):
+            continue
+        # Skip separator rows like |---|---|
+        if re.match(r"^\|\s*-+\s*\|", line):
+            continue
+        cleaned.append(line)
+    return cleaned
+
+def covert_response_to_testcases_single_sheet(markdown_text, test_collection,
+                                              output_file=None):
+    """
+    Combine multiple markdown tables (possibly from multiple responses)
+    into one clean Excel file without repeated headers or separator lines.
+    """
+    print("\n🚀 Starting markdown table to Excel conversion (clean version)...")
+
+    # --- Normalize input ---
+    if isinstance(markdown_text, list):
+        markdown_text = "\n".join(str(line) for line in markdown_text)
+    elif not isinstance(markdown_text, str):
+        markdown_text = str(markdown_text)
+
+    # --- Clean and split multiple tables ---
+    markdown_text = markdown_text.replace("```", "")
+    table_blocks = re.split(r"\n\s*\n", markdown_text)  # split at double newlines
+    all_dfs = []
+    master_header = None
+
+    for block in table_blocks:
+        table_lines = clean_table_lines(block)
+        if len(table_lines) < 2 or "|" not in table_lines[0]:
+            continue
+        try:
+            df = pd.read_csv(StringIO("\n".join(table_lines)), sep="|", engine="python", on_bad_lines="skip")
+            df = df.dropna(axis=1, how="all")
+
+            # Cleanup column names
+            df.columns = [re.sub(r"\*+", "", col.strip()) for col in df.columns]
+
+            # Remove empty/NaN rows
+            df = df.dropna(how="all")
+
+            # Strip extra spaces
+            for col in df.select_dtypes(include="object").columns:
+                df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
+
+            # --- Handle repeated headers ---
+            if master_header is None:
+                master_header = list(df.columns)
+            else:
+                # Remove any rows where row values match header names
+                df = df[~df.apply(lambda row: all(str(row[c]).strip().lower() == str(c).strip().lower()
+                                                  for c in df.columns), axis=1)]
+
+            all_dfs.append(df)
+        except Exception as e:
+            print(f"⚠️ Skipping invalid block due to parse error: {e}")
+
+    if not all_dfs:
+        print("⚠️ No valid markdown tables found to save.")
+        return None
+
+    final_df = pd.concat(all_dfs, ignore_index=True)
+    final_df = final_df.loc[:, ~final_df.columns.str.contains('^Unnamed')]
+
+    # --- Prepare output file ---
+    if not os.path.exists(test_collection):
+        os.makedirs(test_collection)
+        print(f"📁 Created output directory: {test_collection}")
+
+    if not output_file:
+        output_file = f"prompt_LLM_validator_{generate_random_prefix()}.xlsx"
+
+    excel_path = os.path.join(test_collection, output_file)
+
+    try:
+        final_df.to_excel(excel_path, index=False, sheet_name="All_Prompts")
+        print(f"✅ Cleaned markdown tables saved successfully: {excel_path}")
+        return excel_path
+    except PermissionError:
+        print("❌ Permission denied. Please close the file if it’s open and retry.")
+        return None
