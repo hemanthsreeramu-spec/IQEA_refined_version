@@ -91,19 +91,14 @@ For the given **Category** and **Subcategory** (extracted from the requirements)
 --- 
 ### Question Types (must be covered — produce variations for each)
 - Comparisons
-- Scenario-based
-- Compute/Quantify (Compute for X)
-- Dynamic Info / Time-bound
+- Scenario Based
+- Compute for X
+- Dynamic Info
 - Factual
-- Client-related (personalized/clarifying)
-- Clarification / Follow-up prompts
-- Out-of-scope (should be identified as outside KB)
-- Ambiguous / Confusing phrasing (to test robustness)
-- Multi-turn / Conversation-flow prompts
-- Negative tests (malformed input, contradictory facts)
-- Localization / Region-specific variations
-- Safety / Sensitive content checks (if applicable)
-- Edge-case / Rare-event questions
+- Client-related
+- Investment Advice
+- Not Personal Finance
+- Outside Knowledge Base
 
 --- 
 ### Strict Instructions (Behavioral rules)

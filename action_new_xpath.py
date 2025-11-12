@@ -568,7 +568,7 @@ if st.session_state.checkbox3_state:
                                                                               image_data_processed, Action_data,
                                                                                prompt)
                     else:
-                        print("Model Type is gimini")
+                        print("Model Type is pepgenx")
                         constructedprompt = utils.generate_pom_from_excel_testcases("Test_case_generation_gemini", navigation,
                                                                                     image_data_processed, Action_data,
                                                                                     prompt)

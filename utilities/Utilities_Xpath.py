@@ -1,5 +1,7 @@
 import os
 import base64
+import uuid
+import requests
 from typing import Union, IO
 import openai
 import re
@@ -1731,7 +1733,8 @@ def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases,
 
         try:
             response = get_queries_from_ai_updated(prompt) if model_type == "azureopenai" \
-                else get_queries_from_ai_updated_gemini(prompt)
+                else llm_pepgenx(prompt)
+                #else get_queries_from_ai_updated_gemini(prompt)
             all_raw_responses += "\n" + response
 
             # Parse test cases
@@ -1980,6 +1983,7 @@ def get_queries_from_ai_updated_again(formatted_summary, previous_output):
     output_value = model([message])
     print(output_value)
     return output_value.content
+
 def get_queries_from_ai_updated_gemini(formatted_summary):
     # Access the variables
     model = "gemini-2.5-pro"
@@ -3187,3 +3191,53 @@ def estimate_testcase_coverage(formatted_summary):
         }
 
     return coverage_counts
+
+
+#####pepgenx
+
+okta_metadata= os.getenv("okta_metadata")
+okta_secret = os.getenv("okta_secret")
+okta_client = os.getenv("okta_client")
+team_id = os.getenv("team_id")
+project_id  = os.getenv("project_id")
+api_key = os.getenv("api_key")
+pepgenx_url= os.getenv("pepgenx_url")
+
+
+def pepgenx_authendication():
+        bearer_token = requests.get(okta_metadata,verify=False)
+        token_url = bearer_token.json()["token_endpoint"]
+        token_response = requests.post(
+                token_url,
+                auth=requests.auth.HTTPBasicAuth(
+                    okta_client, okta_secret
+                ),  # Basic Auth with client_id and client_secret
+                data={"grant_type": "client_credentials"},
+                headers={"Content-Type": "application/x-www-form-urlencoded"},verify=False
+        )
+
+        bearer_token = token_response.json()["access_token"]
+        print(bearer_token)
+        return bearer_token
+prompt ="""Hi"""
+def llm_pepgenx(prompt):
+        headers = {
+                'Authorization': f'Bearer {pepgenx_authendication}',
+                'team_id': team_id,
+                'project_id': project_id,
+                'user_id': 'test-user',
+                'transaction_id': str(uuid.uuid4()),
+                'x-pepgenx-apikey': api_key,
+                "Content-Type": "application/json",
+        }
+        test_data = {
+                "prompt": prompt,
+                "generation_model": "gpt-4o",
+                "temperature": 0.1
+        }
+
+        # response = requests.request("POST", url3, headers=headers,data=json.dumps(data2))
+        response = requests.request("POST", pepgenx_url, headers=headers, data=json.dumps(test_data),verify=False)
+        print(response.text)
+        return response
+
