@@ -3,6 +3,7 @@ from github import Github, GithubException  # Make sure GithubException is impor
 from gitlab import Gitlab
 import re
 from github import Github
+from pyasn1_modules.rfc8017 import emptyString
 from selenium.webdriver.chrome.service import Service
 import streamlit as st
 from selenium import webdriver
@@ -17,6 +18,7 @@ import time
 import utilities.Utilities_Xpath as utils
 import utilities.utils_action as action_utils
 import utilities.db_utils.handler as db_handler
+import utilities.TMT_Connection.Test_management_tool_utils as tmt_utils
 from PIL import Image
 import pytesseract
 import io
@@ -144,6 +146,21 @@ if "open_expander_collection" not in st.session_state:
     st.session_state.open_expander_collection = False
 if "recorded_actions_history" not in st.session_state:
     st.session_state.recorded_actions_history = False
+
+# ---------- TMT integration----------
+if "document_source_selector" not in st.session_state:
+    st.session_state.document_source_selector = "Files"   # default
+
+if "uploaded_file_path" not in st.session_state:
+    st.session_state.uploaded_file_path = None
+
+if "azure_workitem_id" not in st.session_state:
+    st.session_state.azure_workitem_id = ""
+
+if "jira_workitem_id" not in st.session_state:
+    st.session_state.jira_workitem_id = ""
+if "excel_path" not in st.session_state:
+    st.session_state.excel_path = ""
 
 st.title(" 🤖 TigerQE AI Platform - iQEA (Intelligent QE Assistant)")
 
@@ -438,42 +455,62 @@ if st.session_state.checkbox3_state:
                             st.warning(f"⚠️ Could not load content for: {file}")
                     Action_data = merged_content
         elif option == 'Documents':
-            # Show only document upload section
-            uploaded_file = st.file_uploader(
-                "Upload a PDF, Text, Word, or Excel document",
-                type=['pdf', 'docx', 'xlsx', 'txt']
+            source_type = st.selectbox(
+                "Select Source Type",
+                options=["Files", "Azure Board", "Jira"],
+                index=0,  # ensures default selection is "Files"
             )
+            # store selection explicitly (optional, selectbox with key already updates session_state)
+            st.session_state.document_source_selector = source_type
+            # Show only document upload section
+            if source_type == "Files":
+            # Show only document upload section
+                uploaded_file = st.file_uploader(
+                    "Upload a PDF, Text, Word, or Excel document",
+                    type=['pdf', 'docx', 'xlsx', 'txt'],
+                    key="uploaded_file_uploader"  # this will populate st.session_state.uploaded_file_uploader
+                )
+                if uploaded_file is not None:
+                    filename = uploaded_file.name.lower()
 
+                    if filename.endswith(".pdf"):
+                        st.success("PDF file uploaded successfully!")
+                        # Call your PDF extraction logic here
+                        # extracted_text = utils.extract_text_from_document(uploaded_file, filename)
+
+                    elif filename.endswith(".docx"):
+                        st.success("Word file uploaded successfully!")
+                        # Call your DOCX extraction logic here
+
+                    elif filename.endswith(".xlsx"):
+                        st.success("Excel file uploaded successfully!")
+                        # Call your Excel extraction logic here
+
+                    elif filename.endswith(".txt"):
+                        st.success("Text file uploaded successfully!")
+                        try:
+                            text_content = uploaded_file.read().decode("utf-8", errors="ignore")
+                        except Exception as e:
+                            st.error(f"Error reading TXT file: {e}")
+
+                    else:
+                        # This branch should rarely hit because file_uploader already restricts type
+                        st.error("Unsupported file format.")
+            elif source_type == "Azure Board":
+                st.info("Enter Azure Work Item ID (numeric)")
+                workitem = st.text_input("Azure Work Item ID", value=st.session_state.azure_workitem_id,
+                                         key="azure_workitem_text")
+                st.session_state.azure_workitem_id = workitem.strip()
+
+                if workitem and not workitem.isdigit():
+                    st.warning("Work Item ID typically numeric — ensure it's correct.")
+
+            elif source_type == "Jira":
+                st.info("Enter Jira Issue ID (e.g. PROJ-123)")
+                jira_id = st.text_input("Jira Issue ID", value=st.session_state.jira_workitem_id,
+                                        key="jira_workitem_text")
+                st.session_state.jira_workitem_id = jira_id.strip()
             Document_image_data = ""
-
-            if uploaded_file is not None:
-                filename = uploaded_file.name.lower()
-
-                if filename.endswith(".pdf"):
-                    st.success("PDF file uploaded successfully!")
-                    # Call your PDF extraction logic here
-                    # extracted_text = utils.extract_text_from_document(uploaded_file, filename)
-
-                elif filename.endswith(".docx"):
-                    st.success("Word file uploaded successfully!")
-                    # Call your DOCX extraction logic here
-
-                elif filename.endswith(".xlsx"):
-                    st.success("Excel file uploaded successfully!")
-                    # Call your Excel extraction logic here
-
-                elif filename.endswith(".txt"):
-                    st.success("Text file uploaded successfully!")
-                    try:
-                        text_content = uploaded_file.read().decode("utf-8", errors="ignore")
-                        Document_image_data += re.sub(r'\W+', ' ', text_content)
-                    except Exception as e:
-                        st.error(f"Error reading TXT file: {e}")
-
-                else:
-                    # This branch should rarely hit because file_uploader already restricts type
-                    st.error("Unsupported file format.")
-
             image_uploaded_files = st.file_uploader(
                 "📁 Upload one or more image files (Optional)",
                 type=["jpg", "jpeg", "png", "bmp", "tiff", "webp"],
@@ -481,25 +518,26 @@ if st.session_state.checkbox3_state:
             )
             if image_uploaded_files:
                 st.info("📸 Image processed.")
-                for uploaded_file in image_uploaded_files:
+                for image_uploaded_file in image_uploaded_files:
                     try:
-                        image = Image.open(uploaded_file)
+                        image = Image.open(image_uploaded_file)
                         #st.image(image, caption=uploaded_file.name, use_container_width=True)
 
                         # Extract text using pytesseract
                         extracted_text = pytesseract.image_to_string(image)
                         if extracted_text.strip():
-                            Document_image_data += f"\nImage: {uploaded_file.name}\nExtracted Text:\n{extracted_text.strip()}\n"
+                            Document_image_data += f"\nImage: {image_uploaded_file.name}\nExtracted Text:\n{extracted_text.strip()}\n"
                         else:
-                            Document_image_data += f"\nImage: {uploaded_file.name}\nExtracted Text: No text found\n"
+                            Document_image_data += f"\nImage: {image_uploaded_file.name}\nExtracted Text: No text found\n"
 
                     except Exception as e:
-                        st.error(f"Error processing {uploaded_file.name}: {e}")
+                        st.error(f"Error processing {image_uploaded_file.name}: {e}")
             st.markdown("Enter the navigation details (Optional)",
                         unsafe_allow_html=True)
             Navigation_details = st.text_area('', '')
         if st.button("Generate Functional Test Cases"):
-            st.session_state.testcase_response = None
+            st.session_state.testcase_response = []
+            st.session_state.testcases_saved = False
             st.session_state.scenario_response = None
             st.session_state.all_testcases= None
             st.session_state.overall_accuracy = None
@@ -588,11 +626,38 @@ if st.session_state.checkbox3_state:
                     utils.parse_and_display_testcases_categorywise(st.session_state.testcase_response)
                     st.write(" ")
 
-            elif option == 'Documents' and uploaded_file is not None:
-                extracted_data = utils.extract_text_from_document(uploaded_file,uploaded_file.name)
-                image_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Document_image_data} """
+            elif option == 'Documents' and source_type is not None:
 
-                Document_image_data_processed = utils.get_queries_from_ai_updated(image_prompt)
+                if source_type == "Files" and uploaded_file is not None:
+                    extracted_data = utils.extract_text_from_document(uploaded_file,uploaded_file.name)
+                elif source_type == "Azure Board" and st.session_state.azure_workitem_id is not None:
+                    try:
+                        exists, message = tmt_utils.validate_work_item_exists(st.session_state.azure_workitem_id)
+                        if exists:
+                            extracted_data = tmt_utils.fetch_workitem_detail(st.session_state.azure_workitem_id)
+                        else:
+                            st.error(message)
+                            st.error("Please enter valid workitem")
+                            st.stop()
+                    except Exception as e:
+                        st.error("Invalid Work Item")
+                elif source_type == "Jira"and st.session_state.azure_workitem_id is not None:
+                    try:
+                        exists, message = tmt_utils.validate_work_item_exists(st.session_state.azure_workitem_id )
+                        if exists:
+
+                            extracted_data = tmt_utils.fetch_workitem_detail(st.session_state.azure_workitem_id)
+                        else:
+                            st.error(message)
+                            st.error("Please enter valid workitem")
+                            st.stop()
+                    except Exception as e:
+                        st.error("Invalid Work Item")
+                image_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Document_image_data} """
+                if model_type == "azureopenai":
+                    Document_image_data_processed = utils.get_queries_from_ai_updated(image_prompt)
+                else:
+                    Document_image_data_processed = utils.llm_pepgenx(image_prompt)
                 print(Document_image_data_processed)
 
                 st.session_state.testcase_response = []
@@ -617,11 +682,134 @@ if st.session_state.checkbox3_state:
 
         if st.session_state.testcase_response:
             st.session_state.save_testcases = True
-        if st.session_state.save_testcases and st.button("Save test cases"):
+        if st.session_state.save_testcases and st.button("💾 Save test cases"):
 
             utils.covert_response_to_testcases_single_file(st.session_state.testcase_response, Test_case_collection)
-            utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
-            utils.covert_response_to_testcases_single_sheet(st.session_state.testcase_response, Test_case_collection)
+            #utils.covert_response_to_testcases(st.session_state.testcase_response, Test_case_collection)
+            st.session_state.excel_path=utils.covert_response_to_testcases_single_sheet(st.session_state.testcase_response, Test_case_collection)
+            st.session_state.testcases_saved = True
+            st.session_state.show_popup = True
+            st.session_state.show_form = False
+
+        if st.session_state.get("testcases_saved"):
+            if option == "Documents" and source_type == "Azure Board":
+                if st.button("📤 Export test cases to azure Board"):
+                    try:
+                        sub_work_item=tmt_utils.create_test_case(st.session_state.azure_workitem_id)
+                        tmt_utils.upload_attachment_to_testcase(sub_work_item,st.session_state.excel_path)
+                    except Exception as e:
+                        st.error("Invalid Work Item")
+                    st.success(f"✅ Test cases were successfully exported!\n\n📄 Work Item ID: **{sub_work_item}**")
+                    st.session_state.save_testcases = False
+            elif option == "Documents" and source_type == "Files":
+                if st.session_state.show_popup and not st.session_state.show_form:
+                    st.write("**Do you want to export the generated testcases?**")
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("Yes"):
+                            st.session_state.show_popup = False  # Hide popup
+                            st.session_state.show_form = True  # Show form for page file generation
+
+                    with col2:
+                        if st.button("No"):
+                            for _ in range(2):
+                                st.session_state.show_popup = False
+                                st.session_state.show_form = False
+                                st.session_state.prompt_response = ""
+                                xpath_output_placeholder = st.empty()
+                                # st.write("Page file generation skipped.")
+                                st.session_state.xpath_for_new_page_user_info = True
+                                st.rerun()
+                            st.info(
+                                "Test Case export skipped.")
+                # Show popup only if the flag is set
+                if st.session_state.show_form:
+                    st.info("Enter Azure Work Item ID (numeric)")
+                    workitem = st.text_input("Azure Work Item ID", value=st.session_state.azure_workitem_id,
+                                             key="azure_workitem_text")
+                    st.session_state.azure_workitem_id = workitem.strip()
+                    if workitem and not workitem.isdigit():
+                        st.warning("Work Item ID typically numeric — ensure it's correct.")
+                    if st.button("📤 Export test cases to azure Board"):
+
+                        if st.session_state.azure_workitem_id:
+                            try:
+                                exists, message = tmt_utils.validate_work_item_exists(
+                                    st.session_state.azure_workitem_id)
+                                if exists:
+                                    child_id = tmt_utils.create_test_case(st.session_state.azure_workitem_id)
+                                    tmt_utils.upload_attachment_to_testcase(child_id, st.session_state.excel_path)
+                                    st.success(f"✅ Test cases were successfully exported!\n\n📄 Work Item ID: **{child_id}**")
+                                else:
+                                    st.error(f"{message} — Please enter a valid Work Item.")
+                                    st.stop()
+
+                            except Exception as e:
+                                st.error("Invalid Work Item")
+                        else:
+                            try:
+                                child_id=tmt_utils.create_direct_test_case()
+                                tmt_utils.upload_attachment_to_testcase(child_id, st.session_state.excel_path)
+                                st.success(f"✅ Test cases were successfully exported!\n\n📄 Work Item ID: **{child_id}**")
+                            except Exception as e:
+                                st.error("Invalid Work Item")
+
+            elif option == "Recorded_Details":
+                if st.session_state.show_popup and not st.session_state.show_form:
+                    st.write("**Do you want to export the generated testcases?**")
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("Yes"):
+                            st.session_state.show_popup = False  # Hide popup
+                            st.session_state.show_form = True  # Show form for page file generation
+
+                    with col2:
+                        if st.button("No"):
+                            for _ in range(2):
+                                st.session_state.show_popup = False
+                                st.session_state.show_form = False
+                                st.session_state.prompt_response = ""
+                                xpath_output_placeholder = st.empty()
+                                # st.write("Page file generation skipped.")
+                                st.session_state.xpath_for_new_page_user_info = True
+                                st.rerun()
+                            st.info("Test Case export skipped.")
+                # Show popup only if the flag is set
+                if st.session_state.show_form:
+                    st.info("Enter Azure Work Item ID (numeric)")
+                    workitem = st.text_input("Azure Work Item ID", value=st.session_state.azure_workitem_id,
+                                             key="azure_workitem_text")
+                    st.session_state.azure_workitem_id = workitem.strip()
+                    if workitem and not workitem.isdigit():
+                        st.warning("Work Item ID typically numeric — ensure it's correct.")
+                    if st.button("📤 Export test cases to azure Board"):
+
+                        if st.session_state.azure_workitem_id:
+                            try:
+                                exists, message = tmt_utils.validate_work_item_exists(
+                                    st.session_state.azure_workitem_id)
+                                if exists:
+                                    child_id = tmt_utils.create_test_case(st.session_state.azure_workitem_id)
+                                    tmt_utils.upload_attachment_to_testcase(child_id, st.session_state.excel_path)
+                                    st.success(f"✅ Test cases were successfully exported!\n\n📄 Work Item ID: **{child_id}**")
+                                else:
+                                    st.error(f"{message} — Please enter a valid Work Item.")
+                                    st.stop()
+
+                            except Exception as e:
+                                st.error("Invalid Work Item")
+                        else:
+                            try:
+                                child_id=tmt_utils.create_direct_test_case()
+                                tmt_utils.upload_attachment_to_testcase(child_id, st.session_state.excel_path)
+                                st.success(f"✅ Test cases were successfully exported!\n\n📄 Work Item ID: **{child_id}**")
+                            except Exception as e:
+                                st.error("Invalid Work Item")
+
+
+
 if st.session_state.checkbox4_state:
     with st.expander("🔎 Locators 🧾 POM File Generator",expanded=st.session_state.open_expander_collection):
         st.title("Locator Generator for Visible Elements")
@@ -734,7 +922,7 @@ if st.session_state.checkbox4_state:
             if st.session_state.show_form:
                 st.header("Generating Page File")
                 page_name = st.text_input("Enter Page Name (same as xpath details)", value=page_name)
-                language = st.selectbox("Select Language", ["java", "python", "c#", "javascript"])
+                language = st.selectbox("Select Language", ["Java-Selenium","Java-Playwright","Python-Selenium", "Python-Playwright"])
                 Action_data = ""
                 if source == "file":
                     Action_data = utils.select_and_read_text_files_xpath("xpath", Action_collection)
@@ -758,7 +946,7 @@ if st.session_state.checkbox4_state:
 
                 if st.button("Generate Page File"):
                     st.session_state.prompt_response_page_file = ""
-                    Prompt = utils.generate_pom_from_excel_with_action("Page_File_Action", page_name, language,
+                    Prompt = utils.generate_pom_from_excel_with_action(language, page_name, language,
                                                                        Action_data)
                     st.session_state.prompt_response_page_file = utils.get_queries_from_ai("Page_File", Prompt)
                     st.subheader("Generated Page Class")
@@ -796,7 +984,7 @@ if st.session_state.checkbox4_state:
         with st.expander("🧾 Test Automation Script Generator"):
             st.title("Automation Script Generator using page file and test cases")
             test_file_name=st.text_input("Enter the test File Name")
-            test_file_language = st.selectbox("Select Language for test file", ["java", "python", "c#", "javascript"])
+            test_file_language = st.selectbox("Select Language for test file",["Java-Selenium","Java-Playwright","Python-Selenium", "Python-Playwright"] )
             page_files_content=""
             test_files_content=""
             Action_data=""
@@ -854,9 +1042,14 @@ if st.session_state.checkbox4_state:
                 # action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
                 # action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
             if st.button("Generate_Test_Script"):
-                Prompt = utils.generate_test_script("Test_File_Action", test_file_language, page_files_content,test_files_content,Action_data)
+                Lang_lib= "Test-" + test_file_language
+                Prompt = utils.generate_test_script(Lang_lib, test_file_language, page_files_content,test_files_content,Action_data)
                 test_script_response= utils.get_queries_from_ai_updated(Prompt)
                 #st.write(test_script_response)
+                Lang_lib_validate = "Test-validate-" + test_file_language
+                script_validator_prompt=utils.generate_script_validator(Lang_lib_validate,page_files_content,test_script_response)
+
+                test_script_response = utils.get_queries_from_ai_updated(script_validator_prompt)
                 if source == "file":
                     utils.create_test_file(Test_file_generator,test_file_name, test_file_language, test_script_response)
                 elif source == "database":

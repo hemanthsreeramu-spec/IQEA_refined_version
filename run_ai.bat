@@ -22,7 +22,7 @@ REM Install dependencies
 IF EXIST %REQUIREMENTS% (
     python.exe -m pip install --upgrade pip
     echo Installing all dependencies...
-    pip install -r %REQUIREMENTS%
+    pip install -u -r %REQUIREMENTS%
 ) ELSE (
     echo No requirements.txt found, skipping installation.
 )

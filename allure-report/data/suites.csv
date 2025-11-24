@@ -1,0 +1,4 @@
+"Status","Start Time","Stop Time","Duration in ms","Parent Suite","Suite","Sub Suite","Test Class","Test Method","Name","Description"
+"passed","Mon Nov 24 19:24:35 IST 2025","Mon Nov 24 19:24:44 IST 2025","8737","output.test_file_generator","test_script_selenium_valida","","","","test_place_alert[test_data1]",""
+"passed","Mon Nov 24 19:24:52 IST 2025","Mon Nov 24 19:25:02 IST 2025","9955","output.test_file_generator","test_script_selenium_valida","","","","test_place_alert[test_data2]",""
+"passed","Mon Nov 24 19:24:16 IST 2025","Mon Nov 24 19:24:26 IST 2025","10051","output.test_file_generator","test_script_selenium_valida","","","","test_place_alert[test_data0]",""

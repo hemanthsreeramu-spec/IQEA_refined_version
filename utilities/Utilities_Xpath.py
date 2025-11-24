@@ -82,18 +82,50 @@ def load_prompt_from_file(prompt_type):
     print(source)
     if source == "file":
         config_folder = os.path.join(os.getcwd(), "Input")
+        page_file_prompt=os.path.join(config_folder,"Page_file_prompts")
+        test_file_prompt = os.path.join(config_folder, "Test_file_prompts")
+        test_file_validator_prompt = os.path.join(config_folder, "Script_validation")
+
         prompt_file = ""
 
         if prompt_type == "Web":
             prompt_file = os.path.join(config_folder, "web_prompt.txt")
+        #####Page_file_prompt based on the language - library ( Selenium/Playwright)
+        elif prompt_type== "Java-Selenium":
+            prompt_file = os.path.join(page_file_prompt, "java_selenium_page_prompt.txt")
+        elif prompt_type== "Java-Playwright":
+            prompt_file = os.path.join(page_file_prompt, "java_playwright_page_prompt.txt")
+        elif prompt_type== "Python-Selenium":
+            prompt_file = os.path.join(page_file_prompt, "python_selenium_page_prompt.txt")
+        elif prompt_type== "Python-Playwright":
+            prompt_file = os.path.join(page_file_prompt, "python_playwright_page_prompt.text")
+            #####Test_file_prompt based on the language - library ( Selenium/Playwright)
+        elif prompt_type == "Test-Java-Selenium":
+            prompt_file = os.path.join(test_file_prompt, "java_selenium_test_prompt.txt")
+        elif prompt_type == "Test-Java-Playwright":
+            prompt_file = os.path.join(test_file_prompt, "java_playwright_test_prompt.txt")
+        elif prompt_type == "Test-Python-Selenium":
+            prompt_file = os.path.join(test_file_prompt, "python_selenium_test_prompt.txt")
+        elif prompt_type == "Test-Python-Playwright":
+            prompt_file = os.path.join(test_file_prompt, "python_playwright_test_prompt.txt")
+        #####Test_file_validator_prompt based on the language - library ( Selenium/Playwright)
+        elif prompt_type == "Test-validate-Java-Selenium":
+            prompt_file = os.path.join(test_file_validator_prompt, "java_selenium_validation.txt")
+        elif prompt_type == "Test-validate-Java-Playwright":
+            prompt_file = os.path.join(test_file_validator_prompt, "java_playwright_validation.txt")
+        elif prompt_type == "Test-validate-Python-Selenium":
+            prompt_file = os.path.join(test_file_validator_prompt, "python_selenium_validation.txt")
+        elif prompt_type == "Test-validate-Python-Playwright":
+            prompt_file = os.path.join(test_file_validator_prompt, "python_playwright_validation.txt")
+
         elif prompt_type== "PowerBi":
             prompt_file = os.path.join(config_folder, "powerBi_prompt.txt")
         elif prompt_type== "Page_File":
             prompt_file = os.path.join(config_folder, "Page_file_prompt.txt")
         elif prompt_type== "Page_File_Action":
-            prompt_file = os.path.join(config_folder, "Page_file_prompt_with_action.txt")
+            prompt_file = os.path.join(config_folder, "Page_file_prompt_with_action_v2.txt")
         elif prompt_type== "Test_File_Action":
-            prompt_file = os.path.join(config_folder, "test_script_prompt.txt")
+            prompt_file = os.path.join(config_folder, "test_script_prompt_v2.txt")
         elif prompt_type== "Test_case_generation":
             prompt_file = os.path.join(config_folder, "testcase_generation_final_prompt.txt")
         elif prompt_type== "Test_case_generation_gemini":
@@ -141,6 +173,10 @@ def load_prompt_from_file(prompt_type):
 
 def create_java_file(file_name: str, file_extension: str,response):
     # Ensure the file extension is .java
+    if file_extension in ["Java-Selenium", "Java-Playwright"]:
+        file_extension = "java"
+    elif file_extension in ["Python-Selenium", "Python-Playwright"]:
+        file_extension = "python"
     if not file_extension.startswith("."):
         if file_extension =="java":
             file_extension = f".{file_extension}"
@@ -159,6 +195,10 @@ def create_java_file(file_name: str, file_extension: str,response):
 
 def create_test_file(Test_file_location,file_name: str, file_extension: str,response):
     # Ensure the file extension is .java
+    if file_extension in ["Java-Selenium", "Java-Playwright"]:
+        file_extension = "java"
+    elif file_extension in ["Python-Selenium", "Python-Playwright"]:
+        file_extension = "python"
     if not file_extension.startswith("."):
         if file_extension =="java":
             file_extension = f".{file_extension}"
@@ -714,6 +754,15 @@ def generate_pom_from_excel_feature(prompt_type,Recorded_Action):
     print(final_prompt)
     return final_prompt
 
+def generate_script_validator(prompt_type,page_file_conetent,test_file_content):
+    prompt_template = load_prompt_from_file(prompt_type)
+
+    final_prompt = prompt_template.format(
+        page_files_content=page_file_conetent,
+        test_files_content=test_file_content,
+    )
+    print(final_prompt)
+    return final_prompt
 def generate_test_script(prompt_type,test_file_language,page_file_conetent,test_file_content,action_data=None):
     prompt_template = load_prompt_from_file(prompt_type)
     if action_data:
@@ -762,7 +811,7 @@ def generate_pom_from_excel_with_action(prompt_type,page_name,language,action_da
 
     # Extract XPaths
     xpaths = "\n".join(filtered_df["XPath"].apply(clean_xpath).tolist())
-    final_prompt = prompt_template.format(language=language,xpaths=xpaths,Action_data=action_data,page_name=page_name)
+    final_prompt = prompt_template.format(language_library=language,xpaths=xpaths,Action_data=action_data,page_name=page_name)
     print(final_prompt)
     return final_prompt
 
@@ -1734,7 +1783,7 @@ def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases,
         try:
             response = get_queries_from_ai_updated(prompt) if model_type == "azureopenai" \
                 else llm_pepgenx(prompt)
-                #else get_queries_from_ai_updated_gemini(prompt)
+                #else get_queries_from_ai_updated_geminiget_queries_from_ai_updated_gemini(prompt)
             all_raw_responses += "\n" + response
 
             # Parse test cases
@@ -2319,7 +2368,7 @@ def covert_response_to_testcases_single_sheet(markdown_text, test_collection, ou
         db_handler.save_testcases_to_db("All_Test_Cases", final_df, "sathanantham")
         print("✅ Saved all test cases in single sheet to DB")
         st.write("✅ Saved all test cases in single sheet to DB")
-
+    return excel_path
 def covert_response_to_testcases_single_file(markdown_text, test_collection):
     print("\n🚀 Starting test case parsing...")
 
@@ -3222,7 +3271,7 @@ def pepgenx_authendication():
 prompt ="""Hi"""
 def llm_pepgenx(prompt):
         headers = {
-                'Authorization': f'Bearer {pepgenx_authendication}',
+                'Authorization': f'Bearer {pepgenx_authendication()}',
                 'team_id': team_id,
                 'project_id': project_id,
                 'user_id': 'test-user',
@@ -3239,5 +3288,33 @@ def llm_pepgenx(prompt):
         # response = requests.request("POST", url3, headers=headers,data=json.dumps(data2))
         response = requests.request("POST", pepgenx_url, headers=headers, data=json.dumps(test_data),verify=False)
         print(response.text)
-        return response
+        raw_text=response_check(response.text)
+        return str(raw_text)
+def response_check(raw_response):
+    """
+        Cleans up LLM JSON-like response by removing unnecessary sections.
+        Handles prompt, metadata, and markdown code fences.
+        """
 
+    # Ensure string
+    if not isinstance(raw_response, str):
+        raw_response = str(raw_response)
+
+    cleaned = raw_response
+
+    # 1️⃣ Remove from "prompt" to the next closing brace
+    cleaned = re.sub(r'","prompt".*?}', '}', cleaned, flags=re.DOTALL)
+
+    # 2️⃣ Remove from '{"response' to the first colon
+    cleaned = re.sub(r'\{"response"\s*:\s*', '', cleaned, flags=re.DOTALL)
+
+    # 3️⃣ Remove from "```" to "markdown" (if exists)
+    cleaned = re.sub(r'```.*?markdown', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+
+    # 4️⃣ Remove all "```" fences
+    cleaned = cleaned.replace("```", "")
+
+    # 5️⃣ Clean up trailing braces, quotes, and whitespace
+    cleaned = cleaned.strip("} \n\t\"")
+
+    return cleaned.strip()

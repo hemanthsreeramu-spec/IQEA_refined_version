@@ -95,6 +95,10 @@ def save_action_to_db(action_name, content, created_by):
     return action.id
 
 def save_testfile_to_db(test_name, content, created_by, language):
+    if language in ["Java-Selenium", "Java-Playwright"]:
+        language = "java"
+    elif language in ["Python-Selenium", "Python-Playwright"]:
+        language = "python"
     ext = "java" if language == "java" else "py"
     file_name = f"{test_name}.{ext}"
 
@@ -115,6 +119,10 @@ def save_testfile_to_db(test_name, content, created_by, language):
     return testfile.id
 
 def save_pagefile_to_db(page_name, content, created_by, language):
+    if language in ["Java-Selenium", "Java-Playwright"]:
+        file_extension = "java"
+    elif language in ["Python-Selenium", "Python-Playwright"]:
+        file_extension = "python"
     ext = "java" if language == "java" else "py"
     file_name = f"{page_name}.{ext}"
 
