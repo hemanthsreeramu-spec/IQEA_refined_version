@@ -24,10 +24,10 @@ Do NOT add other imports.
 
 LOCATORS — Provide a LOCATORS dictionary exactly in this format:
 
-LOCATORS = {
+LOCATORS = {{
     "key_name": (By.XPATH, "<xpath>"),
     ...
-}
+}}
 
 
 Keys must be pythonic snake_case and derived from element meaning (e.g., submit_button, last_name_input).

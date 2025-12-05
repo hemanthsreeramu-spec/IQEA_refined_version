@@ -1,6 +1,7 @@
 import subprocess
 from github import Github, GithubException  # Make sure GithubException is imported
 from gitlab import Gitlab
+import pandas as pd
 import re
 from github import Github
 from pyasn1_modules.rfc8017 import emptyString
@@ -42,10 +43,13 @@ Page_collection = os.path.join(output_folder, "page_file_generator")
 Test_case_collection = os.path.join(output_folder, "Test_Cases_collection")
 Test_file_generator = os.path.join(output_folder, "test_file_generator")
 feature_file_collection = os.path.join(output_folder, "Feature_file_generator")
+test_data_folder=os.path.join(output_folder, "Test_data_generator")
+api_template_file=os.path.join(input_folder,"Api_template.xlsx")
 os.makedirs(Page_collection, exist_ok=True)
 os.makedirs(Test_case_collection, exist_ok=True)
 os.makedirs(Action_collection, exist_ok=True)
 os.makedirs(feature_file_collection, exist_ok=True)
+os.makedirs(test_data_folder, exist_ok=True)
 #page_screenshot_folder_new = os.path.join(Action_collection, "page_screenshot_valid")
 page_screenshot_folder = os.path.join(Action_collection, "page_screenshot")
 os.makedirs(page_screenshot_folder, exist_ok=True)
@@ -123,6 +127,10 @@ if "checkbox6_state" not in st.session_state:
     st.session_state.checkbox6_state = True
 if "checkbox7_state" not in st.session_state:
     st.session_state.checkbox7_state = True
+if "checkbox8_state" not in st.session_state:
+    st.session_state.checkbox8_state = True
+if "checkbox9_state" not in st.session_state:
+    st.session_state.checkbox9_state = True
 if "failed_files" not in st.session_state:
     st.session_state.failed_files = []
 if "regenerate_clicked" not in st.session_state:
@@ -161,8 +169,20 @@ if "jira_workitem_id" not in st.session_state:
     st.session_state.jira_workitem_id = ""
 if "excel_path" not in st.session_state:
     st.session_state.excel_path = ""
-
+### test_data_generate
+if "test_data_action_data" not in st.session_state:
+    st.session_state.test_data_action_data = ""
+if "test_files_content" not in st.session_state:
+    st.session_state.test_files_content = ""
+if "test_data_addition_info" not in st.session_state:
+    st.session_state.test_data_addition_info= ""
+if "test_data_llm_response" not in st.session_state:
+    st.session_state.test_data_llm_response= ""
+#### Api
+if "api_data" not in st.session_state:
+    st.session_state.api_data= ""
 st.title(" 🤖 TigerQE AI Platform - iQEA (Intelligent QE Assistant)")
+
 
 # 1. Open the browser
 page_url = st.text_input("Enter the URL of the page:")
@@ -368,7 +388,6 @@ if st.session_state.checkbox2_state:
             if source == "database":
                 db_handler.save_featurefile_to_db(Feature_file_name, feature_response, get_update_user())
                 st.success(f"feature file save in database for '{Feature_file_name}'")
-
 if st.session_state.checkbox3_state:
     with (st.expander("🧮 E2E Scenario Based Test Case Generator")):
 
@@ -435,7 +454,7 @@ if st.session_state.checkbox3_state:
                 st.session_state.selected_images = []
             st.markdown("**Enter the additional information or requirements** <span style='color:red;'>*</span>",
                         unsafe_allow_html=True)
-            prompt = st.text_area('', '')
+            prompt = st.text_area("Enter the test requirements", "",key="user_requirements_textarea")
             st.markdown("**Please select relevent action file(Optional)**", unsafe_allow_html=True)
             Action_data = ""
             if source == "file":
@@ -534,7 +553,7 @@ if st.session_state.checkbox3_state:
                         st.error(f"Error processing {image_uploaded_file.name}: {e}")
             st.markdown("Enter the navigation details (Optional)",
                         unsafe_allow_html=True)
-            Navigation_details = st.text_area('', '')
+            Navigation_details = st.text_area("Enter Navigation Details", "",key="navigation_details_textarea")
         if st.button("Generate Functional Test Cases"):
             st.session_state.testcase_response = []
             st.session_state.testcases_saved = False
@@ -809,8 +828,66 @@ if st.session_state.checkbox3_state:
                                 st.error("Invalid Work Item")
 
 
-
 if st.session_state.checkbox4_state:
+    with st.expander("🧪 Action-Driven Test Data Generator"):
+        st.title("Enhanced Test Data Generator (Based on Action File)")
+        st.session_state.test_data_action_data = ""
+        st.session_state.test_files_content = ""
+        if source == "file":
+            st.session_state.test_files_content = utils.select_and_read_text_files_xpath("test data generation -Test Cases files", Test_case_collection)
+            st.session_state.test_data_action_data = utils.select_and_read_text_files_xpath("test data generation -Recorded actions files", Action_collection)
+        elif source == "database":
+            all_testcase_files = db_handler.get_all_testcasefile_names()
+            selected_testcase_files = st.multiselect("Select saved testcase files from database", all_testcase_files)
+            if selected_testcase_files:
+                merged_testcase_content = ""
+
+                for file in selected_testcase_files:
+                    content = db_handler.get_action_content_by_name(file, "testcase")
+                    if content:
+                        merged_testcase_content += f"\n### {file} ###\n{content}\n"
+                    else:
+                        # st.warning(f"⚠️ Could not load content for: {file}")
+                        st.session_state.failed_files.append(file)
+
+                st.session_state.test_files_content = merged_testcase_content
+                if st.session_state.failed_files:
+                    st.warning("⚠️ Could not load content for the following files:\n- " + "\n- ".join(
+                        st.session_state.failed_files))
+            all_files = db_handler.get_all_action_names()
+            selected_files = st.multiselect("Select saved action files from database for pagefile",
+                                            all_files)
+            if selected_files:
+                merged_content = ""
+
+                for file in selected_files:
+                    content = db_handler.get_action_content_by_name(file, "action")
+                    if content:
+                        merged_content += f"\n### {file} ###\n{content}\n"
+                    else:
+                        st.warning(f"⚠️ Could not load content for: {file}")
+                st.session_state.test_data_action_data = merged_content
+
+        st.markdown("**Enter the additional information or sample data** <span style='color:red;'>*</span>",
+                    unsafe_allow_html=True)
+        st.session_state.test_data_addition_info= st.text_area("Optional: Provide additional test data", "",key="user_data_textarea")
+        if st.button("Generate Functional Test Data"):
+            if st.session_state.test_data_action_data:
+              constructed_prompt=utils.generate_promot_test_data_generator("test_data",st.session_state.test_data_action_data,st.session_state.test_files_content,st.session_state.test_data_addition_info)
+              st.session_state.test_data_llm_response=utils.get_queries_from_ai_updated(constructed_prompt)
+            else:
+                st.error("Please select action file")
+        if st.session_state.test_data_llm_response:
+            test_data_file_name = st.text_input("Enter the Page Name:")
+            if st.button("Save Test Data"):
+                if test_data_file_name:
+                    utils.save_test_data_into_excel(st.session_state.test_data_llm_response,test_data_file_name,test_data_folder)
+                    st.success("Test data generated successfully")
+
+                else:
+                    st.error("Please select test data file name")
+
+if st.session_state.checkbox5_state:
     with st.expander("🔎 Locators 🧾 POM File Generator",expanded=st.session_state.open_expander_collection):
         st.title("Locator Generator for Visible Elements")
 
@@ -979,7 +1056,7 @@ if st.session_state.checkbox4_state:
             st.info(
                 "Please change to the new page in the browser and click 'Collecting Elements' again.")
             st.session_state.xpath_for_new_page_user_info = False
-    if st.session_state.checkbox5_state:
+    if st.session_state.checkbox6_state:
         st.session_state.failed_files = []
         with st.expander("🧾 Test Automation Script Generator"):
             st.title("Automation Script Generator using page file and test cases")
@@ -1050,11 +1127,18 @@ if st.session_state.checkbox4_state:
                 script_validator_prompt=utils.generate_script_validator(Lang_lib_validate,page_files_content,test_script_response)
 
                 test_script_response = utils.get_queries_from_ai_updated(script_validator_prompt)
+                second_level_script_validation=utils.generate_script_validation_prompt("Script_validation_common",page_files_content,test_script_response,Lang_lib)
+                print("second_level_script_validation",second_level_script_validation)
+                final_test_page_script=utils.get_queries_from_ai_updated(second_level_script_validation)
+                print("final_test_page_script", final_test_page_script)
+                utils.update_page_files_from_json(final_test_page_script,Page_collection)
+                validated_test_script=utils.extract_test_script_from_json(final_test_page_script)
+                print("validated_test_script", validated_test_script)
                 if source == "file":
-                    utils.create_test_file(Test_file_generator,test_file_name, test_file_language, test_script_response)
+                    utils.create_test_file(Test_file_generator,test_file_name, test_file_language, validated_test_script)
                 elif source == "database":
-                    db_handler.save_testfile_to_db(test_file_name,test_script_response,get_update_user(),test_file_language)
-if st.session_state.checkbox6_state:
+                    db_handler.save_testfile_to_db(test_file_name,validated_test_script,get_update_user(),test_file_language)
+if st.session_state.checkbox7_state:
     with st.expander("⚙️ Source Code 📡 Automation Bridge"):
         st.title("Upload code to Repository")
         if source == "file":
@@ -1126,7 +1210,7 @@ if st.session_state.checkbox6_state:
                 st.warning("⚠️ Please enter both folder names in the repo.")
 
 
-if st.session_state.checkbox7_state:
+if st.session_state.checkbox8_state:
     if source == "database":
         with st.expander("📥 Download Artifacts"):
             st.title("Download Artifacts from Database")
@@ -1163,7 +1247,6 @@ if st.session_state.checkbox7_state:
                         st.warning("⚠️ Could not prepare the ZIP.")
                 else:
                     st.warning("⚠️ Please select at least one file.")
-
 # Footer of webpage
 st.divider()
 st.markdown("""    
@@ -1171,8 +1254,9 @@ st.markdown("""
     - Reach us at [QE Core Team](mailto:sahil.gupta@tigeranalytics.com)
 """)
 
-# Create 7 columns
-col0, col1, col2, col3, col4, col5, col6, col7 = st.columns(8)
+
+# Create 10 columns
+col0, col1, col2, col3, col4, col5, col6, col7,col8= st.columns(9)
 
 with col0:
     st.write("Choose display")
@@ -1211,3 +1295,11 @@ with col7:
     if st.session_state.checkbox7_state != checkbox7:
         st.session_state.checkbox7_state = checkbox7  # Update session state
         st.rerun()
+
+with col8:
+    checkbox8= st.checkbox("(8)", value=st.session_state.checkbox8_state)
+    if st.session_state.checkbox8_state != checkbox8:
+        st.session_state.checkbox8_state = checkbox8  # Update session state
+        st.rerun()
+
+

@@ -21,3 +21,6 @@ def get_db_url():
 
 def get_update_user():
     return config.get('DATABASE', 'DB_USER') # change the username for database updates
+
+def get_api_key():
+    return config.get('API', 'Api_key')

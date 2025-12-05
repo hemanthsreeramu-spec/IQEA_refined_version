@@ -1,105 +1,62 @@
 import re
+import json
+import os
 
-# AI response in markdown format
-response_text = f"""### Evaluation of Test Cases Against Requirement
+current_path = os.getcwd()
+output_folder = os.path.join(current_path, "output")
+xpath_generator_folder = os.path.join(output_folder, "xpath_generator")
+Page_file_generator = os.path.join(output_folder, "page_file_generator")
+raw_response="""
+{"response":"from selenium.webdriver.common.by import By\nfrom selenium.webdriver.support.ui import WebDriverWait\nfrom selenium.webdriver.support import expected_conditions as EC\nfrom selenium.webdriver.common.action_chains import ActionChains\nfrom selenium.webdriver.common.keys import Keys\n\nclass GPA_Login:\n    LOCATORS = {\n        \"userid_input\": (By.XPATH, \"//input[@id='userid']\"),\n        \"identifier_field\": (By.XPATH, \"//input[@id='identifier']\"),\n        \"submit_button\": (By.XPATH, \"//button[@id='submit']\"),\n        \"credentials_passcode_field\": (By.XPATH, \"//input[@id='credentials.passcode']\"),\n        \"verify_button\": (By.XPATH, \"//button[text()='Verify']\"),\n        \"security_question_answer_field\": (By.XPATH, \"//input[@id='credentials.answer']\")\n    }\n\n    def __init__(self, driver):\n        self.driver = driver\n        self.wait = WebDriverWait(driver, 10)\n\n    def wait_for_element(self, locator):\n        return self.wait.until(EC.presence_of_element_located(locator))\n\n    def click(self, locator):\n        element = self.wait_for_element(locator)\n        element.click()\n\n    def enter_text(self, locator, text):\n        element = self.wait_for_element(locator)\n        element.clear()\n        element.send_keys(text)\n\n    def switch_to_window_by_index(self, index):\n        handles = self.driver.window_handles\n        if index < len(handles):\n            self.driver.switch_to.window(handles[index])\n        else:\n          
+  raise RuntimeError(f\"Window index {index} out of range.\")\n\n    def switch_to_window_by_handle(self, handle):\n        self.driver.switch_to.window(handle)\n\n    def switch_to_window_matching_url(self, url):\n        for handle in self.driver.window_handles:\n            self.driver.switch_to.window(handle)\n            if self.driver.current_url == url:\n                return\n        raise RuntimeError(f\"No window found with URL: {url}\")\n\n    def switch_to_new_window(self, url=None):\n        handles_before = set(self.driver.window_handles)\n        self.wait.until(lambda driver: len(driver.window_handles) > len(handles_before))\n        new_handles = set(self.driver.window_handles) - handles_before\n        if new_handles:\n            self.driver.switch_to.window(new_handles.pop())\n            if url and self.driver.current_url != url:\n                raise RuntimeError(f\"Switched to a new window, but URL does not match. Expected: {url}, Found: {self.driver.current_url}\")\n\n    def enter_userid(self, userid):\n        self.wait_for_element(self.LOCATORS[\"userid_input\"])\n        self.enter_text(self.LOCATORS[\"userid_input\"], userid)\n\n    def click_identifier_field(self):\n        self.wait_for_element(self.LOCATORS[\"identifier_field\"])\n        self.click(self.LOCATORS[\"identifier_field\"])\n\n    def enter_identifier(self, identifier):\n        self.wait_for_element(self.LOCATORS[\"identifier_field\"])\n        self.enter_text(self.LOCATORS[\"identifier_field\"], identifier)\n\n    def click_submit_button(self):\n        self.wait_for_element(self.LOCATORS[\"submit_button\"])\n        self.click(self.LOCATORS[\"submit_button\"])\n\n    def enter_credentials_passcode(self, passcode):\n        self.wait_for_element(self.LOCATORS[\"credentials_passcode_field\"])\n        self.enter_text(self.LOCATORS[\"credentials_passcode_field\"], passcode)\n\n    def click_verify_button(self):\n        self.wait_for_element(self.LOCATORS[\"verify_button\"])\n        self.click(self.LOCATORS[\"verify_button\"])\n\n    def enter_security_question_answer(self, answer):\n        self.wait_for_element(self.LOCATORS[\"security_question_answer_field\"])\n        self.enter_text(self.LOCATORS[\"security_question_answer_field\"], answer)\n\n    def perform_login_flow(self, userid, identifier, passcode, security_answer):\n        self.enter_userid(userid)\n        self.click_identifier_field()\n        self.enter_identifier(identifier)\n        self.click_submit_button()\n        self.enter_credentials_passcode(passcode)\n        self.click_submit_button()\n        self.enter_security_question_answer(security_answer)\n        self.click_verify_button()","prompt":"You are an expert in generating Page Object Model (POM) classes for Selenium frameworks.  Your task is to generate a complete, syntactically correct, and production-ready python class based on the provided input.  Inputs: 1. Elements (with XPaths): //input[@id='userid']  2. Recorded User Actions (to derive methods and behavior): {'gpa_login_logout_actions.txt': 'Switched to new window: [https://secure.ite.pepsico.com/oauth2/default/v1/authorize?client_id=0oa1mhob45h8zzwvC0h8&code_challenge=BDuj5JwYzLokmmTNxBaMSgjevtec001grbUiErYSsl4&code_challenge_method=S256&nonce=hEEjbo2H9dsghccjCUOaWBzDhTS4n6dTfOAcq7zijTxtDHIvVzSPNJyJ5gkvCWpL&redirect_uri=https%3A%2F%2Fgpa-web-qa.global.gw01.aks01.eus.nonprod.azure.intra.pepsico.com%2Flogin%2Fcallback&response_type=code&state=xNsqLb9BMaLXqnbCeSarIf4xzxR5dVGEpz3IzvDEHOtql6wkqfRPT1wTSOXI8zM7&scope=openid%20email%20profile%20offline_access]\\nClick on \"identifier\" (URL: https://secure.ite.pepsico.com/oauth2/default/v1/authorize?client_id=0oa1mhob45h8zzwvC0h8&code_challenge=BDuj5JwYzLokmmTNxBaMSgjevtec001grbUiErYSsl4&code_challenge_method=S256&nonce=hEEjbo2H9dsghccjCUOaWBzDhTS4n6dTfOAcq7zijTxtDHIvVzSPNJyJ5gkvCWpL&redirect_uri=https%3A%2F%2Fgpa-web-qa.global.gw01.aks01.eus.nonprod.azure.intra.pepsico.com%2Flogin%2Fcallback&response_type=code&state=xNsqLb9BMaLXqnbCeSarIf4xzxR5dVGEpz3IzvDEHOtql6wkqfRPT1wTSOXI8zM7&scope=openid%20email%20profile%20offline_access)\\nEnter \"rkr\" in the \"identifier\" field (URL: https://secure.ite.pepsico.com/oauth2/default/v1/authorize?client_id=0oa1mhob45h8zzwvC0h8&code_challenge=BDuj5JwYzLokmmTNxBaMSgjevtec001grbUiErYSsl4&code_challenge_method=S256&nonce=hEEjbo2H9dsghccjCUOaWBzDhTS4n6dTfOAcq7zijTxtDHIvVzSPNJyJ5gkvCWpL&redirect_uri=https%3A%2F%2Fgpa-web-qa.global.gw01.aks01.eus.nonprod.azure.intra.pepsico.com%2Flogin%2Fcallback&response_type=code&state=xNsqLb9BMaLXqnbCeSarIf4xzxR5dVGEpz3IzvDEHOtql6wkqfRPT1wTSOXI8zM7&scope=openid%20email%20profile%20offline_access)\\nClick on \"submit\" (URL: https://secure.ite.pepsico.com/oauth2/default/v1/authorize?client_id=0oa1mhob45h8zzwvC0h8&code_challenge=BDuj5JwYzLokmmTNxBaMSgjevtec001grbUiErYSsl4&code_challenge_method=S256&nonce=hEEjbo2H9dsghccjCUOaWBzDhTS4n6dTfOAcq7zijTxtDHIvVzSPNJyJ5gkvCWpL&redirect_uri=https%3A%2F%2Fgpa-web-qa.global.gw01.aks01.eus.nonprod.azure.intra.pepsico.com%2Flogin%2Fcallback&response_type=code&state=xNsqLb9BMaLXqnbCeSarIf4xzxR5dVGEpz3IzvDEHOtql6wkqfRPT1wTSOXI8zM7&scope=openid%20email%20profile%20offline_access)\\nClick on \"Log In With Okta FastPass\\nLearn More\\nOR\\nUser ID - Email Address or Global Person ID (GPID)\\xa0\\nFORGOT PASSWORD\\nHELP\\nFIRST TIME USER\" (URL: https://secure.ite.pepsico.com/oauth2/default/v1/authorize?client_id=0oa1mhob45h8zzwvC0h8&code_challenge=BDuj5JwYzLokmmTNxBaMSgjevtec001grbUiErYSsl4&code_challenge_method=S256&nonce=hEEjbo2H9dsghccjCUOaWBzDhTS4n6dTfOAcq7zijTxtDHIvVzSPNJyJ5gkvCWpL&redirect_uri=https%3A%2F%2Fgpa-web-qa.global.gw01.aks01.eus.nonprod.azure.intra.pepsico.com%2Flogin%2Fcallback&response_type=code&state=xNsqLb9BMaLXqnbCeSarIf4xzxR5dVGEpz3IzvDEHOtql6wkqfRPT1wTSOXI8zM7&scope=openid%20email%20profile%20offline_access)\\nClick on \"credentials.passcode\" (URL: https://secure.ite.pepsico.com/oauth2/default/v1/authorize?client_id=0oa1mhob45h8zzwvC0h8&code_challenge=BDuj5JwYzLokmmTNxBaMSgjevtec001grbUiErYSsl4&code_challenge_method=S256&nonce=hEEjbo2H9dsghccjCUOaWBzDhTS4n6dTfOAcq7zijTxtDHIvVzSPNJyJ5gkvCWpL&redirect_uri=https%3A%2F%2Fgpa-web-qa.global.gw01.aks01.eus.nonprod.azure.intra.pepsico.com%2Flogin%2Fcallback&response_type=code&state=xNsqLb9BMaLXqnbCeSarIf4xzxR5dVGEpz3IzvDEHOtql6wkqfRPT1wTSOXI8zM7&scope=openid%20email%20profile%20offline_access)\\nEnter \"u)z48FyuOY6-vxZ\" in the \"credentials.passcode\" field (URL: https://secure.ite.pepsico.com/oauth2/default/v1/authorize?client_id=0oa1mhob45h8zzwvC0h8&code_challenge=BDuj5JwYzLokmmTNxBaMSgjevtec001grbUiErYSsl4&code_challenge_method=S256&nonce=hEEjbo2H9dsghccjCUOaWBzDhTS4n6dTfOAcq7zijTxtDHIvVzSPNJyJ5gkvCWpL&redirect_uri=https%3A%2F%2Fgpa-web-qa.global.gw01.aks01.eus.nonprod.azure.intra.pepsico.com%2Flogin%2Fcallback&response_type=code&state=xNsqLb9BMaLXqnbCeSarIf4xzxR5dVGEpz3IzvDEHOtql6wkqfRPT1wTSOXI8zM7&scope=openid%20email%20profile%20offline_access)\\nClick on \"submit\" (URL: https://secure.ite.pepsico.com/oauth2/default/v1/authorize?client_id=0oa1mhob45h8zzwvC0h8&code_challenge=BDuj5JwYzLokmmTNxBaMSgjevtec001grbUiErYSsl4&code_challenge_method=S256&nonce=hEEjbo2H9dsghccjCUOaWBzDhTS4n6dTfOAcq7zijTxtDHIvVzSPNJyJ5gkvCWpL&redirect_uri=https%3A%2F%2Fgpa-web-qa.global.gw01.aks01.eus.nonprod.azure.intra.pepsico.com%2Flogin%2Fcallback&response_type=code&state=xNsqLb9BMaLXqnbCeSarIf4xzxR5dVGEpz3IzvDEHOtql6wkqfRPT1wTSOXI8zM7&scope=openid%20email%20profile%20offline_access)\\nClick on \"Verify with your password\\nPassword\\xa0\\nFORGOT PASSWORD\\nBACK TO SIGN IN\" (URL:https://secure.ite.pepsico.com/oauth2/default/v1/authorize?client_id=0oa1mhob45h8zzwvC0h8&code_challenge=BDuj5JwYzLokmmTNxBaMSgjevtec001grbUiErYSsl4&code_challenge_method=S256&nonce=hEEjbo2H9dsghccjCUOaWBzDhTS4n6dTfOAcq7zijTxtDHIvVzSPNJyJ5gkvCWpL&redirect_uri=https%3A%2F%2Fgpa-web-qa.global.gw01.aks01.eus.nonprod.azure.intra.pepsico.com%2Flogin%2Fcallback&response_type=code&state=xNsqLb9BMaLXqnbCeSarIf4xzxR5dVGEpz3IzvDEHOtql6wkqfRPT1wTSOXI8zM7&scope=openid%20email%20profile%20offline_access)\\nEnter \"doctor\" in the \"credentials.answer\" field (URL: https://secure.ite.pepsico.com/oauth2/default/v1/authorize?client_id=0oa1mhob45h8zzwvC0h8&code_challenge=BDuj5JwYzLokmmTNxBaMSgjevtec001grbUiErYSsl4&code_challenge_method=S256&nonce=hEEjbo2H9dsghccjCUOaWBzDhTS4n6dTfOAcq7zijTxtDHIvVzSPNJyJ5gkvCWpL&redirect_uri=https%3A%2F%2Fgpa-web-qa.global.gw01.aks01.eus.nonprod.azure.intra.pepsico.com%2Flogin%2Fcallback&response_type=code&state=xNsqLb9BMaLXqnbCeSarIf4xzxR5dVGEpz3IzvDEHOtql6wkqfRPT1wTSOXI8zM7&scope=openid%20email%20profile%20offline_access)\\nClick on \"Verify\" (URL: https://secure.ite.pepsico.com/oauth2/default/v1/authorize?client_id=0oa1mhob45h8zzwvC0h8&code_challenge=BDuj5JwYzLokmmTNxBaMSgjevtec001grbUiErYSsl4&code_challenge_method=S256&nonce=hEEjbo2H9dsghccjCUOaWBzDhTS4n6dTfOAcq7zijTxtDHIvVzSPNJyJ5gkvCWpL&redirect_uri=https%3A%2F%2Fgpa-web-qa.global.gw01.aks01.eus.nonprod.azure.intra.pepsico.com%2Flogin%2Fcallback&response_type=code&state=xNsqLb9BMaLXqnbCeSarIf4xzxR5dVGEpz3IzvDEHOtql6wkqfRPT1wTSOXI8zM7&scope=openid%20email%20profile%20offline_access)\\nClick on \"Verify with your Security Question\\nWhat was your dream job as a child?\\xa0\\nBACK TO SIGN IN\" (URL: https://secure.ite.pepsico.com/oauth2/default/v1/authorize?client_id=0oa1mhob45h8zzwvC0h8&code_challenge=BDuj5JwYzLokmmTNxBaMSgjevtec001grbUiErYSsl4&code_challenge_method=S256&nonce=hEEjbo2H9dsghccjCUOaWBzDhTS4n6dTfOAcq7zijTxtDHIvVzSPNJyJ5gkvCWpL&redirect_uri=https%3A%2F%2Fgpa-web-qa.global.gw01.aks01.eus.nonprod.azure.intra.pepsico.com%2Flogin%2Fcallback&response_type=code&state=xNsqLb9BMaLXqnbCeSarIf4xzxR5dVGEpz3IzvDEHOtql6wkqfRPT1wTSOXI8zM7&scope=openid%20email%20profile%20offline_access)\\nClick on \"submit\" (URL: https://secure.ite.pepsico.com/oauth2/default/v1/authorize?client_id=0oa1mhob45h8zzwvC0h8&code_challenge=BDuj5JwYzLokmmTNxBaMSgjevtec001grbUiErYSsl4&code_challenge_method=S256&nonce=hEEjbo2H9dsghccjCUOaWBzDhTS4n6dTfOAcq7zijTxtDHIvVzSPNJyJ5gkvCWpL&redirect_uri=https%3A%2F%2Fgpa-web-qa.global.gw01.aks01.eus.nonprod.azure.intra.pepsico.com%2Flogin%2Fcallback&response_type=code&state=xNsqLb9BMaLXqnbCeSarIf4xzxR5dVGEpz3IzvDEHOtql6wkqfRPT1wTSOXI8zM7&scope=openid%20email%20profile%20offline_access)'}  Strict Requirements:  1. The output must be a ready-to-use python Selenium Page Object file with correct syntax and structure.  2. **All import statements must be at the top of the file**, outside the class. Include all required Selenium and language-specific modules based on the code that is generated — no missing or hardcoded imports. Example modules: `WebDriverWait`, `EC`, `Select`, `By`, `ActionChains`, `WebDriver`.  3. Use python-specific locator annotations or dictionary-based locators consistently:    - Java → `@FindBy(how = How.XPATH, using = \"...\")`    - Python → LOCATORS dict with `(By.XPATH, \"...\")`    - C# → `[FindsBy(How = How.XPath, Using = \"...\")]`    (Adjust automatically based on python.)  4. Only **one class per page file**; do not create nested classes.  5. Proper constructor/init method must be declared, initializing WebDriver and wait utilities correctly.  6. Reusable helper methods must be created for:    - wait_for_element(locator)    - click(locator)    - enter_text(locator, text)    - switch_to_window_by_index(index)    - switch_to_window_by_handle(handle)    - switch_to_window_matching_url(url)    - switch_to_new_window(url)     Notes:     - **switch_to_new_window(url):**      - Must be simple, correct, and fully executable.      - Steps:          1. Get all window handles          2. If count > 1, switch to the newest window          3. Optionally verify URL matches the expected one      - Must not rely on other potentially broken methods.      - Must not raise exceptions due to missing helpers.     - **wait_for_element(locator):**      - Only called inside page feature methods.      - Do not call `wait_for_element` directly from test scripts.      - Every page feature method that interacts with an element must first call `wait_for_element` for its own locators.        Example:          def click_close_button(self):              self.wait_for_element(self.LOCATORS[\"close_button\"])              self.click(self.LOCATORS[\"close_button\"])  7. Action Method Generation Rules:    - Every method derived from \"Action_data\" must call the reusable helpers (click, enter_text, wait_for_element, etc.).    - Placeholders (`raise RuntimeError(\"...\")`) are allowed **only** if the locator key is truly missing.    - Composite flows (multi-stepactions) must chain multiple helpers in sequence.    - No empty methods are allowed. Each must be fully functional or explicitly raise a RuntimeError if locator(s) are missing.    - **Do not call `enter_text` on non-input elements.** For buttons or links, use `wait_for_element` + `click`.  8. Method names must reflect the intent of the action (e.g., `enter_first_name`, `click_place_an_alert`, `switch_to_registration_window`).  9. Naming conventions for classes, methods, and variables must follow python standards. Always detect the **actual class name** from the provided input and use it exactly in imports and object creation.  10. Do not include explanations, comments, markdown, or extra text — return only the complete python class code.  11. The generated class must be executable as-is, without requiring manual fixes, and directly usable inside a test file.  Dynamic Imports Rule: - Scan all generated methods, including helper calls and nested logic. - Extract every external class, function, or constant used (e.g., WebDriverWait, EC, Select, By, ActionChains). - Include imports for each detected usage. - No missing imports: If a method calls a library function, the corresponding import must be included. - No extra imports: Do not include libraries unless at least one method uses them. - Always resolve aliases correctly: If using EC for ExpectedConditions, include `from selenium.webdriver.support import expected_conditions as EC`. 12. Class name must be GPA_Login 13. Only the final python class code that includes all required elements above with dynamically resolved imports. 14. The model must return **raw code only** — no ```python``` or other wrappers.","functions":[]}
 
-The requirement specifies the need to display current and past QCT records on the Business Activity tab of an account record, showing all relevant fields and providing clickable links for navigation. It also requires functionality validation for various scenarios, such as absence of QCT records and login/logout functionality. Below is the detailed breakdown of the test scenarios, their evaluation using applicable design techniques, and the overall accuracy.
+"""
+import re
+import json
 
----
+def extract_json(raw_response):
+    """
+    Extracts the first valid JSON object from an LLM response.
+    Handles multiline content, nested braces, and extra text.
+    """
+    output=""
+    # Remove markdown fences
 
-| Scenario ID | Scenario Description                                     | Technique | Parameters / Factors                                                                                                   | Score | Gaps                                                                                 | Suggestions                                                                     |
-|-------------|---------------------------------------------------------|-----------|-----------------------------------------------------------------------------------------------------------------------|-------|-------------------------------------------------------------------------------------|--------------------------------------------------------------------------------|
-| 1           | User login with valid credentials                       | EP        | Valid credentials (username, password), invalid credentials (invalid username, invalid password)                       | 75    | Missing tests for invalid credentials, account lockout after failed attempts       | Add negative test cases for incorrect username/password and lockout scenarios  |
-| 1           | User login with valid credentials                       | ST        | System state: logged out, logged in                                                                                   | 100   | None                                                                                | None                                                                           |
-| 2           | Navigation to Business Activity tab                     | OAT       | Factors: Account with QCTs, account without QCTs; Actions: click on tab                                               | 100   | None                                                                                | None                                                                           |
-| 2           | Navigation to Business Activity tab                     | EP        | Valid accounts (with QCTs, without QCTs), invalid accounts (nonexistent)                                               | 75    | Missing test: invalid account (e.g., typing non-existent account in search bar)   | Add test case for navigating to invalid/nonexistent accounts                  |
-| 3           | QCT related list loading on Business Activity tab       | EP        | Valid data sets (QCT statuses: active/inactive; multiple records), invalid data sets (no QCTs)                        | 90    | None                                                                                | None                                                                           |
-| 3           | QCT related list loading on Business Activity tab       | DT        | Conditions: Account with QCTs, no QCTs, large number of QCT records                                                   | 75    | Missing edge cases for performance (e.g., large data volumes, degraded load time) | Add performance tests for large QCT volume and validate load times            |
-| 4           | Display of required fields in QCT related list          | EP        | Valid partitions (QCT records with all fields), invalid partitions (null/empty fields)                                | 80    | Missing validation for cases when fields are null or empty                        | Add null/empty field test cases for each field                                 |
-| 4           | Display of required fields in QCT related list          | DT        | Conditions: Field missing in database, field present but data invalid                                                 | 80    | Missing boundary tests for string fields (length constraints)                     | Add tests for boundary conditions (e.g., very long/short names)               |
-| 5           | Clickable link navigation to QCT page                   | DT        | Conditions: Functional link, broken/nonexistent link                                                                  | 60    | Missing test for broken link or invalid page scenario                             | Add negative test case for invalid/malfunctioning clickable links             |
-| 5           | Clickable link navigation to QCT page                   | ST        | System state: QCT page loads correctly, navigation error                                                              | 100   | None                                                                                | None                                                                           |
-| 6           | No QCT records are shown for account with no related QCTs | EP        | Valid scenario (account with no QCTs), invalid scenario (account with QCTs not linked properly in DB)                 | 80    | Missing DB integrity validation test (e.g., improperly linked QCT records)        | Add test cases for database linkage errors                                     |
-| 7           | Negative test: QCT related list without logging in       | ST        | System state: logged out, unauthorized access attempt                                                                 | 100   | None                                                                                | None                                                                           |
-| 8           | Verify logout functionality                              | ST        | System state: User logged in, user logged out                                                                         | 100   | None                                                                                | None                                                                           |
+    keyword="""","prompt":"""
+    index = raw_response.find(keyword)
+    if index != -1:
+        output= raw_response[:index]
 
----
+    keyword = '{"response":"'
 
-### Observations
-1. **Technique Coverage**:
-   - For simpler scenarios (e.g., login, logout), **EP** and **ST** techniques suffice.
-   - Complex scenarios (e.g., QCT list loading, field validation) benefit from **OAT** and **DT** to cover all combinations and conditions.
-   - Boundary and performance testing are underrepresented across scenarios.
+    output = output.lstrip()  # remove any hidden spaces/newlines
 
-2. **Key Gaps**:
-   - No negative test cases for invalid credentials, field boundaries, or broken links.
-   - Missing performance tests to validate behavior with large QCT datasets.
-   - Absence of database integrity checks (e.g., incorrectly linked QCT records).
+    if output.startswith(keyword):
+        output = output[len(keyword):] # remove only the keyword
 
-3. **Suggestions**:
-   - Add boundary testing (e.g., string length, expiration dates).
-   - Incorporate negative tests (e.g., invalid/missing data, broken links).
-   - Include performance scenarios for large QCT volume and gradual load degradation.
-
----
-
-### Overall Accuracy
-
-The technique scores for each scenario are averaged to compute the overall accuracy:
-
-| Scenario ID | Technique             | Score |
-|-------------|-----------------------|-------|
-| 1           | EP                   | 75    |
-| 1           | ST                   | 100   |
-| 2           | OAT                  | 100   |
-| 2           | EP                   | 75    |
-| 3           | EP                   | 90    |
-| 3           | DT                   | 75    |
-| 4           | EP                   | 80    |
-| 4           | DT                   | 80    |
-| 5           | DT                   | 60    |
-| 5           | ST                   | 100   |
-| 6           | EP                   | 80    |
-| 7           | ST                   | 100   |
-| 8           | ST                   | 100   |
-
-#### Overall Accuracy: **85.83%**
-
----
-
-### Conclusion
-
-While the overall accuracy is satisfactory, addressing the identified gaps (e.g., negative testing, performance validation, and boundary conditions) can enhance the test suite's robustness and ensure comprehensive coverage."""
-
-# Use regex to find the "Overall Accuracy" line
-match = re.search(r"Overall Accuracy: \*\*(\d+\.?\d*)%", response_text)
-if match:
-    overall_accuracy = float(match.group(1))
-else:
-    # If not found, compute manually from the last "Score" table
-    scores = re.findall(r"\|\s*\d+\s*\|\s*[A-Z]+\s*\|\s*(\d+)\s*\|", response_text)
-    if scores:
-        scores = [float(s) for s in scores]
-        overall_accuracy = sum(scores) / len(scores)
-    else:
-        overall_accuracy = 0
-
-overall_accuracy = overall_accuracy
-return overall_accuracy
+    return output
 
 
-def accuracy_collect(response_text):
-    match = re.search(r"Overall Accuracy: \*\*(\d+\.?\d*)%", response_text)
-    if match:
-        overall_accuracy = float(match.group(1))
-    else:
-        # If not found, compute manually from the last "Score" table
-        scores = re.findall(r"\|\s*\d+\s*\|\s*[A-Z]+\s*\|\s*(\d+)\s*\|", response_text)
-        if scores:
-            scores = [float(s) for s in scores]
-            overall_accuracy = sum(scores) / len(scores)
+result = extract_json(raw_response)
+def create_java_file(file_name: str, file_extension: str,response):
+    # Ensure the file extension is .java
+    if file_extension in ["Java-Selenium", "Java-Playwright"]:
+        file_extension = "java"
+    elif file_extension in ["Python-Selenium", "Python-Playwright"]:
+        file_extension = "python"
+    if not file_extension.startswith("."):
+        if file_extension =="java":
+            file_extension = f".{file_extension}"
+        elif file_extension =="python":
+            file_extension = f".py"
         else:
-            overall_accuracy = 0
+            file_extension = f".{file_extension}"
 
-    overall_accuracy = overall_accuracy
-    return overall_accuracy
+    # Full file path with specified directory
+    full_file_path = os.path.join(Page_file_generator, f"{file_name}{file_extension}")
+
+    with open(full_file_path, "w") as file:
+        file.write(response)
+
+    print(f"✅ script generated: {full_file_path}")
+create_java_file("test_file","python",result)

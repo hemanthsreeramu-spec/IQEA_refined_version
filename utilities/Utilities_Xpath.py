@@ -43,10 +43,11 @@ import os
 import utilities.db_utils.handler as db_handler
 
 #setting details - source
-from config.settings_reader import get_source,get_model
+from config.settings_reader import get_source,get_model,get_api_key
 
 source = get_source()
 model_type=get_model()
+api_key=get_api_key()
 
 load_dotenv()
 current_path = os.getcwd()
@@ -117,7 +118,11 @@ def load_prompt_from_file(prompt_type):
             prompt_file = os.path.join(test_file_validator_prompt, "python_selenium_validation.txt")
         elif prompt_type == "Test-validate-Python-Playwright":
             prompt_file = os.path.join(test_file_validator_prompt, "python_playwright_validation.txt")
-
+        elif prompt_type == "Script_validation_common":
+            prompt_file = os.path.join(test_file_validator_prompt, "Script_validation_common.txt")
+        #####test_data
+        elif prompt_type== "test_data":
+            prompt_file = os.path.join(config_folder, "test_data_generator_promt.txt")
         elif prompt_type== "PowerBi":
             prompt_file = os.path.join(config_folder, "powerBi_prompt.txt")
         elif prompt_type== "Page_File":
@@ -300,7 +305,70 @@ Strict Instruction:no ``` or any other wrapper
         print(output_value)
         return output_value.content
     # Split the JSON list if its length exceeds 15
+def get_queries_from_ai_pepgenx(prompt, formatted_summary):
+    prompt_template = load_prompt_from_file(prompt)
+    print(prompt_template)
 
+    if prompt == "PowerBi":
+        #print("formatted_summary:", {formatted_summary})
+        formatted_summary_json = json.dumps(formatted_summary, indent=2)
+        final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
+        print("Final prompt:", {final_prompt})
+        json_list = formatted_summary if isinstance(formatted_summary, list) else json.loads(formatted_summary)
+        chunk_size = 15
+        json_chunks = [json_list[i:i + chunk_size] for i in range(0, len(json_list), chunk_size)]
+        # Collecting responses for all JSON chunks
+        all_responses = []
+        for i, chunk in enumerate(json_chunks):
+            print(f"Processing JSON chunk {i + 1}/{len(json_chunks)}")
+            formatted_summary_json = json.dumps(chunk, indent=2)
+            final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
+
+            llm_pepgenx(final_prompt)
+
+            print(f"Response for chunk {i + 1}: {llm_pepgenx(final_prompt)}")
+            all_responses.append(llm_pepgenx(final_prompt))
+
+        # Combine all responses into one
+        combined_response = "\n".join(all_responses)
+        return combined_response
+    elif prompt =="Web":
+        # print("formatted_summary:", {formatted_summary})
+        formatted_summary_json = json.dumps(formatted_summary, indent=2)
+        final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
+        print("Final prompt:", {final_prompt})
+        json_list = formatted_summary if isinstance(formatted_summary, list) else json.loads(formatted_summary)
+        chunk_size = 15
+        json_chunks = [json_list[i:i + chunk_size] for i in range(0, len(json_list), chunk_size)]
+        # Collecting responses for all JSON chunks
+        all_responses = []
+        for i, chunk in enumerate(json_chunks):
+            print(f"Processing JSON chunk {i + 1}/{len(json_chunks)}")
+            formatted_summary_json = json.dumps(chunk, indent=2)
+            final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
+            print(f"Response for chunk {i + 1}: {llm_pepgenx(final_prompt)}")
+            all_responses.append(llm_pepgenx(llm_pepgenx(final_prompt)))
+
+        # Combine all responses into one
+        combined_response = "\n".join(all_responses)
+        return combined_response
+    elif prompt == "Web1":
+        print(formatted_summary)
+        #final_prompt = prompt_template.format(formatted_summary=formatted_summary)
+        prompt = f"""
+From the given list of elements, generate all possible XPath expressions for each element using its tag and attributes only. 
+Return only valid XPath strings as output. Do not include any explanation or description. 
+
+Input: {formatted_summary}
+Strict Instruction:no ``` or any other wrapper 
+"""
+        print(llm_pepgenx(prompt))
+        return llm_pepgenx(prompt)
+    elif prompt == "Page_File":
+        print(formatted_summary)
+        print(llm_pepgenx(formatted_summary))
+        return llm_pepgenx(formatted_summary)
+    # Split the JSON list if its length exceeds 15
 def get_queries_from_ai_duplicate(prompt,formatted_summary):
     prompt_template = load_prompt_from_file(prompt)
     print(prompt_template)
@@ -712,13 +780,29 @@ def generate_excel_testcases_with_document(prompt_type,extracted_data,Document_i
     print(final_prompt)
     return final_prompt
 
+def generate_script_validation_prompt(prompt_type,page_file_content,test_file_content,language_lib):
+    prompt_template = load_prompt_from_file(prompt_type)
+    # Conditionally inject Action Data section or leave it blank
+    final_prompt = prompt_template.format(page_file_content=page_file_content,test_file_content=test_file_content,language_lib=language_lib)
+    print(final_prompt)
+    return final_prompt
+
 def generate_testcase_accuracy_matrix(prompt_type,requirements,testcase):
     prompt_template = load_prompt_from_file(prompt_type)
     # Conditionally inject Action Data section or leave it blank
     final_prompt = prompt_template.format(requirement_text=requirements,test_case_text=testcase)
     print(final_prompt)
     return final_prompt
-
+def generate_promot_test_data_generator(prompt_type,action_data,test_case_data,sample_data=None):
+    prompt_template = load_prompt_from_file(prompt_type)
+    # Conditionally inject Action Data section or leave it blank
+    if sample_data:
+        sample_data_section =  sample_data
+    else:
+        sample_data_section = ""
+    final_prompt = prompt_template.format(action_file=action_data,test_cases=test_case_data,user_test_data=sample_data_section)
+    print(final_prompt)
+    return final_prompt
 def generate_pom_from_excel_testcases(prompt_type,navigation,image_data,action_data=None,requirements=""):
     prompt_template = load_prompt_from_file(prompt_type)
     # Conditionally inject Action Data section or leave it blank
@@ -1200,7 +1284,7 @@ def monitor_url_changes_for_each_nav_old(driver, screenshot_folder, stop_flag):
             print("Error during URL monitoring:", e)
         time.sleep(1)  # check every second
 
-def select_and_read_text_files_xpath(type, folder_path):
+def select_and_read_text_files_xpath(file_type, folder_path):
     # Step 1: List all files in the folder
     files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
 
@@ -1208,7 +1292,7 @@ def select_and_read_text_files_xpath(type, folder_path):
         st.warning("No files found in the folder.")
         return {}
 
-    selected_files = st.multiselect(f"Select relevant file(s) for {type.replace('_', ' ')}", files)
+    selected_files = st.multiselect(f"Select relevant file(s) for {file_type.replace('_', ' ')}", files)
 
     file_contents = {}
 
@@ -1217,11 +1301,11 @@ def select_and_read_text_files_xpath(type, folder_path):
 
         try:
             # Type: For txt-based files
-            if type in ["xpath","recorded action (Optional)", "page", "feature"]:
+            if file_type in ["xpath","recorded action (Optional)", "page", "feature","test data generation -Recorded actions files"]:
                 with open(full_path, 'r', encoding='utf-8') as f:
                     file_contents[file_name] = f.read()
 
-            elif type in ("page_test", "pom_file","test_file") and file_name.endswith((".py", ".java", ".cs", ".js")):
+            elif file_type in ("page_test", "pom_file","test_file") and file_name.endswith((".py", ".java", ".cs", ".js")):
                 try:
                     with open(full_path, 'r', encoding='utf-8') as f:
                         content = f.read()
@@ -1267,7 +1351,7 @@ def select_and_read_text_files_xpath(type, folder_path):
                     st.error(f"Failed to read {file_name}: {read_err}")
 
             # Type: For Excel test cases - testcase_test
-            elif type == "testcase_test" and file_name.endswith((".xlsx", ".xls")):
+            elif file_type in ["testcase_test","test data generation -Test Cases files"] and file_name.endswith((".xlsx", ".xls")):
                 df = pd.read_excel(full_path)
 
                 test_case_name = df['Test Case Name'][0]
@@ -1289,11 +1373,6 @@ def select_and_read_text_files_xpath(type, folder_path):
             st.error(f"Error processing {file_name}: {e}")
 
     return file_contents
-
-import re
-
-import re
-
 
 def parse_testcases_from_markdown(md_text):
     """
@@ -3269,7 +3348,7 @@ def pepgenx_authendication():
         print(bearer_token)
         return bearer_token
 prompt ="""Hi"""
-def llm_pepgenx(prompt):
+def llm_pepgenx(prompt,type=None):
         headers = {
                 'Authorization': f'Bearer {pepgenx_authendication()}',
                 'team_id': team_id,
@@ -3288,7 +3367,10 @@ def llm_pepgenx(prompt):
         # response = requests.request("POST", url3, headers=headers,data=json.dumps(data2))
         response = requests.request("POST", pepgenx_url, headers=headers, data=json.dumps(test_data),verify=False)
         print(response.text)
-        raw_text=response_check(response.text)
+        if type=="page":
+            raw_text = extract_json(response.text)
+        else:
+            raw_text=response_check(response.text)
         return str(raw_text)
 def response_check(raw_response):
     """
@@ -3318,3 +3400,184 @@ def response_check(raw_response):
     cleaned = cleaned.strip("} \n\t\"")
 
     return cleaned.strip()
+def extract_json(raw_response):
+    """
+    Extracts the first valid JSON object from an LLM response.
+    Handles multiline content, nested braces, and extra text.
+    """
+
+    if not isinstance(raw_response, str):
+        raw_response = str(raw_response)
+
+    # Remove markdown fences
+    cleaned = raw_response.replace("```json", "").replace("```", "").strip()
+
+    # Fix non-breaking spaces and weird whitespace
+    cleaned = cleaned.replace("\u00A0", " ")
+    cleaned = re.sub(r"[ ]{2,}", " ", cleaned)
+    cleaned = re.sub(r"\n\s+", "\n", cleaned)
+    keyword="""","prompt":"""
+    index = cleaned.find(keyword)
+    if index != -1:
+        final= cleaned[:index]
+
+    keyword='{"response":"'
+    if final.startswith(keyword):
+        final= final[len(keyword):]  # remove only the keyword
+
+    return final
+
+
+###test_Data_generator_utils
+import os
+import pandas as pd
+from io import StringIO
+
+
+def save_test_data_into_excel(md_table: str, file_name: str, folder_path: str):
+    # Convert markdown table string to DataFrame
+    df = pd.read_csv(StringIO(md_table), sep="|", engine="python")
+
+    # Clean unwanted empty columns created by '|'
+    df = df.dropna(axis=1, how='all')  # remove blank columns
+    df.columns = df.columns.str.strip()  # trim spaces
+
+    # Remove first/last column if created accidentally
+    if df.columns[0] == "":
+        df = df.drop(df.columns[0], axis=1)
+    if df.columns[-1] == "":
+        df = df.drop(df.columns[-1], axis=1)
+
+    # Ensure folder exists
+    os.makedirs(folder_path, exist_ok=True)
+
+    # Ensure .xlsx extension
+    if not file_name.lower().endswith(".xlsx"):
+        file_name += ".xlsx"
+
+    # Final full path
+    file_path = os.path.join(folder_path, file_name)
+
+    # Save to Excel
+    df.to_excel(file_path, index=False)
+    st.success(f"Test data successfully added to Excel! Download the file [here](sandbox:{file_path})")
+    return file_path
+
+
+### Api utils
+
+def excel_to_api_list(df):
+    api_list = []
+    for _, row in df.iterrows():
+        api_list.append({
+            "api_name": row["API Name"],
+            "method": row["Method"],
+            "base_url": row["Base URL"],
+            "endpoint": row["Endpoint"],
+            "headers": row.get("Headers (JSON)", "{}"),
+            "payload": row.get("Payload (JSON)", "{}"),
+            "auth_required": row.get("Auth Required", "No"),
+            "auth_type": row.get("Auth Type", None),
+            "auth_key_name": row.get("Auth Key Name", None),
+            "config_key": row.get("Config Key", None)
+        })
+    return api_list
+
+def call_api(api_details):
+    url = api_details["base_url"].rstrip("/") + api_details["endpoint"]
+
+    headers = json.loads(api_details["headers"]) if api_details["headers"] else {}
+    payload = json.loads(api_details["payload"]) if api_details["payload"] else {}
+
+    # Handle Authentication
+    if str(api_details["auth_required"]).lower() == "yes":
+        token = api_key
+
+        if api_details["auth_type"].lower() == "bearer":
+            headers[api_details["auth_key_name"]] = f"Bearer {token}"
+
+        elif api_details["auth_type"].lower() == "api-key":
+            headers[api_details["auth_key_name"]] = token
+
+    response = requests.request(
+        method=api_details["method"],
+        url=url,
+        headers=headers,
+        json=payload,
+        timeout=30
+    )
+
+    return {
+        "api_name": api_details["api_name"],
+        "url": url,
+        "status_code": response.status_code,
+        "response": response.text
+    }
+def run_all_api_tests(df, config):
+    api_list = excel_to_api_list(df)
+    results = []
+
+    for api in api_list:
+        try:
+            result = call_api(api, config)
+            results.append(result)
+        except Exception as e:
+            results.append({
+                "api_name": api["api_name"],
+                "url": api["base_url"] + api["endpoint"],
+                "status_code": "ERROR",
+                "response": str(e)
+            })
+    return results
+## Script validation
+def extract_test_script_from_json(json_response: str):
+    """
+    Extracts the TEST SCRIPT from the JSON and returns:
+    - test_file_name
+    - test_script
+    Does NOT save anything.
+    """
+    try:
+        data = json.loads(json_response)
+    except Exception as e:
+        print("❌ Invalid JSON:", e)
+        return None, None
+
+    test_files = data.get("test_files", [])
+    if not test_files:
+        print("⚠️ No test_files found in JSON.")
+        return None, None
+
+    entry = test_files[0]  # usually one file per test
+    return entry.get("corrected_script")
+
+def update_page_files_from_json(json_response: str, page_folder):
+    """
+    Updates only the PAGE FILES from the AI JSON response.
+    Test files are ignored.
+    """
+    try:
+        data = json.loads(json_response)
+    except Exception as e:
+        print("❌ Invalid JSON:", e)
+        return
+
+    page_files = data.get("page_files", [])
+    if not page_files:
+        print("⚠️ No page_files found in JSON.")
+        return
+
+    for entry in page_files:
+        file_name = entry.get("file_name")
+        script = entry.get("corrected_script")
+
+        if not file_name or not script:
+            print("⚠️ Skipping due to missing file_name or script")
+            continue
+
+        file_path = os.path.join(page_folder, file_name)
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(script)
+
+        print(f"✔ Page file updated → {file_path}")

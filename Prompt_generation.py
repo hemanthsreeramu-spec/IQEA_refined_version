@@ -119,10 +119,10 @@ For the given **Category** and **Subcategory** (extracted from the requirements)
 ### Output Format (STRICT — no extra text)
 Return **only** a Markdown table with EXACT columns and header below (no prelude, no trailing text):
 
-| Question Type | Category | Subcategory | Question |
-|---------------|----------|-------------|----------|
-| <Question Type> | <Category> | <SubCategory> | <Full user question text> |
-| ... | ... | ... | ... |
+| Question Type | Category | Subcategory | Question |Assumed LLM Answer |
+|---------------|----------|-------------|----------|--------------------|
+| <Question Type> | <Category> | <SubCategory> | <Full user question text> |<Full answer text> |
+| ... | ... | ... | ... |... |
 
 - Each cell must be a plain string.  
 - Preserve punctuation and quotation marks inside the Question cell.  
