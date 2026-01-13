@@ -1002,6 +1002,46 @@ def thread_new_window_checker(driver, injected_windows, last_urls, stop_flag, sc
                     # New window detected
                     driver.switch_to.window(handle)
                     driver.execute_script(action_utils.injection_script_updated_fixed())
+                    # driver.execute_script("""
+                    #                 if (!window.__injectedIframes) {
+                    #                     window.__injectedIframes = new Set();
+                    #                 }
+                    #                 """)
+                    # iframes = driver.find_elements(
+                    #     By.XPATH, "//iframe[contains(@id, 'Form')]"
+                    # )
+                    #
+                    # for idx, iframe in enumerate(iframes):
+                    #     try:
+                    #         iframe_key = (
+                    #                 iframe.get_attribute("id")
+                    #                 or iframe.get_attribute("name")
+                    #                 or iframe.get_attribute("src")
+                    #                 or f"iframe_{idx}"
+                    #         )
+                    #
+                    #         already = driver.execute_script(
+                    #             "return window.__injectedIframes.has(arguments[0]);",
+                    #             iframe_key
+                    #         )
+                    #
+                    #         if already:
+                    #             continue
+                    #
+                    #         driver.switch_to.frame(iframe)
+                    #         driver.execute_script(action_utils.inject_iframe_js(driver,iframe, iframe_key))
+                    #         driver.switch_to.default_content()
+                    #
+                    #         driver.execute_script(
+                    #             "window.__injectedIframes.add(arguments[0]);",
+                    #             iframe_key
+                    #         )
+                    #
+                    #         print("✅ Injected iframe:", iframe_key)
+                    #
+                    #     except Exception as e:
+                    #         print("⚠️ Skipping iframe:", e)
+                    #         driver.switch_to.default_content()
 
                     # Mark as injected
                     injected_windows[handle] = True

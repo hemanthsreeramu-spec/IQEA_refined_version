@@ -9,6 +9,7 @@ from selenium.webdriver.chrome.service import Service
 import streamlit as st
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support.wait import WebDriverWait
 import os
@@ -51,7 +52,7 @@ os.makedirs(Action_collection, exist_ok=True)
 os.makedirs(feature_file_collection, exist_ok=True)
 os.makedirs(test_data_folder, exist_ok=True)
 #page_screenshot_folder_new = os.path.join(Action_collection, "page_screenshot_valid")
-page_screenshot_folder = os.path.join(Action_collection, "page_screenshot")
+page_screenshot_folder = os.path.join(Action_collection, "Sauce_demo")
 os.makedirs(page_screenshot_folder, exist_ok=True)
 os.makedirs(Test_file_generator, exist_ok=True)
 
@@ -235,7 +236,50 @@ if st.session_state.checkbox1_state:
                 st.session_state.driver.execute_script(action_utils.injection_script_updated_fixed())
                 print(f"✅ JS injected in new window {handle} ({st.session_state.driver.current_url})")
                 st.session_state.injected_windows[handle] = True
-
+                # Ensure iframe registry exists
+                # st.session_state.driver.execute_script("""
+                # if (!window.__injectedIframes) {
+                #     window.__injectedIframes = new Set();
+                # }
+                # """)
+                # iframes = st.session_state.driver.find_elements(
+                #     By.XPATH, "//iframe[contains(@id, 'Form')]"
+                # )
+                # print("**********Number of Iframe",iframes)
+                # for idx, iframe in enumerate(iframes):
+                #     try:
+                #         iframe_key = (
+                #                 iframe.get_attribute("id")
+                #                 or iframe.get_attribute("name")
+                #                 or iframe.get_attribute("src")
+                #                 or f"iframe_{idx}"
+                #         )
+                #
+                #         already = st.session_state.driver.execute_script(
+                #             "return window.__injectedIframes.has(arguments[0]);",
+                #             iframe_key
+                #         )
+                #
+                #         if already:
+                #             continue
+                #         print("******Going to start Iframe injection for iframe",iframe)
+                #
+                #         st.session_state.driver.switch_to.frame(iframe)
+                #         st.session_state.driver.execute_script(action_utils.inject_iframe_js(st.session_state.driver,iframe, iframe_key))
+                #         print("******injection done", iframe)
+                #         st.session_state.driver.switch_to.default_content()
+                #
+                #         st.session_state.driver.execute_script(
+                #             "window.__injectedIframes.add(arguments[0]);",
+                #             iframe_key
+                #         )
+                #
+                #         print("✅ Injected iframe:", iframe_key)
+                #
+                #     except Exception as e:
+                #         print("⚠️ Skipping iframe:", e)
+                #         st.session_state.driver.switch_to.default_content()
+                #
 
                 # --- Thread 1: New windows checker ---
                 t1 = threading.Thread(
@@ -551,6 +595,7 @@ if st.session_state.checkbox3_state:
 
                     except Exception as e:
                         st.error(f"Error processing {image_uploaded_file.name}: {e}")
+            
             st.markdown("Enter the navigation details (Optional)",
                         unsafe_allow_html=True)
             Navigation_details = st.text_area("Enter Navigation Details", "",key="navigation_details_textarea")
@@ -660,12 +705,12 @@ if st.session_state.checkbox3_state:
                             st.stop()
                     except Exception as e:
                         st.error("Invalid Work Item")
-                elif source_type == "Jira"and st.session_state.azure_workitem_id is not None:
+                elif source_type == "Jira"and st.session_state.jira_workitem_id is not None:
                     try:
-                        exists, message = tmt_utils.validate_work_item_exists(st.session_state.azure_workitem_id )
+                        exists, message = tmt_utils.validate_work_item_exists(st.session_state.jira_workitem_id )
                         if exists:
 
-                            extracted_data = tmt_utils.fetch_workitem_detail(st.session_state.azure_workitem_id)
+                            extracted_data = tmt_utils.fetch_workitem_detail(st.session_state.jira_workitem_id)
                         else:
                             st.error(message)
                             st.error("Please enter valid workitem")
@@ -744,8 +789,8 @@ if st.session_state.checkbox3_state:
                                 "Test Case export skipped.")
                 # Show popup only if the flag is set
                 if st.session_state.show_form:
-                    st.info("Enter Azure Work Item ID (numeric)")
-                    workitem = st.text_input("Azure Work Item ID", value=st.session_state.azure_workitem_id,
+                    st.info("Enter Jira Work Item ID (numeric)")
+                    workitem = st.text_input("jira Work Item ID", value=st.session_state.azure_workitem_id,
                                              key="azure_workitem_text")
                     st.session_state.azure_workitem_id = workitem.strip()
                     if workitem and not workitem.isdigit():
@@ -797,8 +842,8 @@ if st.session_state.checkbox3_state:
                             st.info("Test Case export skipped.")
                 # Show popup only if the flag is set
                 if st.session_state.show_form:
-                    st.info("Enter Azure Work Item ID (numeric)")
-                    workitem = st.text_input("Azure Work Item ID", value=st.session_state.azure_workitem_id,
+                    st.info("Enter jira Work Item ID (numeric)")
+                    workitem = st.text_input("jira Work Item ID", value=st.session_state.azure_workitem_id,
                                              key="azure_workitem_text")
                     st.session_state.azure_workitem_id = workitem.strip()
                     if workitem and not workitem.isdigit():
@@ -875,10 +920,11 @@ if st.session_state.checkbox4_state:
             if st.session_state.test_data_action_data:
               constructed_prompt=utils.generate_promot_test_data_generator("test_data",st.session_state.test_data_action_data,st.session_state.test_files_content,st.session_state.test_data_addition_info)
               st.session_state.test_data_llm_response=utils.get_queries_from_ai_updated(constructed_prompt)
+              st.success("Test data generated for given input")
             else:
                 st.error("Please select action file")
         if st.session_state.test_data_llm_response:
-            test_data_file_name = st.text_input("Enter the Page Name:")
+            test_data_file_name = st.text_input("Enter the testdata file Name:")
             if st.button("Save Test Data"):
                 if test_data_file_name:
                     utils.save_test_data_into_excel(st.session_state.test_data_llm_response,test_data_file_name,test_data_folder)
@@ -900,7 +946,7 @@ if st.session_state.checkbox5_state:
         if "Web" in selected_app:
             selected_tags = tags_placeholder.multiselect(
                 "Select element types to extract:",
-                ["input", "button", "a", "select", "textarea", "div", "span", "All"],
+                ["input", "button", "a", "select", "textarea", "div", "span","i","li","All"],
                 default= st.session_state.selected_tags ,
                 key="selected_tags_multiselect"
             )
