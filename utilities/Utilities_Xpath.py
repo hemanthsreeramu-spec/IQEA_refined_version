@@ -455,7 +455,7 @@ def generate_unique_key_duplicate(element,page_identifier='page', prefix='elemen
 def details_visible_elements(collected_elements,visible_elements,selected_tags,page_identifier):
     for idx, element in enumerate(collected_elements):
         try:
-            # if element.is_displayed() and element.is_enabled():
+         if element.is_displayed() and element.is_enabled():
             tag_name = element.tag_name
 
             # If specific tags are selected or all are allowed
@@ -464,8 +464,10 @@ def details_visible_elements(collected_elements,visible_elements,selected_tags,p
                 details = {
                     "tag": tag_name,
                     "id": element.get_attribute("id"),
+                    "aria-label":element.get_attribute("aria-label"),
                     "class": element.get_attribute("class"),
                     "name": element.get_attribute("name"),
+                    "type":element.get_attribute("type"),
                     "text": element.text.strip()
                 }
 
@@ -586,6 +588,16 @@ def get_visible_element_iframe(driver, page_identifier, selected_tags):
 
     print("[INFO] Collecting all elements from the main page...")
     all_elements = driver.find_elements(By.XPATH, "//*")
+    for idx, element in enumerate(all_elements, start=1):
+        attrs = driver.execute_script(
+            "var items = {}; for (var i = 0; i < arguments[0].attributes.length; i++) { "
+            "items[arguments[0].attributes[i].name] = arguments[0].attributes[i].value; } "
+            "return items;", element
+        )
+
+        print(f"\n[{idx}] <{element.tag_name}>")
+        for k, v in attrs.items():
+            print(f"individual_jan   {k} = {v}")
     print(f"[DEBUG] Total elements on main page: {len(all_elements)}")
     #total_elements.extend(all_elements)
 
@@ -1002,51 +1014,19 @@ def thread_new_window_checker(driver, injected_windows, last_urls, stop_flag, sc
                     # New window detected
                     driver.switch_to.window(handle)
                     driver.execute_script(action_utils.injection_script_updated_fixed())
-                    # driver.execute_script("""
-                    #                 if (!window.__injectedIframes) {
-                    #                     window.__injectedIframes = new Set();
-                    #                 }
-                    #                 """)
-                    # iframes = driver.find_elements(
-                    #     By.XPATH, "//iframe[contains(@id, 'Form')]"
-                    # )
-                    #
-                    # for idx, iframe in enumerate(iframes):
-                    #     try:
-                    #         iframe_key = (
-                    #                 iframe.get_attribute("id")
-                    #                 or iframe.get_attribute("name")
-                    #                 or iframe.get_attribute("src")
-                    #                 or f"iframe_{idx}"
-                    #         )
-                    #
-                    #         already = driver.execute_script(
-                    #             "return window.__injectedIframes.has(arguments[0]);",
-                    #             iframe_key
-                    #         )
-                    #
-                    #         if already:
-                    #             continue
-                    #
-                    #         driver.switch_to.frame(iframe)
-                    #         driver.execute_script(action_utils.inject_iframe_js(driver,iframe, iframe_key))
-                    #         driver.switch_to.default_content()
-                    #
-                    #         driver.execute_script(
-                    #             "window.__injectedIframes.add(arguments[0]);",
-                    #             iframe_key
-                    #         )
-                    #
-                    #         print("✅ Injected iframe:", iframe_key)
-                    #
-                    #     except Exception as e:
-                    #         print("⚠️ Skipping iframe:", e)
-                    #         driver.switch_to.default_content()
-
                     # Mark as injected
                     injected_windows[handle] = True
                     last_urls[handle] = driver.current_url
                     current_window_ref["handle"] = handle
+                    # Then take screenshot as before
+                    if source == "file":
+                        filepath = action_utils.take_screenshot(driver, screenshot_folder)
+                    elif source == "database":
+                        filepath = db_handler.take_screenshot_db(driver, "sathanantham")
+                    else:
+                        filepath = None
+                    print(f"📸 Screenshot taken for: {last_urls} => {filepath}")
+                    print("screenshot thread ended")
 
 
                     print(f"✅ JS injected in new window {handle} ({driver.current_url})")
@@ -1058,19 +1038,25 @@ def thread_new_window_checker(driver, injected_windows, last_urls, stop_flag, sc
 
         # Check every 2-3 seconds
         time.sleep(3)
-
-def thread_focus_screenshot(driver,stop_flag,screenshot_folder,source="file"):
+def thread_focus_screenshot_jan29_backup(driver,stop_flag,screenshot_folder,source="file"):
     """
     Screenshots
     """
     print("screenshot thread started")
+
     last_url = ""
+    all_elements = driver.find_elements(By.XPATH, "//*")
+    element_count_old=0
+    element_count_new=0
     while not stop_flag["stop"]:
         try:
             current_url = driver.current_url
-            if current_url != last_url:
+            if current_url != last_url or element_count_old != element_count_new:
                 last_url = current_url
 
+                all_elements = driver.find_elements(By.XPATH, "//*")
+                element_count_new = len(all_elements)
+                element_count_old=element_count_new
                 # Wait for page to fully load
                 for _ in range(50):  # up to ~5 seconds
                     state = driver.execute_script("return document.readyState")
@@ -1090,6 +1076,106 @@ def thread_focus_screenshot(driver,stop_flag,screenshot_folder,source="file"):
         except Exception as e:
             print("Error during URL monitoring:", e)
         time.sleep(1)  # check every second
+def thread_focus_screenshot(driver, stop_flag, screenshot_folder, source="file"):
+    print("📸 screenshot thread started")
+
+    last_url = None
+    prev_element_count = None
+    first_run = True
+
+    while not stop_flag["stop"]:
+        try:
+            with st.session_state.driver_lock:
+                current_url = driver.current_url
+                all_elements = driver.find_elements(By.XPATH, "//*")
+                current_count = len(all_elements)
+
+            if first_run:
+                page_changed = True
+                first_run = False
+            else:
+                page_changed = (
+                    current_url != last_url
+                    or current_count != prev_element_count
+                )
+
+            if page_changed:
+                last_url = current_url
+                prev_element_count = current_count
+
+                # wait for load
+                for _ in range(50):
+                    with st.session_state.driver_lock:
+                        state = driver.execute_script("return document.readyState")
+                    if state == "complete":
+                        break
+                    time.sleep(0.1)
+
+                with st.session_state.driver_lock:
+                    if source == "file":
+                        filepath = action_utils.take_screenshot(driver, screenshot_folder)
+                    elif source == "database":
+                        filepath = db_handler.take_screenshot_db(driver, "sathanantham")
+                    else:
+                        filepath = None
+
+                print(f"📸 Screenshot taken => {filepath}")
+
+        except Exception as e:
+            print("❌ Screenshot thread error:", e)
+
+        time.sleep(1)
+
+# def thread_focus_screenshot(driver, stop_flag, screenshot_folder, source="file"):
+#     print("📸 screenshot thread started")
+#
+#     last_url = None
+#     prev_element_count = None
+#     first_run = True
+#
+#     while not stop_flag["stop"]:
+#         try:
+#             current_url = driver.current_url
+#             all_elements = driver.find_elements(By.XPATH, "//*")
+#             current_count = len(all_elements)
+#
+#             # First run → always take screenshot
+#             if first_run:
+#                 page_changed = True
+#                 first_run = False
+#             else:
+#                 page_changed = (
+#                     current_url != last_url
+#                     or current_count != prev_element_count
+#                 )
+#
+#             if page_changed:
+#                 print(f"[CHANGE] url={current_url} | elements={current_count}")
+#
+#                 last_url = current_url
+#                 prev_element_count = current_count
+#
+#                 # wait for page ready
+#                 for _ in range(50):
+#                     if driver.execute_script("return document.readyState") == "complete":
+#                         break
+#                     time.sleep(0.1)
+#
+#                 if source == "file":
+#                     filepath = action_utils.take_screenshot(driver, screenshot_folder)
+#                 elif source == "database":
+#                     filepath = db_handler.take_screenshot_db(driver, "sathanantham")
+#                 else:
+#                     filepath = None
+#
+#                 print(f"📸 Screenshot taken => {filepath}")
+#
+#         except Exception as e:
+#             print("❌ Error during monitoring:", e)
+#
+#         time.sleep(1)
+
+
 import time
 import hashlib
 from PIL import Image

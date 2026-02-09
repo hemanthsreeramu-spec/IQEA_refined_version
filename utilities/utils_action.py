@@ -11,7 +11,734 @@ from dotenv import load_dotenv
 load_dotenv()
 from utilities.db_utils.models import Screenshot
 
-JS_action_listeners = """(function (statusKey) {
+JS_action_listeners_agentflow= """(function (statusKey) {
+    if (window.__intentRecorderInjected) return;
+    window.__intentRecorderInjected = true;
+
+    const ACTIONS_KEY = "recordedActions";
+    const INPUT_DEBOUNCE_MS = 400;
+    const CLICK_DEDUP_MS = 300;
+
+    const elementState = new Map();
+    const lastClickMap = new Map();
+
+    // ---------------- SAFETY FILTERS ----------------
+    function shouldRecord() {
+        const p = location.pathname.toLowerCase();
+        return !p.includes("login") &&
+               !p.includes("auth") &&
+               !p.includes("signin") &&
+               !p.includes("microsoft") &&
+               !p.includes("google");
+    }
+    function findToggleInput(el) {
+        if (!el) return null;
+
+        // If clicked element IS input
+        if (el.tagName === "INPUT" && (el.type === "checkbox" || el.type === "radio")) {
+            return el;
+        }
+
+        // Search inside
+        const inside = el.querySelector?.("input[type='checkbox'],input[type='radio']");
+        if (inside) return inside;
+
+        // Search nearby
+        const parent = el.closest("label,div");
+        if (parent) {
+            return parent.querySelector("input[type='checkbox'],input[type='radio']");
+        }
+
+        return null;
+    }
+
+    function isHugeText(el) {
+        return el && el.innerText && el.innerText.length > 150;
+    }
+    function isToggleLike(el) {
+        if (!el) return false;
+        return (
+            el.type === "checkbox" ||
+            el.type === "radio" ||
+            el.getAttribute("role") === "switch" ||
+            el.getAttribute("aria-checked") !== null ||
+            el.closest("[role='switch'],[role='checkbox']")
+        );
+    }    
+    function isToggleWrapper(el) {
+        return el && el.closest &&
+               el.closest("[role='switch'],[role='checkbox'],.MuiSwitch-root,.ant-switch,.react-switch");
+    }
+    function flushPendingInputs() {
+        if (!window.__pendingInputs) return;
+
+        Object.values(window.__pendingInputs).forEach(state => {
+            if (state.value && state.value.trim() !== "") {
+                saveAction({
+                    action: "enter_text",
+                    label: state.label || "[unlabeled]",
+                    value: state.value,
+                    xpath: state.xpath,
+                    url: location.href,
+                    windowId: window.name || statusKey,
+                    timestamp: new Date().toISOString(),
+                    forced: true
+                });
+            }
+        });
+
+        window.__pendingInputs = {};
+    }
+    function isReactOption(el) {
+        return el &&
+            (el.getAttribute("role") === "option" ||
+             el.getAttribute("aria-selected") !== null ||
+             el.closest("[role='listbox']"));
+    }
+    function getXPath(el) {
+        const getPos = e => {
+            let pos = 1;
+            while (e.previousElementSibling) { e = e.previousElementSibling; pos++; }
+            return pos;
+        };
+        const parts = [];
+        while (el && el.nodeType === Node.ELEMENT_NODE) {
+            parts.unshift(`${el.tagName.toLowerCase()}[${getPos(el)}]`);
+            el = el.parentNode;
+        }
+        return "/" + parts.join("/");
+    }
+
+    // ---------------- LABEL FIX ----------------
+    function getLabel(el) {
+        let e = el;
+        for (let i = 0; i < 3 && e; i++) {
+            const tag = e.tagName?.toLowerCase();
+            let label =
+                e.getAttribute("aria-label") ||
+                e.name ||
+                e.id ||
+                e.placeholder;
+
+            if (!label && (tag === "button" || tag === "a")) {
+                label = e.innerText && e.innerText.trim().slice(0, 60);
+            }
+
+            if (label) return label.trim();
+            e = e.parentElement;
+        }
+        return "[unlabeled]";
+    }
+
+    function loadActions() {
+        return JSON.parse(localStorage.getItem(ACTIONS_KEY) || "[]");
+    }
+
+    function saveAction(action) {
+        const actions = loadActions();
+        actions.push(action);
+        localStorage.setItem(ACTIONS_KEY, JSON.stringify(actions));
+        window.dispatchEvent(new CustomEvent("__action_recorded", { detail: action }));
+    }
+    // ---------------- INPUT COMMIT (BLUR) ----------------
+    document.addEventListener("focusout", e => {
+        const el = e.target;
+        if (!el || !["INPUT", "TEXTAREA"].includes(el.tagName)) return;
+
+        const xpath = getXPath(el);
+        if (!window.__pendingInputs || !window.__pendingInputs[xpath]) return;
+
+        const state = window.__pendingInputs[xpath];
+        if (!state.value || state.value.trim() === "") return;
+
+        saveAction({
+            action: "enter_text",
+            label: state.label || getLabel(el),
+            value: state.value,
+            xpath: state.xpath,
+            url: location.href,
+            windowId: window.name || statusKey,
+            timestamp: new Date().toISOString()
+        });
+
+        delete window.__pendingInputs[xpath];
+    }, true);
+
+    // ---------------- CLICK (INTENT) ----------------
+    document.addEventListener("click", e => {
+        if (!shouldRecord()) return;
+
+        const el = e.target.closest("a,button,input,textarea,select,[role='option'],[role='listbox']");
+
+
+        if (!el) return;
+
+        //if (isToggleLike(el) || isToggleWrapper(el)) return; // 🔥 NEW
+        const toggleInput = findToggleInput(el);
+        if (toggleInput) {
+            const checked = !toggleInput.checked; // predict next state
+
+            saveAction({
+                action: checked ? "check" : "uncheck",
+                label: getLabel(toggleInput),
+                value: checked,
+                xpath: getXPath(toggleInput),
+                url: location.href,
+                windowId: window.name || statusKey,
+                timestamp: new Date().toISOString()
+            });
+            return; // ⛔ stop click chain
+        }
+
+        if (["script", "style"].includes(el.tagName?.toLowerCase())) return;
+        if (isHugeText(el)) return;
+
+        const xpath = getXPath(el);
+        const now = Date.now();
+        const lastClickTime = lastClickMap.get(xpath) || 0;
+
+        if (now - lastClickTime < CLICK_DEDUP_MS) return;
+        lastClickMap.set(xpath, now);
+
+        if (isReactOption(el)) {
+            saveAction({
+                action: "select",
+                label: getLabel(el),
+                value: el.innerText?.trim(),
+                xpath,
+                url: location.href,
+                windowId: window.name || statusKey,
+                timestamp: new Date().toISOString()
+            });
+            return;
+        }
+
+        saveAction({
+            action: "click",
+            label: getLabel(el),
+            xpath,
+            url: location.href,
+            windowId: window.name || statusKey,
+            timestamp: new Date().toISOString()
+        });
+    }, true);
+
+
+    // --- Wrap all listeners in try/catch to prevent exceptions ---
+    document.addEventListener("input", e => {
+        try {
+            if (isReactOption(e.target) || isToggleLike(e.target) || isToggleWrapper(e.target)) return;
+
+            const el = e.target;
+            if (!el || !["INPUT", "TEXTAREA"].includes(el.tagName)) return;
+
+            const xpath = getXPath(el);
+            if (!window.__pendingInputs) window.__pendingInputs = {};
+
+            window.__pendingInputs[xpath] = {
+                value: el.value,
+                label: getLabel(el),
+                xpath,
+                time: Date.now()
+            };
+        } catch (err) {
+            console.warn("Input listener error:", err);
+        }
+    }, true);
+
+
+    document.addEventListener("change", e => {
+        try {s
+            if (isReactOption(e.target)) return;
+            if (isToggleLike(e.target) || isToggleWrapper(e.target)) return;
+
+            const wrappedToggle = findToggleInput(e.target);
+            if (wrappedToggle && e.target !== wrappedToggle) return;
+
+            const el = e.target;
+            if (!el) return;
+
+            const tag = el.tagName.toLowerCase();
+
+            if (tag === "select") {
+                saveAction({
+                    action: "select",
+                    label: getLabel(el),
+                    value: el.value,
+                    xpath: getXPath(el),
+                    url: location.href,
+                    windowId: window.name || statusKey,
+                    timestamp: new Date().toISOString()
+                });
+                return;
+            }
+
+            if (el.type === "radio") {
+                saveAction({
+                    action: "select_radio",
+                    label: getLabel(el),
+                    value: el.value,
+                    xpath: getXPath(el),
+                    url: location.href,
+                    windowId: window.name || statusKey,
+                    timestamp: new Date().toISOString()
+                });
+                return;
+            }
+
+            if (el.type === "checkbox") {
+                saveAction({
+                    action: el.checked ? "check" : "uncheck",
+                    label: getLabel(el),
+                    xpath: getXPath(el),
+                    value: el.checked,
+                    url: location.href,
+                    windowId: window.name || statusKey,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        } catch (err) {
+            console.warn("Change listener error:", err);
+        }
+    }, true);
+
+
+    // ---------------- SAFE FLUSH (NO beforeunload) ----------------
+    window.addEventListener("popstate", flushPendingInputs);
+    window.addEventListener("hashchange", flushPendingInputs);
+
+    // ---------------- NAVIGATION ----------------
+    let lastUrl = location.href;
+    setInterval(() => {
+        if (location.href !== lastUrl && shouldRecord()) {
+            lastUrl = location.href;
+            saveAction({
+                action: "navigate",
+                label: document.title || "page",
+                url: lastUrl,
+                windowId: window.name || statusKey,
+                timestamp: new Date().toISOString()
+            });
+        }
+    }, 500);
+    if (location.hostname.includes("microsoft") || location.hostname.includes("google")) {
+    window.addEventListener("beforeunload", () => {
+        try {
+            localStorage.setItem("__oauth_closed", Date.now());
+        } catch (e) {}
+    });
+}
+    console.log("✅ Intent-level action recorder enabled (SAFE MODE):", statusKey);
+})(STATUS_KEY_PLACEHOLDER);
+"""
+JS_action_listeners_working1 = """(function (statusKey) {
+    if (window.__intentRecorderInjected) return;
+    window.__intentRecorderInjected = true;
+
+    const ACTIONS_KEY = "recordedActions";
+    const INPUT_DEBOUNCE_MS = 400;
+    const CLICK_DEDUP_MS = 300;
+
+    const elementState = new Map();
+    const lastClickMap = new Map();
+
+    // ---------------- SAFETY FILTERS ----------------
+    function shouldRecord() {
+        const p = location.pathname.toLowerCase();
+        return !p.includes("login") &&
+               !p.includes("auth") &&
+               !p.includes("signin") &&
+               !p.includes("microsoft") &&
+               !p.includes("google");
+    }
+
+    function isHugeText(el) {
+        return el && el.innerText && el.innerText.length > 150;
+    }
+
+    function flushPendingInputs() {
+        if (!window.__pendingInputs) return;
+
+        Object.values(window.__pendingInputs).forEach(state => {
+            if (state.value && state.value.trim() !== "") {
+                saveAction({
+                    action: "enter_text",
+                    label: state.label || "[unlabeled]",
+                    value: state.value,
+                    xpath: state.xpath,
+                    url: location.href,
+                    windowId: window.name || statusKey,
+                    timestamp: new Date().toISOString(),
+                    forced: true
+                });
+            }
+        });
+
+        window.__pendingInputs = {};
+    }
+    function isReactOption(el) {
+        return el &&
+            (el.getAttribute("role") === "option" ||
+             el.getAttribute("aria-selected") !== null ||
+             el.closest("[role='listbox']"));
+    }
+    function getXPath(el) {
+        const getPos = e => {
+            let pos = 1;
+            while (e.previousElementSibling) { e = e.previousElementSibling; pos++; }
+            return pos;
+        };
+        const parts = [];
+        while (el && el.nodeType === Node.ELEMENT_NODE) {
+            parts.unshift(`${el.tagName.toLowerCase()}[${getPos(el)}]`);
+            el = el.parentNode;
+        }
+        return "/" + parts.join("/");
+    }
+
+    // ---------------- LABEL FIX ----------------
+    function getLabel(el) {
+        let e = el;
+        for (let i = 0; i < 3 && e; i++) {
+            const tag = e.tagName?.toLowerCase();
+            let label =
+                e.getAttribute("aria-label") ||
+                e.name ||
+                e.id ||
+                e.placeholder;
+
+            if (!label && (tag === "button" || tag === "a")) {
+                label = e.innerText && e.innerText.trim().slice(0, 60);
+            }
+
+            if (label) return label.trim();
+            e = e.parentElement;
+        }
+        return "[unlabeled]";
+    }
+
+    function loadActions() {
+        return JSON.parse(localStorage.getItem(ACTIONS_KEY) || "[]");
+    }
+
+    function saveAction(action) {
+        const actions = loadActions();
+        actions.push(action);
+        localStorage.setItem(ACTIONS_KEY, JSON.stringify(actions));
+        window.dispatchEvent(new CustomEvent("__action_recorded", { detail: action }));
+    }
+    // ---------------- INPUT COMMIT (BLUR) ----------------
+    document.addEventListener("focusout", e => {
+        const el = e.target;
+        if (!el || !["INPUT", "TEXTAREA"].includes(el.tagName)) return;
+
+        const xpath = getXPath(el);
+        if (!window.__pendingInputs || !window.__pendingInputs[xpath]) return;
+
+        const state = window.__pendingInputs[xpath];
+        if (!state.value || state.value.trim() === "") return;
+
+        saveAction({
+            action: "enter_text",
+            label: state.label || getLabel(el),
+            value: state.value,
+            xpath: state.xpath,
+            url: location.href,
+            windowId: window.name || statusKey,
+            timestamp: new Date().toISOString()
+        });
+
+        delete window.__pendingInputs[xpath];
+    }, true);
+
+    // ---------------- CLICK (INTENT) ----------------
+    document.addEventListener("click", e => {
+        if (!shouldRecord()) return;
+
+        const el = e.target.closest("a,button,input,textarea,select,[role='option'],[role='listbox']");
+
+        if (!el || ["script", "style"].includes(el.tagName?.toLowerCase())) return;
+        if (isHugeText(el)) return;
+
+        const xpath = getXPath(el);
+        const now = Date.now();
+        const lastClickTime = lastClickMap.get(xpath) || 0;
+
+        if (now - lastClickTime < CLICK_DEDUP_MS) return;
+        lastClickMap.set(xpath, now);
+        // React dropdown option → record only as select
+        if (isReactOption(el)) {
+            saveAction({
+                action: "select",
+                label: getLabel(el),
+                value: el.innerText?.trim(),
+                xpath: getXPath(el),
+                url: location.href,
+                windowId: window.name || statusKey,
+                timestamp: new Date().toISOString()
+            });
+            return; // ⛔ block click/check/input chain
+        }
+        saveAction({
+            action: "click",
+            label: getLabel(el),
+            xpath,
+            url: location.href,
+            windowId: window.name || statusKey,
+            timestamp: new Date().toISOString()
+        });
+    }, true);
+
+    // --- Wrap all listeners in try/catch to prevent exceptions ---
+    document.addEventListener("input", e => {
+        try {
+            if (isReactOption(e.target)) return; // skip React virtual options
+
+            const el = e.target;
+            if (!el || !["INPUT", "TEXTAREA"].includes(el.tagName)) return;
+
+            const xpath = getXPath(el);
+            if (!window.__pendingInputs) window.__pendingInputs = {};
+
+            window.__pendingInputs[xpath] = {
+                value: el.value,          // actual typed value
+                label: getLabel(el),
+                xpath,
+                time: Date.now()
+            };
+        } catch (err) {
+            console.warn("Input listener error:", err);
+        }
+    }, true);
+
+    document.addEventListener("change", e => {
+        try {
+            if (isReactOption(e.target)) return; // skip React virtual options
+
+            const el = e.target;
+            if (!el) return;
+
+            const tag = el.tagName.toLowerCase();
+
+            if (tag === "select") {
+                saveAction({
+                    action: "select",
+                    label: getLabel(el),
+                    value: el.value,
+                    xpath: getXPath(el),
+                    url: location.href,
+                    windowId: window.name || statusKey,
+                    timestamp: new Date().toISOString()
+                });
+                return;
+            }
+
+            if (el.type === "radio") {
+                saveAction({
+                    action: "select_radio",
+                    label: getLabel(el),
+                    value: el.value,
+                    xpath: getXPath(el),
+                    url: location.href,
+                    windowId: window.name || statusKey,
+                    timestamp: new Date().toISOString()
+                });
+                return;
+            }
+
+            if (el.type === "checkbox") {
+                saveAction({
+                    action: el.checked ? "check" : "uncheck",
+                    label: getLabel(el),
+                    xpath: getXPath(el),
+                    value: el.checked,
+                    url: location.href,
+                    windowId: window.name || statusKey,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        } catch (err) {
+            console.warn("Change listener error:", err);
+        }
+    }, true);
+
+    // ---------------- SAFE FLUSH (NO beforeunload) ----------------
+    window.addEventListener("popstate", flushPendingInputs);
+    window.addEventListener("hashchange", flushPendingInputs);
+
+    // ---------------- NAVIGATION ----------------
+    let lastUrl = location.href;
+    setInterval(() => {
+        if (location.href !== lastUrl && shouldRecord()) {
+            lastUrl = location.href;
+            saveAction({
+                action: "navigate",
+                label: document.title || "page",
+                url: lastUrl,
+                windowId: window.name || statusKey,
+                timestamp: new Date().toISOString()
+            });
+        }
+    }, 500);
+    if (location.hostname.includes("microsoft") || location.hostname.includes("google")) {
+    window.addEventListener("beforeunload", () => {
+        try {
+            localStorage.setItem("__oauth_closed", Date.now());
+        } catch (e) {}
+    });
+}
+    console.log("✅ Intent-level action recorder enabled (SAFE MODE):", statusKey);
+})(STATUS_KEY_PLACEHOLDER);
+"""
+JS_action_listeners_jan_21="""(function (statusKey) {
+    if (window.__intentRecorderInjected) return;
+    window.__intentRecorderInjected = true;
+
+    const ACTIONS_KEY = "recordedActions";
+    const INPUT_DEBOUNCE_MS = 400;
+    const CLICK_DEDUP_MS = 300;
+
+    const elementState = new Map();
+    const lastClickMap = new Map();
+    
+    function getXPath(el) {
+        const getPos = e => {
+            let pos = 1;
+            while (e.previousElementSibling) { e = e.previousElementSibling; pos++; }
+            return pos;
+        };
+        const parts = [];
+        while (el && el.nodeType === Node.ELEMENT_NODE) {
+            parts.unshift(`${el.tagName.toLowerCase()}[${getPos(el)}]`);
+            el = el.parentNode;
+        }
+        return "/" + parts.join("/");
+    }
+   
+    function getLabel(el) {
+    let e = el;
+    for (let i = 0; i < 3 && e; i++) {
+        const label =
+            e.getAttribute("aria-label") ||
+            e.name ||
+            e.id ||
+            e.placeholder ||
+            (e.innerText && e.innerText.trim());
+        if (label) return label.trim();
+        e = e.parentElement;
+        }
+    return "[unlabeled]";
+    }
+
+    function loadActions() {
+        return JSON.parse(localStorage.getItem(ACTIONS_KEY) || "[]");
+    }
+
+    function saveAction(action) {
+        const actions = loadActions();
+        actions.push(action);
+        localStorage.setItem(ACTIONS_KEY, JSON.stringify(actions));
+        window.dispatchEvent(new CustomEvent("__action_recorded", { detail: action }));
+    }
+
+    // ---------------- CLICK (INTENT) ----------------
+    document.addEventListener("click", e => {
+        const el = e.target;
+        if (!el || ["script", "style"].includes(el.tagName?.toLowerCase())) return;
+
+        const xpath = getXPath(el);
+        const now = Date.now();
+        const lastClickTime = lastClickMap.get(xpath) || 0;
+
+        if (now - lastClickTime < CLICK_DEDUP_MS) return;
+        lastClickMap.set(xpath, now);
+
+        saveAction({
+            action: "click",
+            label: getLabel(el),
+            xpath,
+            url: location.href,
+            windowId: window.name || statusKey,
+            timestamp: new Date().toISOString()
+        });
+    }, true);
+
+    // ---------------- INPUT TRACKING ----------------
+    document.addEventListener("input", e => {
+        const el = e.target;
+        if (!el || !["INPUT", "TEXTAREA"].includes(el.tagName)) return;
+
+        const xpath = getXPath(el);
+        const state = elementState.get(xpath) || {};
+        state.lastValue = el.value;
+        state.lastInputTime = Date.now();
+        elementState.set(xpath, state);
+    }, true);
+
+    // ---------------- INPUT COMMIT (BLUR) ----------------
+    document.addEventListener("focusout", e => {
+        const el = e.target;
+        if (!el || !["INPUT", "TEXTAREA"].includes(el.tagName)) return;
+
+        const xpath = getXPath(el);
+        const state = elementState.get(xpath);
+        if (!state) return;
+
+        const stable =
+            Date.now() - state.lastInputTime >= INPUT_DEBOUNCE_MS &&
+            state.lastValue &&
+            state.lastValue.trim() !== "";
+
+        if (!stable) return;
+
+        saveAction({
+            action: "enter_text",
+            label: getLabel(el),
+            value: state.lastValue,
+            xpath,
+            url: location.href,
+            windowId: window.name || statusKey,
+            timestamp: new Date().toISOString()
+        });
+
+        elementState.delete(xpath);
+    }, true);
+
+    // ---------------- CHECKBOX / RADIO ----------------
+    document.addEventListener("change", e => {
+        const el = e.target;
+        if (!el || el.type !== "checkbox") return;
+
+        saveAction({
+            action: el.checked ? "check" : "uncheck",
+            label: getLabel(el),
+            xpath: getXPath(el),
+            value: el.checked,
+            url: location.href,
+            windowId: window.name || statusKey,
+            timestamp: new Date().toISOString()
+        });
+    }, true);
+
+    // ---------------- NAVIGATION ----------------
+    let lastUrl = location.href;
+    setInterval(() => {
+        if (location.href !== lastUrl) {
+            lastUrl = location.href;
+            saveAction({
+            action: "navigate",
+            label: document.title || "page",
+            url: lastUrl,
+            windowId: window.name || statusKey,
+            timestamp: new Date().toISOString()
+            });
+        }
+    }, 500);
+
+    console.log("✅ Intent-level action recorder enabled:", statusKey);
+})(STATUS_KEY_PLACEHOLDER);
+"""
+JS_action_listeners= """(function (statusKey) {
     if (window.__listenersInjected) return;
     window.__listenersInjected = true;
 
@@ -744,6 +1471,46 @@ def generate_workflow_manual(actions):
     Convert recorded actions into human-readable workflow suitable for AI feature/test case generation.
     Handles multiple windows and avoids duplicate window messages.
     """
+    workflow_lines = []
+    current_window = None
+    seen_windows = set()
+    last_action_url = None   # ✅ NEW: track previous action URL
+
+    for act in actions:
+        window_id = act.get("windowId", "MainWindow")
+        url = act.get("url", "Unknown")
+
+        # Detect window switch or new window
+        if window_id != current_window:
+            if window_id in seen_windows:
+                workflow_lines.append(f'Switched to window: [{url}]')
+            else:
+                if window_id == "MainWindow":
+                    workflow_lines.append(f'User opened page: [{url}]')
+                else:
+                    workflow_lines.append(f'Switched to new window: [{url}]')
+                seen_windows.add(window_id)
+
+            current_window = window_id
+            last_action_url = None  # ✅ reset when window changes
+
+        # Human-readable action
+        readable = humanize_action(act)
+        if readable:
+            # ✅ URL comparison logic
+            if url != last_action_url:
+                workflow_lines.append(f'{readable} (URL: {url})')
+                last_action_url = url
+            else:
+                workflow_lines.append(f'{readable}')
+
+    return workflow_lines
+
+def generate_workflow_manual_bug(actions):
+    """
+    Convert recorded actions into human-readable workflow suitable for AI feature/test case generation.
+    Handles multiple windows and avoids duplicate window messages.
+    """
     print("************Actions***************")
     print(actions)
     workflow_lines = []
@@ -771,6 +1538,7 @@ def generate_workflow_manual(actions):
         readable = humanize_action(act)
         if readable:
             workflow_lines.append(f'{readable} (URL: {url})')
+            #workflow_lines.append(f'{readable}')
     print("*********workflow_lines************")
     print(workflow_lines)
     print("*********workflow_lines ends************")
@@ -786,7 +1554,8 @@ def humanize_action(action_dict):
     action_type = action_dict.get("action")
     tag = (action_dict.get("tag") or "").lower()
     label = (action_dict.get("label") or "").strip()
-    value = (action_dict.get("value") or "").strip()
+    raw = action_dict.get("value")
+    value = str(raw).strip() if raw is not None else ""
     placeholder = (action_dict.get("placeholder") or "").strip()
     element_id = (action_dict.get("id") or "").strip()
 

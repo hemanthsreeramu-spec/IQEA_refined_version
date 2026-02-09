@@ -199,10 +199,10 @@ if st.button("Open Browser"):
         chrome_options.add_argument("--remote-allow-origins=*")
         chrome_options.add_argument("--disable-dev-shm-usage")
         #chrome_options.binary_location = chromedriver_path
-        #service = Service(executable_path=chromedriver_path)
+        service = Service(executable_path=chromedriver_path)
         #service = Service(ChromeDriverManager().install())
-        st.session_state.driver = webdriver.Chrome(options=chrome_options)
-        #st.session_state.driver = webdriver.Chrome(service=service, options=chrome_options)
+        #st.session_state.driver = webdriver.Chrome(options=chrome_options)
+        st.session_state.driver = webdriver.Chrome(service=service, options=chrome_options)
         st.session_state.driver.get(page_url)
         st.session_state.driver.maximize_window()
         WebDriverWait(st.session_state.driver, 30).until(utils.is_page_loaded)
@@ -236,51 +236,6 @@ if st.session_state.checkbox1_state:
                 st.session_state.driver.execute_script(action_utils.injection_script_updated_fixed())
                 print(f"✅ JS injected in new window {handle} ({st.session_state.driver.current_url})")
                 st.session_state.injected_windows[handle] = True
-                # Ensure iframe registry exists
-                # st.session_state.driver.execute_script("""
-                # if (!window.__injectedIframes) {
-                #     window.__injectedIframes = new Set();
-                # }
-                # """)
-                # iframes = st.session_state.driver.find_elements(
-                #     By.XPATH, "//iframe[contains(@id, 'Form')]"
-                # )
-                # print("**********Number of Iframe",iframes)
-                # for idx, iframe in enumerate(iframes):
-                #     try:
-                #         iframe_key = (
-                #                 iframe.get_attribute("id")
-                #                 or iframe.get_attribute("name")
-                #                 or iframe.get_attribute("src")
-                #                 or f"iframe_{idx}"
-                #         )
-                #
-                #         already = st.session_state.driver.execute_script(
-                #             "return window.__injectedIframes.has(arguments[0]);",
-                #             iframe_key
-                #         )
-                #
-                #         if already:
-                #             continue
-                #         print("******Going to start Iframe injection for iframe",iframe)
-                #
-                #         st.session_state.driver.switch_to.frame(iframe)
-                #         st.session_state.driver.execute_script(action_utils.inject_iframe_js(st.session_state.driver,iframe, iframe_key))
-                #         print("******injection done", iframe)
-                #         st.session_state.driver.switch_to.default_content()
-                #
-                #         st.session_state.driver.execute_script(
-                #             "window.__injectedIframes.add(arguments[0]);",
-                #             iframe_key
-                #         )
-                #
-                #         print("✅ Injected iframe:", iframe_key)
-                #
-                #     except Exception as e:
-                #         print("⚠️ Skipping iframe:", e)
-                #         st.session_state.driver.switch_to.default_content()
-                #
-
                 # --- Thread 1: New windows checker ---
                 t1 = threading.Thread(
                     target=utils.thread_new_window_checker,
@@ -369,14 +324,24 @@ if st.session_state.checkbox1_state:
                 else:
                     st.session_state.workflow_text = action_utils.generate_workflow_manual(st.session_state.actions)
                     workflow_saved = False
+                    print("workflow_text",st.session_state.workflow_text)
                     if source == "database":
                         action_id = db_handler.save_action_to_db(page_name,st.session_state.workflow_text , get_update_user())
                         st.success(f"✅ Action saved to database (ID: {action_id})")
                         #st.write(db_handler.get_action_file_by_name(page_name))
                     elif source == "file":
                         filename = os.path.join(Action_collection, f"{page_name}_actions.txt")
-                        with open(filename, "w") as f:
-                            f.write("\n".join(st.session_state.workflow_text ))  # ✅ FIXED
+                        def clean_text(s):
+                            return (
+                                s.replace("\u200b", "")
+                                .replace("\xa0", " ")
+                                .strip()
+                            )
+                        cleaned = [clean_text(x) for x in st.session_state.workflow_text]
+                        with open(filename, "w", encoding="utf-8") as f:
+                            f.write("\n".join(cleaned))
+                        # with open(filename, "w") as f:
+                        #     f.write("\n".join(st.session_state.workflow_text ))  # ✅ FIXED
                              #f.write(st.session_state.workflow_text)
                         st.success(f"✅ Workflow saved: {filename}")
                         #action_utils.reinject_clear_local_storage(st.session_state.driver)
@@ -979,6 +944,8 @@ if st.session_state.checkbox5_state:
             if "Web" in selected_app:
                 formatted_summary = utils.get_visible_element_iframe(st.session_state.driver, page_identifier,
                                                                     st.session_state.selected_tags)
+                # formatted_summary = utils.get_visible_element(st.session_state.driver, page_identifier,
+                #                                                     st.session_state.selected_tags)
             if formatted_summary is None:
                 formatted_summary = []
             if formatted_summary:
@@ -1171,19 +1138,19 @@ if st.session_state.checkbox5_state:
                 #st.write(test_script_response)
                 Lang_lib_validate = "Test-validate-" + test_file_language
                 script_validator_prompt=utils.generate_script_validator(Lang_lib_validate,page_files_content,test_script_response)
-
+                #
                 test_script_response = utils.get_queries_from_ai_updated(script_validator_prompt)
-                second_level_script_validation=utils.generate_script_validation_prompt("Script_validation_common",page_files_content,test_script_response,Lang_lib)
-                print("second_level_script_validation",second_level_script_validation)
-                final_test_page_script=utils.get_queries_from_ai_updated(second_level_script_validation)
-                print("final_test_page_script", final_test_page_script)
-                utils.update_page_files_from_json(final_test_page_script,Page_collection)
-                validated_test_script=utils.extract_test_script_from_json(final_test_page_script)
-                print("validated_test_script", validated_test_script)
+                # second_level_script_validation=utils.generate_script_validation_prompt("Script_validation_common",page_files_content,test_script_response,Lang_lib)
+                # print("second_level_script_validation",second_level_script_validation)
+                # final_test_page_script=utils.get_queries_from_ai_updated(second_level_script_validation)
+                # print("final_test_page_script", final_test_page_script)
+                # utils.update_page_files_from_json(final_test_page_script,Page_collection)
+                # test_script_response=utils.extract_test_script_from_json(final_test_page_script)
+                # print("validated_test_script", test_script_response)
                 if source == "file":
-                    utils.create_test_file(Test_file_generator,test_file_name, test_file_language, validated_test_script)
+                    utils.create_test_file(Test_file_generator,test_file_name, test_file_language, test_script_response)
                 elif source == "database":
-                    db_handler.save_testfile_to_db(test_file_name,validated_test_script,get_update_user(),test_file_language)
+                    db_handler.save_testfile_to_db(test_file_name,test_script_response,get_update_user(),test_file_language)
 if st.session_state.checkbox7_state:
     with st.expander("⚙️ Source Code 📡 Automation Bridge"):
         st.title("Upload code to Repository")
