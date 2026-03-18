@@ -5,6 +5,7 @@ from utilities.db_utils.base import Base  # Shared Base
 
 class Prompt(Base):
     __tablename__ = "prompts"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True, index=True)
     prompt_name = Column(String(255), nullable=False, unique=True)
@@ -22,6 +23,7 @@ class Prompt(Base):
 
 class Action(Base):
     __tablename__ = 'actions'
+    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True)
     action_name = Column(Text, nullable=False)  # this is the file name
@@ -31,7 +33,7 @@ class Action(Base):
 
 class Pagefile(Base):
     __tablename__ = 'pagefile'
-
+    __table_args__ = {"extend_existing": True}
     id = Column(Integer, primary_key=True)
     pagefile_name = Column(Text, nullable=False)  # this is the file name
     file_data = Column(LargeBinary, nullable=False)
@@ -40,7 +42,7 @@ class Pagefile(Base):
 
 class Testcasefile(Base):
     __tablename__ = 'testcase'
-
+    __table_args__ = {"extend_existing": True}
     id = Column(Integer, primary_key=True)
     testcase_name = Column(Text, nullable=False)  # this is the file name
     file_data = Column(LargeBinary, nullable=False)
@@ -49,7 +51,7 @@ class Testcasefile(Base):
 
 class Testfile(Base):
     __tablename__ = 'testfile'
-
+    __table_args__ = {"extend_existing": True}
     id = Column(Integer, primary_key=True)
     testfile_name = Column(Text, nullable=False)  # this is the file name
     file_data = Column(LargeBinary, nullable=False)
@@ -58,7 +60,7 @@ class Testfile(Base):
 
 class Fetaurefile(Base):
     __tablename__ = 'featurefile'
-
+    __table_args__ = {"extend_existing": True}
     id = Column(Integer, primary_key=True)
     featurefile_name = Column(Text, nullable=False)  # this is the file name
     file_data = Column(LargeBinary, nullable=False)
@@ -67,7 +69,7 @@ class Fetaurefile(Base):
 
 class Screenshot(Base):
     __tablename__ = 'screenshot'
-
+    __table_args__ = {"extend_existing": True}
     id = Column(Integer, primary_key=True)
     page_name = Column(Text, nullable=False)
     url = Column(Text, nullable=False)

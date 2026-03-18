@@ -9,7 +9,6 @@ from langchain_core.messages import HumanMessage
 from langchain_openai import AzureChatOpenAI
 from dotenv import load_dotenv
 load_dotenv()
-from utilities.db_utils.models import Screenshot
 
 JS_action_listeners_agentflow= """(function (statusKey) {
     if (window.__intentRecorderInjected) return;
@@ -331,7 +330,7 @@ JS_action_listeners_agentflow= """(function (statusKey) {
     console.log("✅ Intent-level action recorder enabled (SAFE MODE):", statusKey);
 })(STATUS_KEY_PLACEHOLDER);
 """
-JS_action_listeners_working1 = """(function (statusKey) {
+JS_action_listeners_march11 = """(function (statusKey) {
     if (window.__intentRecorderInjected) return;
     window.__intentRecorderInjected = true;
 
@@ -738,7 +737,844 @@ JS_action_listeners_jan_21="""(function (statusKey) {
     console.log("✅ Intent-level action recorder enabled:", statusKey);
 })(STATUS_KEY_PLACEHOLDER);
 """
-JS_action_listeners= """(function (statusKey) {
+JS_action_listeners = """/**
+ * IQEA Enhanced Action Listener v2.0 (fixed: no duplicates, no hover noise)
+ */
+(function (statusKey) {
+
+    // ─── Guard: SPA-safe reinject (URL-bound) ─────────────────────────────────
+    const _currentUrl = window.location.href;
+    if (window.__iqea_injected_url === _currentUrl) return;
+    window.__iqea_injected_url = _currentUrl;
+
+    // ─── Global step counter ──────────────────────────────────────────────────
+    function nextStepNumber() {
+        const n = parseInt(localStorage.getItem("__iqea_step") || "0") + 1;
+        localStorage.setItem("__iqea_step", String(n));
+        return n;
+    }
+
+    // ─── Action persistence ────────────────────────────────────────────────────
+    if (!window.__recordedActions) {
+        window.__recordedActions = JSON.parse(localStorage.getItem("recordedActions") || "[]");
+    }
+
+    function saveAction(action) {
+        const existing = JSON.parse(localStorage.getItem("recordedActions") || "[]");
+        const last = existing.length > 0 ? existing[existing.length - 1] : null;
+
+        if (last &&
+            last.action === action.action &&
+            last.label === action.label &&
+            last.url === action.url &&
+            (!action.value || action.value === last.value) &&
+            (new Date(action.timestamp) - new Date(last.timestamp)) < 500) {
+            return;
+        }
+
+        if (last && last.action === "switch" && last.windowId === action.windowId) {
+            existing.pop();
+            window.__recordedActions.pop();
+        }
+
+        existing.push(action);
+        localStorage.setItem("recordedActions", JSON.stringify(existing));
+        window.__recordedActions.push(action);
+
+        try {
+            window.dispatchEvent(new CustomEvent("__action_recorded", { detail: action }));
+            if (window.opener && window.opener !== window) {
+                window.opener.postMessage({ __relay: true, payload: action }, "*");
+            }
+            if (window.__iqeaChannel) {
+                window.__iqeaChannel.postMessage({ __relay: true, payload: action });
+            }
+        } catch (err) {
+            console.warn("Relay failed:", err);
+        }
+    }
+
+    // BroadcastChannel for cross-tab relay
+    try {
+        if (!window.__iqeaChannel) {
+            window.__iqeaChannel = new BroadcastChannel("__iqea_channel");
+            window.__iqeaChannel.onmessage = (e) => {
+                if (e.data && e.data.__relay && e.data.payload) saveAction(e.data.payload);
+            };
+        }
+    } catch (_) {}
+
+    // Cross-window postMessage relay
+    if (!window.__iqea_msg_listener) {
+        window.__iqea_msg_listener = true;
+        window.addEventListener("message", function (event) {
+            if (event.data && event.data.__relay && event.data.payload) {
+                saveAction(event.data.payload);
+                if (window.opener && window.opener !== window) {
+                    window.opener.postMessage(event.data, "*");
+                }
+            }
+        });
+    }
+
+    if (!window.__iqea_focus_listener) {
+        window.__iqea_focus_listener = true;
+        window.addEventListener("focus", () => {
+            localStorage.setItem("lastFocusedWindow", window.location.href);
+        });
+    }
+
+    // ─── Smart XPath builder ───────────────────────────────────────────────────
+    function getSmartXPath(el) {
+        if (!el || el.nodeType !== Node.ELEMENT_NODE) return "";
+
+        if (el.id && !/^\\d/.test(el.id)) return `//*[@id="${el.id}"]`;
+
+        const testAttrs = ["data-testid", "data-qa", "data-cy", "data-id", "data-automation-id"];
+        for (const attr of testAttrs) {
+            const val = el.getAttribute(attr);
+            if (val) return `//${el.tagName.toLowerCase()}[@${attr}="${val}"]`;
+        }
+
+        const interactiveTags = ["input", "button", "select", "textarea", "a"];
+        if (interactiveTags.includes(el.tagName.toLowerCase())) {
+            const ariaLabel = el.getAttribute("aria-label");
+            if (ariaLabel) return `//${el.tagName.toLowerCase()}[@aria-label="${ariaLabel}"]`;
+            const name = el.getAttribute("name");
+            if (name) return `//${el.tagName.toLowerCase()}[@name="${name}"]`;
+            const placeholder = el.getAttribute("placeholder");
+            if (placeholder) return `//${el.tagName.toLowerCase()}[@placeholder="${placeholder}"]`;
+        }
+
+        const parts = [];
+        let node = el;
+        while (node && node.nodeType === Node.ELEMENT_NODE) {
+            let index = 1;
+            let sib = node.previousElementSibling;
+            while (sib) {
+                if (sib.tagName === node.tagName) index++;
+                sib = sib.previousElementSibling;
+            }
+            const tag = node.tagName.toLowerCase();
+            parts.unshift(index > 1 ? `${tag}[${index}]` : tag);
+            node = node.parentNode;
+        }
+        return "/" + parts.join("/");
+    }
+
+    // ─── Element label extractor ───────────────────────────────────────────────
+    function getLabel(el) {
+        if (!el) return "";
+        return (
+            el.getAttribute("aria-label") ||
+            el.getAttribute("data-testid") ||
+            el.getAttribute("name") ||
+            el.id ||
+            el.getAttribute("placeholder") ||
+            el.getAttribute("alt") ||
+            el.getAttribute("title") ||
+            (el.innerText || "").trim().substring(0, 80) ||
+            el.getAttribute("class") ||
+            el.type || ""
+        );
+    }
+
+    // ─── Core record function ──────────────────────────────────────────────────
+    function recordAction(type, target, extra = {}) {
+        const grace = window.__reinjectionGrace || 0;
+        if (grace > 0 && (Date.now() - grace) < 300) return;
+
+        if (!target || ["script", "style", "html", "body", "head"].includes(
+            target.tagName?.toLowerCase())) return;
+
+        const xpath = getSmartXPath(target);
+        const label = getLabel(target);
+        const value = extra.value !== undefined
+            ? extra.value
+            : (["input", "change", "input_others", "select"].includes(type)
+                ? (target.value || target.innerText || "") : "");
+
+        const actionObj = {
+            step:      nextStepNumber(),
+            action:    type,
+            xpath,
+            label:     label?.trim(),
+            value:     String(value).trim(),
+            url:       window.location.href,
+            windowId:  window.name || statusKey,
+            timestamp: new Date().toISOString(),
+            ...extra
+        };
+
+        saveAction(actionObj);
+        console.log("IQEA Recorded:", actionObj);
+    }
+
+    // ─── Scroll throttle ──────────────────────────────────────────────────────
+    let _scrollTimer = null;
+    function throttledScroll(target) {
+        if (_scrollTimer) clearTimeout(_scrollTimer);
+        _scrollTimer = setTimeout(() => {
+            const scrollX = Math.round(window.scrollX || target.scrollLeft || 0);
+            const scrollY = Math.round(window.scrollY || target.scrollTop || 0);
+            recordAction("scroll", target === window ? document.body : target, {
+                value: `scrollX:${scrollX},scrollY:${scrollY}`
+            });
+        }, 400);
+    }
+
+    // ─── Drag state ───────────────────────────────────────────────────────────
+    let _dragSource = null;
+
+    // ─── Attach listeners — FIX: use AbortController per root ─────────────────
+    // OLD approach: root.__iqea_attached = true flag — but this flag was being
+    // reset to false by injection_script_updated_fixed() before the old script
+    // tag was removed, so the old listeners were still alive AND new ones were
+    // added → every event fired twice.
+    //
+    // NEW approach: each root gets an AbortController. On reinject, the old
+    // controller is aborted (removes all its listeners cleanly), then a new
+    // controller is created. This guarantees exactly ONE set of listeners
+    // per root at all times, regardless of how many reinjections happen.
+    function attachListeners(root) {
+        // Abort and replace any existing listeners on this root
+        if (root.__iqea_controller) {
+            root.__iqea_controller.abort();
+        }
+        const controller = new AbortController();
+        const signal = controller.signal;
+        root.__iqea_controller = controller;
+
+        const doc = root.ownerDocument || root;
+        const opts = { signal, capture: true };
+
+        doc.addEventListener("click",       e => recordAction("click",       e.target), opts);
+        doc.addEventListener("contextmenu", e => recordAction("right_click", e.target), opts);
+
+        doc.addEventListener("change", e => {
+            const el  = e.target;
+            const tag = el.tagName.toLowerCase();
+            if      (tag === "select")       recordAction("select",      el, { value: el.options[el.selectedIndex]?.text || el.value });
+            else if (el.type === "checkbox") recordAction("checkbox",    el, { value: el.checked ? "checked" : "unchecked" });
+            else if (el.type === "radio")    recordAction("radio",       el, { value: el.value });
+            else if (el.type === "file")     recordAction("file_upload", el, { value: Array.from(el.files || []).map(f => f.name).join(", ") });
+            else                             recordAction("input",       el);
+        }, opts);
+
+        doc.addEventListener("focusout", e => {
+            const tag = e.target.tagName.toLowerCase();
+            if (!["button", "input", "textarea", "select"].includes(tag))
+                recordAction("change", e.target);
+        }, opts);
+
+        doc.addEventListener("keydown", e => {
+            const key   = e.key;
+            const ctrl  = e.ctrlKey || e.metaKey;
+            const shift = e.shiftKey;
+
+            if (key === "Enter")  { recordAction("key_enter",  e.target, { value: "Enter" });                     return; }
+            if (key === "Escape") { recordAction("key_escape", e.target, { value: "Escape" });                    return; }
+            if (key === "Tab")    { recordAction("key_tab",    e.target, { value: shift ? "Shift+Tab" : "Tab" }); return; }
+
+            if (ctrl) {
+                const map = { c:"copy", x:"cut", v:"paste", z:"undo", y:"redo",
+                              a:"select_all", f:"find", s:"save", p:"print" };
+                const action = map[key.toLowerCase()];
+                if (action) recordAction(`shortcut_${action}`, e.target,
+                    { value: `${e.metaKey ? "Cmd" : "Ctrl"}+${key.toUpperCase()}` });
+            }
+            if (key.startsWith("F") && !isNaN(key.slice(1)))
+                recordAction("function_key", e.target, { value: key });
+        }, opts);
+
+        doc.addEventListener("copy",  e => recordAction("copy",  e.target,
+            { value: (doc.getSelection()||"").toString().substring(0,200) }), opts);
+        doc.addEventListener("cut",   e => recordAction("cut",   e.target,
+            { value: (doc.getSelection()||"").toString().substring(0,200) }), opts);
+        doc.addEventListener("paste", e => {
+            let pasted = "";
+            try { pasted = (e.clipboardData || window.clipboardData)?.getData("text")?.substring(0,200) || ""; } catch(_) {}
+            recordAction("paste", e.target, { value: pasted });
+        }, opts);
+
+        // Scroll — passive listeners also support AbortController signal
+        window.addEventListener("scroll", e => throttledScroll(e.target),
+            { passive: true, capture: true, signal });
+        doc.addEventListener("scroll", e => {
+            if (e.target !== window && e.target !== doc) throttledScroll(e.target);
+        }, { passive: true, capture: true, signal });
+
+        doc.addEventListener("dragstart", e => {
+            _dragSource = e.target;
+            recordAction("drag_start", e.target, { value: getLabel(e.target) });
+        }, opts);
+        doc.addEventListener("drop", e => {
+            recordAction("drop", e.target,
+                { value: `from: ${getLabel(_dragSource)} to: ${getLabel(e.target)}` });
+            _dragSource = null;
+        }, opts);
+
+        // ── HOVER DISABLED ─────────────────────────────────────────────────────
+        // Hover events (mouseenter/mouseleave) are intentionally NOT recorded.
+        // They generate extreme noise (every button mouseover = 2 entries) and
+        // are not useful for test case generation or script replay.
+        // To re-enable, uncomment the block below.
+        //
+        // doc.addEventListener("mouseenter", e => {
+        //     const tag = e.target.tagName?.toLowerCase();
+        //     if (["button","a","select"].includes(tag) || ...)
+        //         recordAction("hover", e.target);
+        // }, opts);
+        // doc.addEventListener("mouseleave", e => {
+        //     const tag = e.target.tagName?.toLowerCase();
+        //     if (["button","a"].includes(tag)) recordAction("hover_end", e.target);
+        // }, opts);
+
+        console.log("IQEA listeners attached to:", root);
+    }
+
+    // ─── Shadow DOM support ───────────────────────────────────────────────────
+    function injectIntoShadowRoots(node) {
+        if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
+        if (node.shadowRoot) {
+            attachListeners(node.shadowRoot);
+            node.shadowRoot.querySelectorAll("*").forEach(injectIntoShadowRoots);
+        }
+        node.querySelectorAll && node.querySelectorAll("*").forEach(child => {
+            if (child.shadowRoot) { attachListeners(child.shadowRoot); injectIntoShadowRoots(child); }
+        });
+    }
+
+    if (!window.__iqea_shadow_observer) {
+        window.__iqea_shadow_observer = new MutationObserver(mutations => {
+            mutations.forEach(m => m.addedNodes.forEach(n => {
+                if (n.nodeType === Node.ELEMENT_NODE) injectIntoShadowRoots(n);
+            }));
+        });
+        window.__iqea_shadow_observer.observe(document.documentElement,
+            { childList: true, subtree: true });
+    }
+
+    // ─── iFrame support ───────────────────────────────────────────────────────
+    function injectIntoIframe(iframe) {
+        try {
+            const iDoc = iframe.contentDocument || iframe.contentWindow?.document;
+            if (iDoc && iDoc.body) {
+                attachListeners(iDoc);
+                injectIntoShadowRoots(iDoc.documentElement);
+                if (!iframe.__iqea_iframe_observer) {
+                    iframe.__iqea_iframe_observer = new MutationObserver(mutations => {
+                        mutations.forEach(m => m.addedNodes.forEach(n => {
+                            if (n.tagName === "IFRAME") injectIntoIframe(n);
+                        }));
+                    });
+                    iframe.__iqea_iframe_observer.observe(iDoc, { childList: true, subtree: true });
+                }
+            }
+        } catch (e) {
+            console.warn("Cross-origin iframe skipped:", iframe.src);
+        }
+    }
+
+    function injectAllIframes() {
+        document.querySelectorAll("iframe").forEach(injectIntoIframe);
+    }
+
+    if (!window.__iqea_iframe_observer) {
+        window.__iqea_iframe_observer = new MutationObserver(mutations => {
+            mutations.forEach(m => m.addedNodes.forEach(n => {
+                if (n.tagName === "IFRAME") injectIntoIframe(n);
+                if (n.querySelectorAll) n.querySelectorAll("iframe").forEach(injectIntoIframe);
+            }));
+        });
+        window.__iqea_iframe_observer.observe(document.documentElement,
+            { childList: true, subtree: true });
+    }
+
+    // ─── SPA route change detection ───────────────────────────────────────────
+    function patchHistory() {
+        const wrap = (orig) => function (...args) {
+            const result = orig.apply(this, args);
+            window.dispatchEvent(new Event("__iqea_spa_navigate"));
+            return result;
+        };
+        if (!window.__iqea_history_patched) {
+            history.pushState    = wrap(history.pushState);
+            history.replaceState = wrap(history.replaceState);
+            window.__iqea_history_patched = true;
+        }
+    }
+
+    if (!window.__iqea_popstate_listener) {
+        window.__iqea_popstate_listener = true;
+        window.addEventListener("popstate", () =>
+            window.dispatchEvent(new Event("__iqea_spa_navigate")));
+        window.addEventListener("__iqea_spa_navigate", () => {
+            window.__iqea_injected_url = null;
+            setTimeout(() => {
+                attachListeners(document);
+                injectAllIframes();
+                injectIntoShadowRoots(document.documentElement);
+            }, 300);
+        });
+    }
+
+    // ─── Bootstrap ────────────────────────────────────────────────────────────
+    function init() {
+        patchHistory();
+        attachListeners(document);
+        injectAllIframes();
+        injectIntoShadowRoots(document.documentElement);
+        console.log("IQEA v2.0 ready. statusKey:", statusKey);
+    }
+
+    if (document.readyState === "complete" || document.readyState === "interactive") init();
+    else window.addEventListener("load", init, { once: true });
+
+})(window.__iqea_windowId);"""
+
+JS_action_listeners_clode_mar17="""/**
+ * IQEA Enhanced Action Listener v2.0
+ * Supports: click, keyboard, scroll, drag-drop, right-click, copy/paste,
+ *           file upload, hover, shadow DOM, iframes, SPA reinject fix,
+ *           smart XPath, multi-window relay, step sequencing
+ */
+(function (statusKey) {
+
+    // ─── Guard: SPA-safe reinject (don't use persistent __listenersInjected) ───
+    // Instead of a permanent flag, use a URL-bound flag so SPA route changes re-attach
+    const _currentUrl = window.location.href;
+    if (window.__iqea_injected_url === _currentUrl) return;
+    window.__iqea_injected_url = _currentUrl;
+
+    // ─── Global step counter (shared across windows via localStorage) ──────────
+    function nextStepNumber() {
+        const n = parseInt(localStorage.getItem("__iqea_step") || "0") + 1;
+        localStorage.setItem("__iqea_step", String(n));
+        return n;
+    }
+
+    // ─── Action persistence ────────────────────────────────────────────────────
+    if (!window.__recordedActions) {
+        window.__recordedActions = JSON.parse(localStorage.getItem("recordedActions") || "[]");
+    }
+
+    function saveAction(action) {
+        const existing = JSON.parse(localStorage.getItem("recordedActions") || "[]");
+        const last = existing.length > 0 ? existing[existing.length - 1] : null;
+
+        // Skip exact duplicate (same action+label+url+value within 500ms)
+        if (last &&
+            last.action === action.action &&
+            last.label === action.label &&
+            last.url === action.url &&
+            (!action.value || action.value === last.value) &&
+            (new Date(action.timestamp) - new Date(last.timestamp)) < 500) {
+            console.log("⏭️ Duplicate action skipped:", action);
+            return;
+        }
+
+        // Replace a trailing orphan "switch" action with the real action
+        if (last && last.action === "switch" && last.windowId === action.windowId) {
+            existing.pop();
+            window.__recordedActions.pop();
+        }
+
+        existing.push(action);
+        localStorage.setItem("recordedActions", JSON.stringify(existing));
+        window.__recordedActions.push(action);
+
+        try {
+            window.dispatchEvent(new CustomEvent("__action_recorded", { detail: action }));
+            // Relay to opener (popup → parent)
+            if (window.opener && window.opener !== window) {
+                window.opener.postMessage({ __relay: true, payload: action }, "*");
+            }
+            // Relay to all same-origin frames via BroadcastChannel
+            if (window.__iqeaChannel) {
+                window.__iqeaChannel.postMessage({ __relay: true, payload: action });
+            }
+        } catch (err) {
+            console.warn("Relay failed:", err);
+        }
+    }
+
+    // BroadcastChannel for cross-tab/window relay (same origin)
+    try {
+        window.__iqeaChannel = new BroadcastChannel("__iqea_channel");
+        window.__iqeaChannel.onmessage = (e) => {
+            if (e.data && e.data.__relay && e.data.payload) {
+                saveAction(e.data.payload);
+            }
+        };
+    } catch (_) {}
+
+    // Cross-window postMessage relay
+    window.addEventListener("message", function (event) {
+        if (event.data && event.data.__relay && event.data.payload) {
+            saveAction(event.data.payload);
+            if (window.opener && window.opener !== window) {
+                window.opener.postMessage(event.data, "*");
+            }
+        }
+    });
+
+    // Focus tracking
+    window.addEventListener("focus", () => {
+        localStorage.setItem("lastFocusedWindow", window.location.href);
+    });
+
+    // ─── Smart XPath builder ───────────────────────────────────────────────────
+    function getSmartXPath(el) {
+        if (!el || el.nodeType !== Node.ELEMENT_NODE) return "";
+
+        // 1. Prefer unique ID
+        if (el.id && !/^\d/.test(el.id)) {
+            return `//*[@id="${el.id}"]`;
+        }
+
+        // 2. Prefer unique data-testid / data-qa / data-cy
+        const testAttrs = ["data-testid", "data-qa", "data-cy", "data-id", "data-automation-id"];
+        for (const attr of testAttrs) {
+            const val = el.getAttribute(attr);
+            if (val) return `//${el.tagName.toLowerCase()}[@${attr}="${val}"]`;
+        }
+
+        // 3. Prefer aria-label or name on interactive elements
+        const interactiveTags = ["input", "button", "select", "textarea", "a"];
+        if (interactiveTags.includes(el.tagName.toLowerCase())) {
+            const ariaLabel = el.getAttribute("aria-label");
+            if (ariaLabel) return `//${el.tagName.toLowerCase()}[@aria-label="${ariaLabel}"]`;
+            const name = el.getAttribute("name");
+            if (name) return `//${el.tagName.toLowerCase()}[@name="${name}"]`;
+            const placeholder = el.getAttribute("placeholder");
+            if (placeholder) return `//${el.tagName.toLowerCase()}[@placeholder="${placeholder}"]`;
+        }
+
+        // 4. Fallback: positional path (robust version with tag+index only)
+        const parts = [];
+        let node = el;
+        while (node && node.nodeType === Node.ELEMENT_NODE) {
+            let index = 1;
+            let sib = node.previousElementSibling;
+            while (sib) {
+                if (sib.tagName === node.tagName) index++;
+                sib = sib.previousElementSibling;
+            }
+            const tag = node.tagName.toLowerCase();
+            parts.unshift(index > 1 ? `${tag}[${index}]` : tag);
+            node = node.parentNode;
+        }
+        return "/" + parts.join("/");
+    }
+
+    // ─── Element label extractor ───────────────────────────────────────────────
+    function getLabel(el) {
+        if (!el) return "";
+        return (
+            el.getAttribute("aria-label") ||
+            el.getAttribute("data-testid") ||
+            el.getAttribute("name") ||
+            el.id ||
+            el.getAttribute("placeholder") ||
+            el.getAttribute("alt") ||
+            el.getAttribute("title") ||
+            (el.innerText || "").trim().substring(0, 80) ||
+            el.getAttribute("class") ||
+            el.type ||
+            ""
+        );
+    }
+
+    // ─── Core record function ──────────────────────────────────────────────────
+    function recordAction(type, target, extra = {}) {
+        if (Date.now() - (window.__reinjectionGrace || 0) < 800) return;
+        if (!target || ["script", "style", "html", "body", "head"].includes(target.tagName?.toLowerCase())) return;
+
+        const xpath = getSmartXPath(target);
+        const label = getLabel(target);
+        const value = extra.value !== undefined
+            ? extra.value
+            : (["input", "change", "input_others", "select"].includes(type)
+                ? (target.value || target.innerText || "")
+                : "");
+
+        const actionObj = {
+            step: nextStepNumber(),
+            action: type,
+            xpath,
+            label: label?.trim(),
+            value: String(value).trim(),
+            url: window.location.href,
+            windowId: window.name || statusKey,
+            timestamp: new Date().toISOString(),
+            ...extra
+        };
+
+        saveAction(actionObj);
+        console.log("✅ Recorded:", actionObj);
+    }
+
+    // ─── Scroll throttle helper ────────────────────────────────────────────────
+    let _scrollTimer = null;
+    function throttledScroll(target) {
+        if (_scrollTimer) clearTimeout(_scrollTimer);
+        _scrollTimer = setTimeout(() => {
+            const scrollX = Math.round(window.scrollX || target.scrollLeft || 0);
+            const scrollY = Math.round(window.scrollY || target.scrollTop || 0);
+            recordAction("scroll", target === window ? document.body : target, {
+                value: `scrollX:${scrollX},scrollY:${scrollY}`
+            });
+        }, 400);
+    }
+
+    // ─── Drag state ───────────────────────────────────────────────────────────
+    let _dragSource = null;
+
+    // ─── Attach all listeners ──────────────────────────────────────────────────
+    function attachListeners(root) {
+        // Prevent double-attach on same root
+        if (root.__iqea_attached) return;
+        root.__iqea_attached = true;
+
+        const doc = root.ownerDocument || root;
+
+        // ── Click ──────────────────────────────────────────────────────────────
+        doc.addEventListener("click", e => recordAction("click", e.target), true);
+
+        // ── Right-click / Context menu ─────────────────────────────────────────
+        doc.addEventListener("contextmenu", e => recordAction("right_click", e.target), true);
+
+        // ── Input / Change / Select ────────────────────────────────────────────
+        doc.addEventListener("change", e => {
+            const el = e.target;
+            const tag = el.tagName.toLowerCase();
+            if (tag === "select") {
+                recordAction("select", el, {
+                    value: el.options[el.selectedIndex]?.text || el.value
+                });
+            } else if (el.type === "checkbox") {
+                recordAction("checkbox", el, { value: el.checked ? "checked" : "unchecked" });
+            } else if (el.type === "radio") {
+                recordAction("radio", el, { value: el.value });
+            } else if (el.type === "file") {
+                const files = Array.from(el.files || []).map(f => f.name).join(", ");
+                recordAction("file_upload", el, { value: files });
+            } else {
+                recordAction("input", el);
+            }
+        }, true);
+
+        // ── Focusout (for non-button/input elements like divs) ─────────────────
+        doc.addEventListener("focusout", e => {
+            const tag = e.target.tagName.toLowerCase();
+            if (!["button", "input", "textarea", "select"].includes(tag)) {
+                recordAction("change", e.target);
+            }
+        }, true);
+
+        // ── Keyboard: Enter, Escape, shortcuts ─────────────────────────────────
+        doc.addEventListener("keydown", e => {
+            const key = e.key;
+            const ctrl = e.ctrlKey || e.metaKey;
+            const shift = e.shiftKey;
+
+            // Enter / Escape
+            if (key === "Enter") {
+                recordAction("key_enter", e.target, { value: "Enter" });
+                return;
+            }
+            if (key === "Escape") {
+                recordAction("key_escape", e.target, { value: "Escape" });
+                return;
+            }
+            if (key === "Tab") {
+                recordAction("key_tab", e.target, { value: shift ? "Shift+Tab" : "Tab" });
+                return;
+            }
+
+            // Ctrl/Cmd shortcuts
+            if (ctrl) {
+                const shortcutMap = {
+                    "c": "copy", "x": "cut", "v": "paste",
+                    "z": "undo", "y": "redo",
+                    "a": "select_all", "f": "find",
+                    "s": "save", "p": "print"
+                };
+                const action = shortcutMap[key.toLowerCase()];
+                if (action) {
+                    recordAction(`shortcut_${action}`, e.target, {
+                        value: `${ctrl ? "Ctrl" : "Cmd"}+${key.toUpperCase()}`
+                    });
+                }
+            }
+
+            // Function keys
+            if (key.startsWith("F") && !isNaN(key.slice(1))) {
+                recordAction("function_key", e.target, { value: key });
+            }
+        }, true);
+
+        // ── Copy / Paste (clipboard events) ────────────────────────────────────
+        doc.addEventListener("copy", e => {
+            const sel = (doc.getSelection() || "").toString().substring(0, 200);
+            recordAction("copy", e.target, { value: sel });
+        }, true);
+
+        doc.addEventListener("cut", e => {
+            const sel = (doc.getSelection() || "").toString().substring(0, 200);
+            recordAction("cut", e.target, { value: sel });
+        }, true);
+
+        doc.addEventListener("paste", e => {
+            let pasted = "";
+            try {
+                pasted = (e.clipboardData || window.clipboardData)?.getData("text") || "";
+                pasted = pasted.substring(0, 200);
+            } catch (_) {}
+            recordAction("paste", e.target, { value: pasted });
+        }, true);
+
+        // ── Scroll ─────────────────────────────────────────────────────────────
+        window.addEventListener("scroll", e => throttledScroll(e.target), { passive: true, capture: true });
+        doc.addEventListener("scroll", e => {
+            if (e.target !== window && e.target !== doc) throttledScroll(e.target);
+        }, { passive: true, capture: true });
+
+        // ── Drag & Drop ────────────────────────────────────────────────────────
+        doc.addEventListener("dragstart", e => {
+            _dragSource = e.target;
+            recordAction("drag_start", e.target, { value: getLabel(e.target) });
+        }, true);
+
+        doc.addEventListener("drop", e => {
+            recordAction("drop", e.target, {
+                value: `from: ${getLabel(_dragSource)} → to: ${getLabel(e.target)}`
+            });
+            _dragSource = null;
+        }, true);
+
+        // ── Hover (mouse enter/leave on interactive elements) ──────────────────
+        const hoverTags = ["button", "a", "select", "input", "li", "[role='menuitem']", "[role='option']"];
+        doc.addEventListener("mouseenter", e => {
+            const tag = e.target.tagName?.toLowerCase();
+            if (["button", "a", "select"].includes(tag) ||
+                e.target.getAttribute("role") === "menuitem" ||
+                e.target.getAttribute("role") === "option") {
+                recordAction("hover", e.target);
+            }
+        }, true);
+
+        doc.addEventListener("mouseleave", e => {
+            const tag = e.target.tagName?.toLowerCase();
+            if (["button", "a"].includes(tag)) {
+                recordAction("hover_end", e.target);
+            }
+        }, true);
+
+        console.log("✅ IQEA listeners attached to:", root);
+    }
+
+    // ─── Shadow DOM support ────────────────────────────────────────────────────
+    function injectIntoShadowRoots(node) {
+        if (!node || node.nodeType !== Node.ELEMENT_NODE) return;
+        if (node.shadowRoot) {
+            attachListeners(node.shadowRoot);
+            node.shadowRoot.querySelectorAll("*").forEach(injectIntoShadowRoots);
+        }
+        node.querySelectorAll && node.querySelectorAll("*").forEach(child => {
+            if (child.shadowRoot) {
+                attachListeners(child.shadowRoot);
+                injectIntoShadowRoots(child);
+            }
+        });
+    }
+
+    // MutationObserver to catch dynamically added shadow roots
+    const _shadowObserver = new MutationObserver(mutations => {
+        mutations.forEach(m => m.addedNodes.forEach(n => {
+            if (n.nodeType === Node.ELEMENT_NODE) injectIntoShadowRoots(n);
+        }));
+    });
+    _shadowObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+    // ─── iFrame support ────────────────────────────────────────────────────────
+    function injectIntoIframe(iframe) {
+        try {
+            const iDoc = iframe.contentDocument || iframe.contentWindow?.document;
+            if (iDoc && iDoc.body) {
+                attachListeners(iDoc);
+                injectIntoShadowRoots(iDoc.documentElement);
+                // Watch for new iframes inside this one
+                new MutationObserver(mutations => {
+                    mutations.forEach(m => m.addedNodes.forEach(n => {
+                        if (n.tagName === "IFRAME") injectIntoIframe(n);
+                    }));
+                }).observe(iDoc, { childList: true, subtree: true });
+            }
+        } catch (e) {
+            // Cross-origin iframe — can't inject (expected)
+            console.warn("⚠️ Cross-origin iframe skipped:", iframe.src);
+        }
+    }
+
+    function injectAllIframes() {
+        document.querySelectorAll("iframe").forEach(injectIntoIframe);
+    }
+
+    // Watch for dynamically added iframes
+    new MutationObserver(mutations => {
+        mutations.forEach(m => m.addedNodes.forEach(n => {
+            if (n.tagName === "IFRAME") injectIntoIframe(n);
+            if (n.querySelectorAll) n.querySelectorAll("iframe").forEach(injectIntoIframe);
+        }));
+    }).observe(document.documentElement, { childList: true, subtree: true });
+
+    // ─── SPA route change detection ────────────────────────────────────────────
+    // Patch pushState / replaceState to detect SPA navigation
+    function patchHistory() {
+        const wrap = (orig) => function (...args) {
+            const result = orig.apply(this, args);
+            window.dispatchEvent(new Event("__iqea_spa_navigate"));
+            return result;
+        };
+        if (!window.__iqea_history_patched) {
+            history.pushState = wrap(history.pushState);
+            history.replaceState = wrap(history.replaceState);
+            window.__iqea_history_patched = true;
+        }
+    }
+
+    window.addEventListener("popstate", () => window.dispatchEvent(new Event("__iqea_spa_navigate")));
+    window.addEventListener("__iqea_spa_navigate", () => {
+        // Clear the URL-bound guard so next inject call re-attaches
+        window.__iqea_injected_url = null;
+        // Re-attach to document (new DOM nodes may have appeared)
+        setTimeout(() => {
+            document.__iqea_attached = false;
+            attachListeners(document);
+            injectAllIframes();
+            injectIntoShadowRoots(document.documentElement);
+        }, 300);
+    });
+
+    // ─── Bootstrap ────────────────────────────────────────────────────────────
+    function init() {
+        patchHistory();
+        attachListeners(document);
+        injectAllIframes();
+        injectIntoShadowRoots(document.documentElement);
+        console.log("✅ IQEA v2.0 Action Listener ready. Key:", statusKey);
+    }
+
+    if (document.readyState === "complete" || document.readyState === "interactive") {
+        init();
+    } else {
+        window.addEventListener("load", init, { once: true });
+    }
+
+})(STATUS_KEY_PLACEHOLDER);"""
+JS_action_listeners_mar16= """(function (statusKey) {
     if (window.__listenersInjected) return;
     window.__listenersInjected = true;
 

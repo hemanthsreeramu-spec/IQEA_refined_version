@@ -64,8 +64,8 @@ st.title("🤖 TigerQE AI Platform - API Validator")
 # ============================================================
 st.subheader("Select Input Mode")
 mode = st.radio("Choose API Source", ["Document", "Swagger"])
-
-performance_flag = st.checkbox("Performance Required?")
+if mode is "Document":
+    performance_flag = st.checkbox("Performance Required?")
 
 # ============================================================
 # DOCUMENT MODE
@@ -379,20 +379,22 @@ if mode == "Swagger":
             st.session_state.api_response_analysis = swagger_utils.get_queries_from_ai_updated(api_response_analysis_prompt)
             api_response_html = swagger_utils.save_html_report(st.session_state.api_response_analysis, REPORT_DIR,
                                                                "Api_Response")
-            performance_extracted_data = swagger_utils.collect_locust_csv_from_paths(performance_result)
+            if performance_result:
+                performance_extracted_data = swagger_utils.collect_locust_csv_from_paths(performance_result)
 
-            print("******performance_extracted_data****", performance_extracted_data)
-            locust_covert_prompt = swagger_utils.locust_convert_prompt(performance_extracted_data)
-            print("******locust_covert_prompt****", locust_covert_prompt)
-            st.session_state.locust_convert_response = swagger_utils.get_queries_from_ai_updated(locust_covert_prompt)
-            print("******locust_convert_response****", st.session_state.locust_convert_response)
+                print("******performance_extracted_data****", performance_extracted_data)
+                locust_covert_prompt = swagger_utils.locust_convert_prompt(performance_extracted_data)
+                print("******locust_covert_prompt****", locust_covert_prompt)
+                st.session_state.locust_convert_response = swagger_utils.get_queries_from_ai_updated(locust_covert_prompt)
+                print("******locust_convert_response****", st.session_state.locust_convert_response)
             api_performance_analysis_prompt = swagger_utils.api_performace_reponse_prompt(
                 st.session_state.locust_convert_response, performance_config)
             print("******api_performance_analysis_prompt****", api_performance_analysis_prompt)
             st.session_state.api_performance_analysis = swagger_utils.get_queries_from_ai_updated(
                 api_performance_analysis_prompt)
-            print("******api_performance_analysis****", st.session_state.api_performance_analysis)
-            api_performance_response_html = swagger_utils.save_html_report(st.session_state.api_performance_analysis,
+            if performance_result:
+                print("******api_performance_analysis****", st.session_state.api_performance_analysis)
+                api_performance_response_html = swagger_utils.save_html_report(st.session_state.api_performance_analysis,
                                                                            REPORT_DIR,
                                                                            "Api_Performance_Response")
 

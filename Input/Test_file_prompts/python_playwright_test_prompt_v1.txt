@@ -1,5 +1,3 @@
-YOU ARE A HIGHLY SPECIALIZED AUTOMATION ARCHITECT.
-
 YOUR TASK:
 Generate a COMPLETE, runnable, production-ready Python pytest test script using Playwright (sync by default).
 

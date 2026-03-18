@@ -31,9 +31,10 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 #setting details - source either file or database
-from config.settings_reader import get_source, get_update_user,get_model
+from config.settings_reader import get_source, get_update_user,get_model,get_xpath_key
 source = get_source()
 model_type= get_model()
+xpath_tag_keys= get_xpath_key()
 
 # Setup output folder
 current_path = os.getcwd()
@@ -182,6 +183,9 @@ if "test_data_llm_response" not in st.session_state:
 #### Api
 if "api_data" not in st.session_state:
     st.session_state.api_data= ""
+####xpath
+if "select_all" not in st.session_state:
+    st.session_state.select_all = False
 st.title(" 🤖 TigerQE AI Platform - iQEA (Intelligent QE Assistant)")
 
 
@@ -199,10 +203,10 @@ if st.button("Open Browser"):
         chrome_options.add_argument("--remote-allow-origins=*")
         chrome_options.add_argument("--disable-dev-shm-usage")
         #chrome_options.binary_location = chromedriver_path
-        service = Service(executable_path=chromedriver_path)
+        #service = Service(executable_path=chromedriver_path)
         #service = Service(ChromeDriverManager().install())
-        #st.session_state.driver = webdriver.Chrome(options=chrome_options)
-        st.session_state.driver = webdriver.Chrome(service=service, options=chrome_options)
+        st.session_state.driver = webdriver.Chrome(options=chrome_options)
+        #st.session_state.driver = webdriver.Chrome(service=service, options=chrome_options)
         st.session_state.driver.get(page_url)
         st.session_state.driver.maximize_window()
         WebDriverWait(st.session_state.driver, 30).until(utils.is_page_loaded)
@@ -909,9 +913,12 @@ if st.session_state.checkbox5_state:
             default=["Web"])
         tags_placeholder = st.empty()
         if "Web" in selected_app:
+            print("xpath_tags",xpath_tag_keys)
+
             selected_tags = tags_placeholder.multiselect(
                 "Select element types to extract:",
-                ["input", "button", "a", "select", "textarea", "div", "span","i","li","All"],
+                #["input", "button", "a", "select", "textarea", "div", "span","i","li","All"],
+                xpath_tag_keys,
                 default= st.session_state.selected_tags ,
                 key="selected_tags_multiselect"
             )
@@ -969,7 +976,7 @@ if st.session_state.checkbox5_state:
             # Define a persistent placeholder at the top of the expander
             xpath_output_placeholder = st.empty()
             with xpath_output_placeholder.container():
-                st.session_state.selected_xpaths = utils.adding_xapth_user_view(xpath_dict)
+                st.session_state.selected_xpaths = utils.adding_xpath_user_view(xpath_dict)
             page_name = st.text_input("Enter the Page Name:")
             # Show "Add Selected XPaths to Excel" button only after XPaths are displayed
             if st.button("Add Selected XPaths to Excel"):

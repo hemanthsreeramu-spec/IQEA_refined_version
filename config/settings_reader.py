@@ -24,3 +24,9 @@ def get_update_user():
 
 def get_api_key():
     return config.get('API', 'Api_key')
+def get_xpath_key():
+    raw = config.get("XPATH", "allowed_tags")
+    allowed_tags = [x.strip() for x in raw.split(",") if x.strip()]
+    print("xpath_allowed_tags",allowed_tags)
+    return allowed_tags
+

@@ -1,11 +1,14 @@
 import os
 import base64
 import uuid
+import threading
 import requests
+from io import BytesIO
 from typing import Union, IO
 import openai
 import re
 import time
+import pyperclip
 from datetime import datetime
 import docx2txt
 import gitlab
@@ -109,6 +112,11 @@ def load_prompt_from_file(prompt_type):
             prompt_file = os.path.join(test_file_prompt, "python_selenium_test_prompt.txt")
         elif prompt_type == "Test-Python-Playwright":
             prompt_file = os.path.join(test_file_prompt, "python_playwright_test_prompt.txt")
+        elif prompt_type == "Test-Desktop & Web[python-Selenium]":
+            prompt_file = os.path.join(test_file_prompt, "Desktop_Web_python_Selenium.txt")
+        elif prompt_type == "Test-UTAM-JavaScript":
+            prompt_file = os.path.join(test_file_prompt, "UTAM-JavaScript.txt")
+
         #####Test_file_validator_prompt based on the language - library ( Selenium/Playwright)
         elif prompt_type == "Test-validate-Java-Selenium":
             prompt_file = os.path.join(test_file_validator_prompt, "java_selenium_validation.txt")
@@ -202,7 +210,7 @@ def create_test_file(Test_file_location,file_name: str, file_extension: str,resp
     # Ensure the file extension is .java
     if file_extension in ["Java-Selenium", "Java-Playwright"]:
         file_extension = "java"
-    elif file_extension in ["Python-Selenium", "Python-Playwright"]:
+    elif file_extension in ["Python-Selenium", "Python-Playwright","Desktop & Web[python-Selenium]"]:
         file_extension = "python"
     if not file_extension.startswith("."):
         if file_extension =="java":
@@ -588,6 +596,7 @@ def get_visible_element_iframe(driver, page_identifier, selected_tags):
 
     print("[INFO] Collecting all elements from the main page...")
     all_elements = driver.find_elements(By.XPATH, "//*")
+    print("**********collected elements:",all_elements)
     for idx, element in enumerate(all_elements, start=1):
         attrs = driver.execute_script(
             "var items = {}; for (var i = 0; i < arguments[0].attributes.length; i++) { "
@@ -729,7 +738,84 @@ def filter_duplicate_xpaths(xpath_dict):
         if filtered:
             filtered_xpath_dict[element] = filtered
     return filtered_xpath_dict
-def adding_xapth_user_view(xpath_dict):
+def adding_xpath_user_view(xpath_dict):
+
+    st.markdown("**XPath bulk selection & download**")
+
+    # ---- SELECT ALL TOGGLE ----
+    st.session_state.select_all = st.checkbox(
+        "Select All XPaths",
+        value=st.session_state.select_all,
+        key="select_all_toggle"
+    )
+
+    all_items = []
+
+    for element, xpaths in xpath_dict.items():
+        for xpath in xpaths:
+            if xpath.strip():
+                all_items.append({"Element": element, "XPath": xpath})
+
+    # ---- Auto select all ----
+    if st.session_state.select_all:
+        st.session_state.selected_xpaths = all_items.copy()
+        # ---- EXPORT TO EXCEL ----
+        if st.session_state.selected_xpaths:
+            df = pd.DataFrame(st.session_state.selected_xpaths)
+
+            buffer = BytesIO()
+            df.to_excel(buffer, index=False, engine="openpyxl")
+            buffer.seek(0)
+
+            st.download_button(
+                "⬇️ Export to Excel",
+                data=buffer,
+                file_name="bulk_xpaths.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
+    # ---- DISPLAY ----
+    for element, xpaths in xpath_dict.items():
+        st.subheader(element)
+
+        for xpath in xpaths:
+            if not xpath.strip():
+                continue
+
+            checkbox_key = hashlib.md5(f"{element}_{xpath}".encode()).hexdigest()
+
+            col1, col2 = st.columns([0.85, 0.15])
+
+            with col1:
+                checked = st.checkbox(
+                    xpath,
+                    key=checkbox_key,
+                    value=any(x["XPath"] == xpath for x in st.session_state.selected_xpaths)
+                )
+
+            with col2:
+                st.button(
+                    "📋",
+                    key=f"copy_{checkbox_key}",
+                    on_click=copy_to_clipboard,
+                    args=(xpath,)
+                )
+
+            # ---- Update selection ----
+            record = {"Element": element, "XPath": xpath}
+
+            if checked:
+                if record not in st.session_state.selected_xpaths:
+                    st.session_state.selected_xpaths.append(record)
+            else:
+                st.session_state.selected_xpaths = [
+                    x for x in st.session_state.selected_xpaths if x["XPath"] != xpath
+                ]
+
+
+    return st.session_state.selected_xpaths
+
+def adding_xapth_user_view_v1(xpath_dict):
     print("goind to add element")
     try:
         for element, xpaths in xpath_dict.items():
@@ -856,6 +942,15 @@ def generate_script_validator(prompt_type,page_file_conetent,test_file_content):
     final_prompt = prompt_template.format(
         page_files_content=page_file_conetent,
         test_files_content=test_file_content,
+    )
+    print(final_prompt)
+    return final_prompt
+def generate_test_script_windows_web(prompt_type,action_data,app_location):
+    prompt_template = load_prompt_from_file(prompt_type)
+
+    final_prompt = prompt_template.format(
+        application_path=app_location,
+        workflow_steps=action_data,
     )
     print(final_prompt)
     return final_prompt
@@ -999,9 +1094,119 @@ def get_window_statuses(driver):
             return results;
         """)
     except Exception:
-        return {}
-
+            return {}
+# #####updated threas logics mar16
+# def thread_new_window_checker(driver, injected_windows, last_urls, stop_flag,
+#                                screenshot_folder, current_window_ref,
+#                                source="file", db_handler=None, driver_lock=None):
+#     """
+#     Detects newly opened windows/tabs and injects the recorder JS.
+#     """
+#     print("🧵 Thread 1 started: new window checker")
+#     _lock = driver_lock or threading.Lock()
+#
+#     while not stop_flag["stop"]:
+#         try:
+#             with _lock:
+#                 handles = driver.window_handles
+#             for handle in handles:
+#                 if handle not in injected_windows:
+#                     with _lock:
+#                         driver.switch_to.window(handle)
+#                         driver.execute_script(action_utils.injection_script_updated_fixed(handle))
+#                         injected_windows[handle] = True
+#                         last_urls[handle] = driver.current_url
+#                         current_window_ref["handle"] = handle
+#
+#                         if source == "file":
+#                             action_utils.take_screenshot(driver, screenshot_folder)
+#                         elif source == "database" and db_handler:
+#                             db_handler.take_screenshot_db(driver, "iqea")
+#
+#                     print(f"✅ JS injected in new window {handle}")
+#         except Exception as e:
+#             print(f"⚠️ New window checker error: {e}")
+#         time.sleep(2)
+#
+# # ─── Thread: Focus & URL monitor ──────────────────────────────────────────────
+# def thread_focus_and_url_monitor(driver, injected_windows, last_urls, stop_flag,
+#                                   screenshot_folder, current_window_ref,
+#                                   source="file", db_handler=None, driver_lock=None):
+#     """
+#     Watches the active window for URL changes (SPA navigation) and reinjection.
+#     """
+#     print("🧵 Thread 2 started: focus/URL monitor")
+#     _lock = driver_lock or threading.Lock()
+#
+#     while not stop_flag["stop"]:
+#         try:
+#             with _lock:
+#                 handle = driver.current_window_handle
+#                 current_window_ref["handle"] = handle
+#                 current_url = driver.current_url
+#
+#             if last_urls.get(handle) != current_url:
+#                 with _lock:
+#                     driver.execute_script(action_utils.injection_script_updated_fixed(handle))
+#                     last_urls[handle] = current_url
+#                 print(f"🔄 URL changed → reinjected in {handle} ({current_url})")
+#
+#         except Exception as e:
+#             print(f"⚠️ Focus/URL monitor error: {e}")
+#         time.sleep(2)
+#
+#     print("🛑 Thread 2 stopped")
+#
+#
+# # ─── Thread: Screenshot on page change ────────────────────────────────────────
+# def thread_focus_screenshot(driver, stop_flag, screenshot_folder,
+#                              source="file", db_handler=None, driver_lock=None):
+#     """
+#     Takes a screenshot whenever the URL or DOM element count changes.
+#     """
+#     print("📸 Thread 3 started: screenshot monitor")
+#     _lock = driver_lock or threading.Lock()
+#     last_url = None
+#     prev_count = None
+#     first_run = True
+#
+#     while not stop_flag["stop"]:
+#         try:
+#             with _lock:
+#                 current_url = driver.current_url
+#                 current_count = len(driver.find_elements("xpath", "//*"))
+#
+#             page_changed = first_run or current_url != last_url or current_count != prev_count
+#             first_run = False
+#
+#             if page_changed:
+#                 last_url = current_url
+#                 prev_count = current_count
+#
+#                 # Wait for DOM ready
+#                 for _ in range(50):
+#                     with _lock:
+#                         state = driver.execute_script("return document.readyState")
+#                     if state == "complete":
+#                         break
+#                     time.sleep(0.1)
+#
+#                 with _lock:
+#                     if source == "file":
+#                         fp = action_utils.take_screenshot(driver, screenshot_folder)
+#                     elif source == "database" and db_handler:
+#                         fp = db_handler.take_screenshot_db(driver, "iqea")
+#                     else:
+#                         fp = None
+#                 print(f"📸 Screenshot => {fp}")
+#
+#         except Exception as e:
+#             print(f"❌ Screenshot thread error: {e}")
+#         time.sleep(1)
+#
+#     print("🛑 Thread 3 stopped")
 def thread_new_window_checker(driver, injected_windows, last_urls, stop_flag, screenshot_folder, current_window_ref):
+    print("🛑 Thread 1 stopped")
     """
     Monitor newly opened windows and inject JS.
     """
@@ -1378,38 +1583,6 @@ def thread_focus_and_url_monitor(driver, injected_windows, last_urls, stop_flag,
             print("Focus/URL monitor error:", e)
 
         time.sleep(2)
-
-def monitor_url_changes_for_each_nav_old(driver, screenshot_folder, stop_flag):
-    last_url = ""
-    while not stop_flag["stop"]:
-        try:
-            current_url = driver.current_url
-            if current_url != last_url:
-                last_url = current_url
-
-                # Wait for page to fully load
-                for _ in range(50):  # up to ~5 seconds
-                    state = driver.execute_script("return document.readyState")
-                    if state == "complete":
-                        break
-                    time.sleep(0.1)
-
-                # Re-inject your recorder JS here
-                action_utils.start_recording(driver)  # Make sure injection_script1 is in scope!
-
-                # Then take screenshot as before
-                if source == "file":
-                    filepath = action_utils.take_screenshot(driver, screenshot_folder)
-                elif source == "database":
-                    filepath = db_handler.take_screenshot_db(driver, "sathanantham")
-                else:
-                    filepath = None
-                print(f"📸 Screenshot taken for: {current_url} => {filepath}")
-
-        except Exception as e:
-            print("Error during URL monitoring:", e)
-        time.sleep(1)  # check every second
-
 def select_and_read_text_files_xpath(file_type, folder_path):
     # Step 1: List all files in the folder
     files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
@@ -1427,7 +1600,7 @@ def select_and_read_text_files_xpath(file_type, folder_path):
 
         try:
             # Type: For txt-based files
-            if file_type in ["xpath","recorded action (Optional)", "page", "feature","test data generation -Recorded actions files"]:
+            if file_type in ["xpath","recorded action","recorded action (Optional)", "page", "feature","test data generation -Recorded actions files"]:
                 with open(full_path, 'r', encoding='utf-8') as f:
                     file_contents[file_name] = f.read()
 
@@ -3707,3 +3880,7 @@ def update_page_files_from_json(json_response: str, page_folder):
             f.write(script)
 
         print(f"✔ Page file updated → {file_path}")
+
+def copy_to_clipboard(text):
+    pyperclip.copy(text)
+    st.toast("XPath copied!", icon="📋")

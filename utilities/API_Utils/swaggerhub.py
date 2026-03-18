@@ -40,7 +40,7 @@ def init_allure_results():
     print("✔ Allure logger registered cleanly")
 
 import requests
-swaggerhub_api_key= "52e91f42-a2d2-4f22-a0d6-114ea1c71ea3"
+swaggerhub_api_key= "3870e0b0-429d-45d8-8502-a85fafab4b51"
 def load_openapi_spec(
     url: str
 ) -> dict:
@@ -680,10 +680,10 @@ Return ONLY valid HTML.
 <h1>Test Execution Configuration</h1>
 <table>
   <tr><th>Parameter</th><th>Value</th></tr>
-  <tr><td>Ramp Users</td><td>{performance_config.get("ramp_users", "Not Available")}</td></tr>
-  <tr><td>Spawn Rate (users/sec)</td><td>{performance_config.get("spawn_rate", "Not Available")}</td></tr>
-  <tr><td>Run Time</td><td>{performance_config.get("run_time", "Not Available")}</td></tr>
-  <tr><td>Stop Time</td><td>{performance_config.get("stop_time", "Not Available")}</td></tr>
+  <tr><td>Ramp Users</td><td>{(performance_config or {}).get("ramp_users", "Not Available")}</td></tr>
+  <tr><td>Spawn Rate (users/sec)</td><td>{(performance_config or {}).get("spawn_rate", "Not Available")}</td></tr>
+  <tr><td>Run Time</td><td>{(performance_config or {}).get("run_time", "Not Available")}</td></tr>
+  <tr><td>Stop Time</td><td>{(performance_config or {}).get("stop_time", "Not Available")}</td></tr>
 </table>
 
 <hr/>
@@ -902,5 +902,5 @@ def collect_locust_csv_from_paths(paths):
                 api_result["exceptions"] = read_csv_safe(full_path)
 
         aggregated_result.append(api_result)
-
+    print("*******aggregated_result**********",aggregated_result)
     return aggregated_result
