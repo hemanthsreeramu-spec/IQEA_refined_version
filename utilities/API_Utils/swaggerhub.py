@@ -1,5 +1,6 @@
 import requests
 import json
+import openai
 import csv
 import allure
 from bs4 import BeautifulSoup
@@ -11,13 +12,17 @@ from dotenv import load_dotenv
 import os
 from datetime import datetime
 load_dotenv()
-# Access the variables
-api_key = os.getenv("AZURE_OPENAI_API_KEY")
-endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-
-# Set the environment variables explicitly if needed
-os.environ["AZURE_OPENAI_API_KEY"] = api_key
-os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
+os.environ["OPENAI_API_KEY"] = os.getenv("AZURE_OPENAI_API_KEY")
+os.environ["OPENAI_API_BASE"] = os.getenv("AZURE_OPENAI_ENDPOINT")
+client = openai.OpenAI(api_key =  os.environ["OPENAI_API_KEY"],
+                       base_url = os.environ["OPENAI_API_BASE"])
+# # Access the variables
+# api_key = os.getenv("AZURE_OPENAI_API_KEY")
+# endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+#
+# # Set the environment variables explicitly if needed
+# os.environ["AZURE_OPENAI_API_KEY"] = api_key
+# os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
 def init_allure_results():
     allure_dir = "allure-results"
 
@@ -761,21 +766,35 @@ Return ONLY valid HTML.
 
     return  formatted_summary
 def get_queries_from_ai_updated(formatted_summary):
-    # Access the variables
-    api_key = os.getenv("AZURE_OPENAI_API_KEY")
-    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-
-    # Set the environment variables explicitly if needed
-    os.environ["AZURE_OPENAI_API_KEY"] = api_key
-    os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
-    model = AzureChatOpenAI(
-        openai_api_version="2023-05-15",
-        azure_deployment="qepracticekey",
-    )
-    message = HumanMessage(content=formatted_summary)
-    output_value = model([message])
-    print(output_value)
-    return output_value.content
+   print("going inside get_queries_from_ai_updated")
+   model = "gpt-5-mini"
+   try:
+        response = client.chat.completions.create(model=model,
+                                          messages=[{"role": "user",
+                                                     "content": formatted_summary
+                                                     }
+                                                    ])
+        print(response)
+        return response.choices[0].message.content
+   except Exception as e:
+        print(f"[ERROR] LLM call failed: {e}")
+        return None
+# def get_queries_from_ai_updated(formatted_summary):
+#     # Access the variables
+#     api_key = os.getenv("AZURE_OPENAI_API_KEY")
+#     endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+#
+#     # Set the environment variables explicitly if needed
+#     os.environ["AZURE_OPENAI_API_KEY"] = api_key
+#     os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
+#     model = AzureChatOpenAI(
+#         openai_api_version="2023-05-15",
+#         azure_deployment="qepracticekey",
+#     )
+#     message = HumanMessage(content=formatted_summary)
+#     output_value = model([message])
+#     print(output_value)
+#     return output_value.content
 
 
 

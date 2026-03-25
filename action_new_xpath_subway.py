@@ -43,6 +43,7 @@ current_path = os.getcwd()
 input_folder = os.path.join(current_path, "Input")
 output_folder = os.path.join(current_path, "output")
 Action_collection = os.path.join(output_folder, "Action_collection")
+Action_collection_desktop=os.path.join(Action_collection, "Action_collection_desktop")
 Page_collection = os.path.join(output_folder, "page_file_generator")
 Test_case_collection = os.path.join(output_folder, "Test_Cases_collection")
 Test_file_generator = os.path.join(output_folder, "test_file_generator")
@@ -54,8 +55,9 @@ os.makedirs(Test_case_collection, exist_ok=True)
 os.makedirs(Action_collection, exist_ok=True)
 os.makedirs(feature_file_collection, exist_ok=True)
 os.makedirs(test_data_folder, exist_ok=True)
+os.makedirs(Action_collection_desktop,exist_ok=True)
 #page_screenshot_folder_new = os.path.join(Action_collection, "page_screenshot_valid")
-page_screenshot_folder = os.path.join(Action_collection, "sfdc_screenshot")
+page_screenshot_folder = os.path.join(Action_collection, "Sauce_demo")
 os.makedirs(page_screenshot_folder, exist_ok=True)
 os.makedirs(Test_file_generator, exist_ok=True)
 
@@ -147,7 +149,8 @@ if 'workflow_text' not in st.session_state:
     st.session_state.workflow_text = []
 if 'injected_windows' not in st.session_state:
     st.session_state.injected_windows= {}
-
+if 'workflow_text_desktop' not in st.session_state:
+    st.session_state.workflow_text_desktop = []
 if "xpath_for_new_page" not in st.session_state:
     st.session_state.xpath_for_new_page = False
 if "xpath_for_new_page_user_info" not in st.session_state:
@@ -379,57 +382,129 @@ if st.session_state.checkbox1_state:
 
             st.subheader("Record User Actions & Capture Screenshots of User Navigation")
 
-            # # Initialize session state variables
-            # if "recorder" not in st.session_state:
-            #     st.session_state.recorder = None
+            # FIX: use a SEPARATE session state key for desktop recording
+            # so it doesn't conflict with st.session_state.recording_started
+            # used by the Web recorder tab.
+            if "desktop_recording_started" not in st.session_state:
+                st.session_state.desktop_recording_started = False
+            if "recorder" not in st.session_state:
+                st.session_state.recorder = None
 
-            if "recording_started" not in st.session_state:
-                st.session_state.recording_started = False
+            application_path = st.text_input(
+                "Enter full path to application (.exe):",
+                placeholder=r"C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE"
+            )
 
-            application_name = st.text_input("Enter application Name for Saving the Workflow:")
-
-            # -----------------------------
-            # Start Recording
-            # -----------------------------
-            if application_name and not st.session_state.recording_started:
+            # ── START ──────────────────────────────────────────────────────────
+            if application_path and not st.session_state.desktop_recording_started:
                 if st.button("🎥 Launch and Start Recording"):
-                    session = DesktopSession(application_name)
-                    app = session.start()
+                    with st.spinner("Launching application, please wait..."):
+                        try:
+                            session = DesktopSession(application_path)
+                            app = session.start(timeout=15)  # waits for window ready
 
-                    recorder = DesktopRecorder()
-                    recorder.start()
+                            recorder = DesktopRecorder()
+                            recorder.start()
 
-                    st.session_state.recorder = recorder
-                    st.session_state.recording_started = True
+                            st.session_state.recorder = recorder
+                            st.session_state.desktop_recording_started = True
+                            st.rerun()
 
-                    st.success("Recording started. Please interact with the application.")
+                        except Exception as e:
+                            st.error(f"Failed to launch application: {e}")
 
-            # -----------------------------
-            # Stop Recording
-            # -----------------------------
-            if st.session_state.recording_started:
+            # ── RECORDING IN PROGRESS ─────────────────────────────────────────
+            if st.session_state.desktop_recording_started:
+                st.info("🔴 Recording in progress... Interact with the application, then click Stop.")
 
                 if st.button("🛑 Stop Recording"):
                     st.session_state.recorder.stop()
-                    st.session_state.recording_started = False
+                    st.session_state.desktop_recording_started = False
+                    action_count = len(st.session_state.recorder.get_actions())
+                    st.success(f"✅ Recording stopped. {action_count} action(s) captured.")
+                    st.rerun()
 
-                    st.success("Recording stopped.")
+            # ── SAVE ──────────────────────────────────────────────────────────
+            if (not st.session_state.desktop_recording_started
+                    and st.session_state.recorder
+                    and st.session_state.recorder.get_actions()):
 
-                    st.session_state.desktop_action_name = ""
-
-            # -----------------------------
-            # Save Workflow
-            # -----------------------------
-            if not st.session_state.recording_started and st.session_state.recorder:
-
-                workflow_name = st.text_input("Enter Name for Saving the Workflow:")
+                workflow_name = st.text_input("Enter name for saving the workflow:")
 
                 if workflow_name:
                     if st.button("💾 Save Desktop Workflow"):
-                        file_name = workflow_name + ".txt"
-                        st.session_state.recorder.save(file_name)
-
-                        st.success(f"Workflow saved as {file_name}")
+                        file_name = workflow_name
+                        st.session_state.workflow_text_desktop=st.session_state.recorder.save(file_name)
+                        filename = os.path.join(Action_collection_desktop, f"{file_name}_desktop_actions.txt")
+                        def clean_text(s):
+                            return (
+                                s.replace("\u200b", "")
+                                .replace("\xa0", " ")
+                                .strip()
+                            )
+                        cleaned = [clean_text(x) for x in st.session_state.workflow_text_desktop]
+                        with open(filename, "w", encoding="utf-8") as f:
+                            f.write("\n".join(cleaned))
+                        st.success(f"✅ Workflow saved: {filename}")
+                        st.download_button("⬇ Download Workflow", data="\n".join(st.session_state.workflow_text_desktop),
+                                           file_name=f"{file_name}_actions.txt")
+                        st.session_state.recorder = None
+                        st.session_state.workflow_text_desktop=[]
+        # if option == 'Desktop':
+        #
+        #     st.subheader("Record User Actions & Capture Screenshots of User Navigation")
+        #
+        #     # # Initialize session state variables
+        #     # if "recorder" not in st.session_state:
+        #     #     st.session_state.recorder = None
+        #
+        #     if "recording_started" not in st.session_state:
+        #         st.session_state.recording_started = False
+        #
+        #     application_name = st.text_input("Enter application Name for Saving the Workflow:")
+        #
+        #     # -----------------------------
+        #     # Start Recording
+        #     # -----------------------------
+        #     if application_name and not st.session_state.recording_started:
+        #         if st.button("🎥 Launch and Start Recording"):
+        #             session = DesktopSession(application_name)
+        #             app = session.start()
+        #
+        #             recorder = DesktopRecorder()
+        #             recorder.start()
+        #
+        #             st.session_state.recorder = recorder
+        #             st.session_state.recording_started = True
+        #
+        #             st.success("Recording started. Please interact with the application.")
+        #
+        #     # -----------------------------
+        #     # Stop Recording
+        #     # -----------------------------
+        #     if st.session_state.recording_started:
+        #
+        #         if st.button("🛑 Stop Recording"):
+        #             st.session_state.recorder.stop()
+        #             st.session_state.recording_started = False
+        #
+        #             st.success("Recording stopped.")
+        #
+        #             st.session_state.desktop_action_name = ""
+        #
+        #     # -----------------------------
+        #     # Save Workflow
+        #     # -----------------------------
+        #     if not st.session_state.recording_started and st.session_state.recorder:
+        #
+        #         workflow_name = st.text_input("Enter Name for Saving the Workflow:")
+        #
+        #         if workflow_name:
+        #             if st.button("💾 Save Desktop Workflow"):
+        #                 file_name = workflow_name + ".txt"
+        #                 st.session_state.recorder.save(file_name)
+        #
+        #                 st.success(f"Workflow saved as {file_name}")
 if st.session_state.checkbox2_state:
     with st.expander("🧾 BDD Feature File Generator"):
         st.title("Feature file Generator using recorded actions")
@@ -1368,6 +1443,61 @@ if st.session_state.checkbox8_state:
                         st.warning("⚠️ Could not prepare the ZIP.")
                 else:
                     st.warning("⚠️ Please select at least one file.")
+if st.session_state.checkbox9_state:
+    with st.expander("🚀 Test Execution & Allure Reporting"):
+        st.title("Execute Generated Test Scripts and View Allure Reports")
+
+        # List test files
+        if source == "file":
+            test_files = [f for f in os.listdir(Test_file_generator) if f.endswith('.py')]
+            selected_file = st.selectbox("Select Test Script to Execute", test_files, key="test_file_select") if test_files else None
+        elif source == "database":
+            all_test_files = db_handler.get_all_testfile_names()
+            selected_file = st.selectbox("Select Test Script to Execute", all_test_files, key="test_file_select") if all_test_files else None
+
+        if selected_file:
+            if st.button("Run Test Script"):
+                if source == "file":
+                    test_path = os.path.join(Test_file_generator, selected_file)
+                elif source == "database":
+                    # For database, we need to save the file temporarily or run it differently
+                    # Assuming we can get the content and save to temp
+                    content = db_handler.get_action_content_by_name(selected_file, "testfile")
+                    if content:
+                        temp_test_file = os.path.join(current_path, f"temp_{selected_file}.py")
+                        with open(temp_test_file, "w") as f:
+                            f.write(content)
+                        test_path = temp_test_file
+                    else:
+                        st.error("Could not load test file from database.")
+                        test_path = None
+                if test_path:
+                    command = f"python -m pytest -q --alluredir=allure-results {test_path}"
+                    try:
+                        result = subprocess.run(command, shell=True, capture_output=True, text=True, cwd=current_path)
+                        st.session_state.test_execution_status = result.stdout + "\n" + result.stderr
+                        if result.returncode == 0:
+                            st.success("✅ Test execution completed successfully.")
+                        else:
+                            st.warning("⚠️ Test execution completed with issues.")
+                        st.text_area("Execution Output", st.session_state.test_execution_status, height=200)
+                        # Clean up temp file if created
+                        if source == "database":
+                            if 'temp_test_file' in locals():
+                                os.remove(temp_test_file)
+                    except Exception as e:
+                        st.error(f"❌ Error running test: {e}")
+
+            if st.button("View Allure Report"):
+                command = "allure serve allure-results"
+                try:
+                    subprocess.Popen(command, shell=True, cwd=current_path)
+                    st.success("✅ Allure report server started. The report should open automatically in your browser.")
+                except Exception as e:
+                    st.error(f"❌ Error starting Allure server: {e}")
+        else:
+            st.info("ℹ️ No test scripts available.")
+
 # Footer of webpage
 st.divider()
 st.markdown("""    
@@ -1377,7 +1507,7 @@ st.markdown("""
 
 
 # Create 10 columns
-col0, col1, col2, col3, col4, col5, col6, col7,col8= st.columns(9)
+col0, col1, col2, col3, col4, col5, col6, col7,col8,col9= st.columns(10)
 
 with col0:
     st.write("Choose display")
@@ -1422,5 +1552,9 @@ with col8:
     if st.session_state.checkbox8_state != checkbox8:
         st.session_state.checkbox8_state = checkbox8  # Update session state
         st.rerun()
-
+with col9:
+    checkbox9= st.checkbox("(9)", value=st.session_state.checkbox9_state)
+    if st.session_state.checkbox9_state != checkbox9:
+        st.session_state.checkbox9_state = checkbox9  # Update session state
+        st.rerun()
 

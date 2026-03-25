@@ -3,6 +3,7 @@ import time
 import re
 import os
 import json
+import openai
 from collections import defaultdict
 from urllib.parse import urlparse
 from langchain_core.messages import HumanMessage
@@ -2223,23 +2224,26 @@ def wait_for_url_change(driver, initial_url, timeout=30):
             return True
         time.sleep(1)
     return False
-
+os.environ["OPENAI_API_KEY"] = os.getenv("AZURE_OPENAI_API_KEY")
+os.environ["OPENAI_API_BASE"] = os.getenv("AZURE_OPENAI_ENDPOINT")
+client = openai.OpenAI(api_key =  os.environ["OPENAI_API_KEY"],
+                       base_url = os.environ["OPENAI_API_BASE"])
 def generate_workflow(actions):
     # Access the variables
     print("*************Recorded Action *****************")
     print(actions)
     print("****************Recorded Action end**************")
-    api_key = os.getenv("AZURE_OPENAI_API_KEY")
-    endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-
-    # Set the environment variables explicitly if needed
-    os.environ["AZURE_OPENAI_API_KEY"] = api_key
-    os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
-
-    model = AzureChatOpenAI(
-        openai_api_version="2023-05-15",
-        azure_deployment="qepracticekey",
-    )
+    # api_key = os.getenv("AZURE_OPENAI_API_KEY")
+    # endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+    #
+    # # Set the environment variables explicitly if needed
+    # os.environ["AZURE_OPENAI_API_KEY"] = api_key
+    # os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
+    #
+    # model = AzureChatOpenAI(
+    #     openai_api_version="2023-05-15",
+    #     azure_deployment="qepracticekey",
+    # )
     #
     prompt = f"""
     You are an expert test automation assistant. 
@@ -2298,10 +2302,24 @@ def generate_workflow(actions):
     ready to be used for test case and feature file creation.
     """
 
-    message = HumanMessage(content=prompt)
-    output_value = model([message])
-    print(output_value)
-    return output_value.content
+    model = "gpt-5-mini"
+    try:
+        response = client.chat.completions.create(model=model,
+                                                  messages=[{"role": "user",
+                                                             "content": prompt
+                                                             }
+                                                            ])
+        print(response)
+        output_value = response.choices[0].message.content
+        print(output_value)
+        return output_value
+    except Exception as e:
+        print(f"[ERROR] LLM call failed: {e}")
+        return None
+    # message = HumanMessage(content=prompt)
+    # output_value = model([message])
+    # print(output_value)
+    # return output_value.content
 def generate_workflow_manual(actions):
     """
     Convert recorded actions into human-readable workflow suitable for AI feature/test case generation.

@@ -50,7 +50,7 @@ from config.settings_reader import get_source,get_model,get_api_key
 
 source = get_source()
 model_type=get_model()
-api_key=get_api_key()
+# api_key=get_api_key()
 
 load_dotenv()
 current_path = os.getcwd()
@@ -63,17 +63,17 @@ os.makedirs(xpath_generator_folder, exist_ok=True)
 os.makedirs(Page_file_generator, exist_ok=True)
 os.makedirs(Test_file_generator, exist_ok=True)
 
-os.environ["OPENAI_API_KEY"] = os.getenv("GEMINI_API_KEY")
-os.environ["OPENAI_API_BASE"] = os.getenv("GEMINI_ENDPOINT")
+os.environ["OPENAI_API_KEY"] = os.getenv("AZURE_OPENAI_API_KEY")
+os.environ["OPENAI_API_BASE"] = os.getenv("AZURE_OPENAI_ENDPOINT")
 client = openai.OpenAI(api_key =  os.environ["OPENAI_API_KEY"],
                        base_url = os.environ["OPENAI_API_BASE"])
-# Access the variables
-api_key = os.getenv("AZURE_OPENAI_API_KEY")
-endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-
-# Set the environment variables explicitly if needed
-os.environ["AZURE_OPENAI_API_KEY"] = api_key
-os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
+# # Access the variables
+# api_key = os.getenv("AZURE_OPENAI_API_KEY")
+# endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
+#
+# # Set the environment variables explicitly if needed
+# os.environ["AZURE_OPENAI_API_KEY"] = api_key
+# os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
 # Check if the Excel file exists
 if not os.path.exists(xpath_file):
     # Just create an empty Excel file (without headers)
@@ -228,7 +228,117 @@ def create_test_file(Test_file_location,file_name: str, file_extension: str,resp
 
     st.write(f"✅ Test file script generated: {full_file_path}")
 
+
 def get_queries_from_ai(prompt, formatted_summary):
+    print("going inside get_queries_from_ai_updated")
+    model = "gpt-5-mini"
+    prompt_template = load_prompt_from_file(prompt)
+    print(prompt_template)
+
+    if prompt == "PowerBi":
+        # print("formatted_summary:", {formatted_summary})
+        formatted_summary_json = json.dumps(formatted_summary, indent=2)
+        final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
+        print("Final prompt:", {final_prompt})
+        json_list = formatted_summary if isinstance(formatted_summary, list) else json.loads(formatted_summary)
+        chunk_size = 15
+        json_chunks = [json_list[i:i + chunk_size] for i in range(0, len(json_list), chunk_size)]
+        # Collecting responses for all JSON chunks
+        all_responses = []
+        for i, chunk in enumerate(json_chunks):
+            print(f"Processing JSON chunk {i + 1}/{len(json_chunks)}")
+            formatted_summary_json = json.dumps(chunk, indent=2)
+            final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
+            try:
+                response = client.chat.completions.create(model=model,
+                                                          messages=[{"role": "user",
+                                                                     "content": final_prompt
+                                                                     }
+                                                                    ])
+                print(response)
+
+                output_value = response.choices[0].message.content
+                print(f"Response for chunk {i + 1}: {output_value}")
+                all_responses.append(output_value)
+            except Exception as e:
+                print(f"[ERROR] LLM call failed for chunk {i + 1}: {e}")
+                all_responses.append(f"Error processing chunk {i + 1}: {e}")
+
+                # Combine all responses into one
+        combined_response = "\n".join(all_responses)
+        return combined_response
+    elif prompt == "Web":
+        # print("formatted_summary:", {formatted_summary})
+        formatted_summary_json = json.dumps(formatted_summary, indent=2)
+        final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
+        print("Final prompt:", {final_prompt})
+        json_list = formatted_summary if isinstance(formatted_summary, list) else json.loads(formatted_summary)
+        chunk_size = 15
+        json_chunks = [json_list[i:i + chunk_size] for i in range(0, len(json_list), chunk_size)]
+        # Collecting responses for all JSON chunks
+        all_responses = []
+        for i, chunk in enumerate(json_chunks):
+            print(f"Processing JSON chunk {i + 1}/{len(json_chunks)}")
+            formatted_summary_json = json.dumps(chunk, indent=2)
+            final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
+            try:
+                response = client.chat.completions.create(model=model,
+                                                          messages=[{"role": "user",
+                                                                     "content": final_prompt
+                                                                     }
+                                                                    ])
+                print(response)
+
+                output_value = response.choices[0].message.content
+                print(f"Response for chunk {i + 1}: {output_value}")
+                all_responses.append(output_value)
+                print(f"Response for chunk {i + 1}: {output_value.content}")
+            except Exception as e:
+                print(f"[ERROR] LLM call failed for chunk {i + 1}: {e}")
+                all_responses.append(f"Error processing chunk {i + 1}: {e}")
+
+                # Combine all responses into one
+        combined_response = "\n".join(all_responses)
+        return combined_response
+    elif prompt == "Web1":
+        print(formatted_summary)
+        # final_prompt = prompt_template.format(formatted_summary=formatted_summary)
+        prompt = f"""
+From the given list of elements, generate all possible XPath expressions for each element using its tag and attributes only. 
+Return only valid XPath strings as output. Do not include any explanation or description. 
+
+Input: {formatted_summary}
+Strict Instruction:no ``` or any other wrapper 
+"""
+        try:
+            response = client.chat.completions.create(model=model,
+                                                      messages=[{"role": "user",
+                                                                 "content": prompt
+                                                                 }
+                                                                ])
+            print(response)
+
+            output_value = response.choices[0].message.content
+            return output_value
+        except Exception as e:
+            print(f"exception: {e}")
+
+    elif prompt == "Page_File":
+        print(formatted_summary)
+        try:
+            response = client.chat.completions.create(model=model,
+                                                      messages=[{"role": "user",
+                                                                 "content": formatted_summary
+                                                                 }
+                                                                ])
+            print(response)
+
+            output_value = response.choices[0].message.content
+            return output_value
+        except Exception as e:
+            print(f"exception: {e}")
+
+def get_queries_from_ai_oldllm(prompt, formatted_summary):
     # Access the variables
     api_key = os.getenv("AZURE_OPENAI_API_KEY")
     endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
@@ -2426,18 +2536,32 @@ def get_queries_from_ai_updated_gemini(formatted_summary):
     print(response)
     return response.choices[0].message.content
 def get_queries_from_ai_updated(formatted_summary):
-
-
-    model = AzureChatOpenAI(
-        openai_api_version="2023-05-15",
-        azure_deployment="qepracticekey",
-        max_tokens=4000,  # adjust depending on your model quota
-        temperature=0
-    )
-    message = HumanMessage(content=formatted_summary)
-    output_value = model([message])
-    print(output_value)
-    return output_value.content
+   print("going inside get_queries_from_ai_updated")
+   model = "gpt-5-mini"
+   try:
+        response = client.chat.completions.create(model=model,
+                                          messages=[{"role": "user",
+                                                     "content": formatted_summary
+                                                     }
+                                                    ])
+        print(response)
+        return response.choices[0].message.content
+   except Exception as e:
+        print(f"[ERROR] LLM call failed: {e}")
+        return None
+# def get_queries_from_ai_updated(formatted_summary):
+#
+#
+#     model = AzureChatOpenAI(
+#         openai_api_version="2023-05-15",
+#         azure_deployment="qepracticekey",
+#         max_tokens=4000,  # adjust depending on your model quota
+#         temperature=0
+#     )
+#     message = HumanMessage(content=formatted_summary)
+#     output_value = model([message])
+#     print(output_value)
+#     return output_value.content
 
 def markdown_to_dataframe(markdown_text):
     # Extract lines that look like markdown rows

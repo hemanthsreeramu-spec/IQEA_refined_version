@@ -1,61 +1,106 @@
-YOU ARE A HIGHLY SPECIALIZED AUTOMATION ARCHITECT.
-YOUR TASK: Generate a production-ready Python-Selenium Page Object Model (POM) class.
+YOU ARE A SENIOR AUTOMATION ENGINEER. GENERATE EXACTLY ONE Python-Selenium POM CLASS.
 
-INPUTS:
-
+=== INPUTS ===
+page_name: {page_name}
 elements: {xpaths}
-
 recorded_actions: {Action_data}
 
-page_name: {page_name}
+=== ABSOLUTE OUTPUT RULE ===
+Return ONLY the raw Python class. Zero markdown. Zero backticks. Zero explanation.
 
-REQUIREMENTS (strict):
-
-RAW CODE ONLY — Return only a single Python class definition for the page. No extra text, no comments, no markdown, no backticks.
-
-TOP-LEVEL IMPORTS (MANDATORY) — The class file must include only:
-
+=== SECTION 1: IMPORTS (FIXED — COPY EXACTLY) ===
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
+No other imports. Ever.
 
-Do NOT add other imports.
-
-LOCATORS — Provide a LOCATORS dictionary exactly in this format:
+=== SECTION 2: LOCATORS DICTIONARY ===
+Define at class level, before __init__:
 
 LOCATORS = {{
-    "key_name": (By.XPATH, "<xpath>"),
-    ...
+    "snake_case_key": (By.XPATH, "exact_xpath_from_elements_input"),
 }}
 
+Rules:
+- Keys are snake_case derived from element purpose (e.g., username_input, login_button)
+- Values are exactly (By.XPATH, "<xpath>") — never By.ID or By.NAME unless explicitly in elements input
+- Every element from xpaths MUST appear as a LOCATORS entry
+- Do NOT invent locators not present in xpaths
 
-Keys must be pythonic snake_case and derived from element meaning (e.g., submit_button, last_name_input).
+=== SECTION 3: CLASS DECLARATION ===
+CLASS NAMING — Class name MUST use PascalCase (e.g., file name
+"checkout_step_one.py" → class name "CheckoutStepOne").
+This is mandatory. The test generator imports by PascalCase class name.
 
-CLASS NAME — Must be exactly the provided page_name (case-sensitive).
-
-CONSTRUCTOR — Must be exactly:
-
+=== SECTION 4: CONSTRUCTOR (COPY EXACTLY) ===
 def __init__(self, driver):
     self.driver = driver
     self.wait = WebDriverWait(driver, 20)
 
+=== SECTION 5: NAVIGATION METHOD (MANDATORY — ALWAYS INCLUDE) ===
+Extract the base page URL from Action_data. Generate:
 
-NO GENERIC HELPER METHODS — Do NOT include generic helpers such as click_element, enter_text, or window switching inside the page class. The page class may include read-only accessor methods that return WebElement objects or simple convenience wrappers that call self.wait and return elements (not actions). Example allowed method:
+def navigate(self):
+    self.driver.get("<extracted_url>")
 
-def get_submit_button(self):
-    return self.wait.until(EC.element_to_be_clickable(self.LOCATORS["submit_button"]))
+If no URL found in Action_data, use:
 
+def navigate(self):
+    raise NotImplementedError("Base URL not found in Action_data. Set manually.")
 
-But do not perform actions (no .click() or .send_keys() inside the POM).
+=== SECTION 6: ELEMENT ACCESSOR METHODS (MANDATORY FOR EVERY LOCATOR) ===
+For every key in LOCATORS, generate one accessor method:
 
-ACTION METHODS — If recorded_actions include complex multi-element flows that are only meaningful as a single page-level behavior (e.g., open_modal_and_return_handle()), you MAY include at most one such method — but it must be minimal and must NOT include global helpers. Prefer exposing elements and locators for tests to operate on.
+def get_<key>(self):
+    locator = self.LOCATORS.get("<key>")
+    if locator is None:
+        raise RuntimeError("Locator '<key>' not found in LOCATORS")
+    return self.wait.until(EC.element_to_be_clickable(locator))
 
-MISSING/XPATH-ONLY LOCATORS — If only XPaths are available, use them exactly. Do not invent ids or names.
+Wait strategy rules:
+- Buttons, links, checkboxes → EC.element_to_be_clickable
+- Input fields → EC.visibility_of_element_located
+- Labels, text spans, read-only elements → EC.visibility_of_element_located
+- Dropdowns → EC.element_to_be_clickable
 
-ERROR ON MISSING LOCATOR — Accessor methods must raise RuntimeError("Locator '<key>' not found in LOCATORS") if the key is missing.
+=== SECTION 7: ACTION METHODS (DERIVED FROM recorded_actions) ===
+For each distinct user action in Action_data, generate one method.
+Method naming: snake_case verb phrase (e.g., enter_username, click_login, select_dropdown_option)
 
-OUTPUT:
-RETURN ONLY RAW CODE. Do NOT wrap output in triple backticks like ```language,```java,```python,```.
-Do NOT wrap output in triple backticks.
-Do NOT add explanations, comments, markdown, or text outside the class.
+Each method MUST:
+1. Call the corresponding get_<key>() accessor (do NOT call LOCATORS directly)
+2. Perform exactly one Selenium action (.click(), .send_keys(), .clear() then .send_keys(), etc.)
+3. Accept parameters for dynamic values (e.g., def enter_username(self, username: str))
+
+Example:
+def enter_username(self, username: str):
+    self.get_username_input().clear()
+    self.get_username_input().send_keys(username)
+
+def click_login(self):
+    self.get_login_button().click()
+
+=== SECTION 8: WINDOW / NEW TAB HANDLING (CONDITIONAL) ===
+Include ONLY if Action_data contains a new window/tab open event.
+
+def switch_to_new_window(self, timeout: int = 10):
+    import time
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if len(self.driver.window_handles) > 1:
+            self.driver.switch_to.window(self.driver.window_handles[-1])
+            return
+        time.sleep(0.5)
+    raise RuntimeError("New window did not appear within timeout")
+
+def switch_to_main_window(self):
+    self.driver.switch_to.window(self.driver.window_handles[0])
+
+=== SECTION 9: BANNED PATTERNS ===
+❌ No generic helpers named click_element, enter_text, wait_for_element
+❌ No direct self.driver.find_element() calls inside action methods (use accessors)
+❌ No try/except blocks
+❌ No print() statements
+❌ No sleep() calls
+❌ No imports beyond Section 1
