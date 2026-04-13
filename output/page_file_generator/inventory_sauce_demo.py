@@ -6,7 +6,7 @@ class InventorySauceDemo:
     LOCATORS = {
         "react_burger_menu_btn": (By.XPATH, "//button[@id='react-burger-menu-btn']"),
         "shopping_cart_link": (By.XPATH, "//a[@class='shopping_cart_link']"),
-        "add_to_cart_sauce_labs_backpack": (By.XPATH, "//button[@id='add-to-cart-sauce-labs-backpack']"),
+        "add_to_cart_sauce_labs_backpack": (By.XPATH, "//button[@id='add-to-cart-sauce-labs-bike-light']"),
         "add_to_cart_sauce_labs_bike_light": (By.XPATH, "//button[@id='add-to-cart-sauce-labs-bike-light']"),
         "add_to_cart_sauce_labs_bolt_t_shirt": (By.XPATH, "//button[@id='add-to-cart-sauce-labs-bolt-t-shirt']"),
         "add_to_cart_sauce_labs_fleece_jacket": (By.XPATH, "//button[@id='add-to-cart-sauce-labs-fleece-jacket']"),
@@ -34,7 +34,7 @@ class InventorySauceDemo:
         return self.wait.until(EC.element_to_be_clickable(locator))
 
     def get_add_to_cart_sauce_labs_backpack(self):
-        locator = self.LOCATORS.get("add_to_cart_sauce_labs_backpack")
+        locator = self.LOCATORS.get("add_to_cart_sauce_labs_bolt_t_shirt")
         if locator is None:
             raise RuntimeError("Locator 'add_to_cart_sauce_labs_backpack' not found in LOCATORS")
         return self.wait.until(EC.element_to_be_clickable(locator))

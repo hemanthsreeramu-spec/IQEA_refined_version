@@ -9,7 +9,7 @@ class sfdc_homepage:
         self.password_field = page.locator("xpath=//input[@id='password']")
         self.login_button = page.locator("xpath=//input[@id='Login']")
         self.verification_code_field = page.locator("xpath=//input[@id='emc']")
-        self.verify_button = page.locator("xpath=//button[text()='Verify']")
+        self.verify_button = page.locator("xpath=//input[@id='save']")
         self.contacts_tab = page.locator("xpath=//span[text()='Contacts']")
 
     def wait_for_element(self, locator_key: str):
@@ -35,14 +35,16 @@ class sfdc_homepage:
         self.enter_text('username_field', username)
         self.enter_text('password_field', password)
         self.click_element('login_button')
+        # Save authentication state
+
 
     def verify_identity(self, verification_code: str):
         new_page = self.switch_to_new_window()
         new_page.locator("xpath=//input[@id='emc']").wait_for()
         self.verification_code_field = new_page.locator("xpath=//input[@id='emc']")
-        self.verify_button = new_page.locator("xpath=//button[text()='Verify']")
-        self.enter_text('verification_code_field', verification_code)
-        time.sleep(10)
+        self.verify_button = new_page.locator("xpath=//input[@id='save']")
+        #self.enter_text('verification_code_field', verification_code)
+        time.sleep(20)
         self.click_element('verify_button')
 
     def click_contacts_tab(self):

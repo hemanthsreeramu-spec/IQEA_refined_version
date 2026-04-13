@@ -128,7 +128,7 @@ def _verify_element_for_interaction(elem):
 
 
 def do_login(driver, login_page_pom, inventory_pom,
-             username="standard_user", password="secret_sauce"):
+    username="standard_user", password="secret_sauce"):
     login_page_pom.navigate()
     safe_send_keys(driver, lambda: login_page_pom.get_user_name_input(), username, label="username")
     safe_send_keys(driver, lambda: login_page_pom.get_password_input(), password, label="password")

@@ -176,10 +176,6 @@ def pytest_runtest_makereport(item, call):
 def test_TC01_successful_purchase_standard_user(setup):
     driver, new_page, inventory, cart, checkout1, checkout2, checkout_complete, home_logout = setup
 
-    with allure.step("Switch to new window"):
-        _retry_action(driver, lambda: switch_to_new_window(driver))
-        attach_screenshot(driver, "Switch to new window")
-
     with allure.step("Navigate to login page"):
         _retry_action(driver, lambda: new_page.navigate())
         attach_screenshot(driver, "Navigate to login page")
@@ -195,19 +191,20 @@ def test_TC01_successful_purchase_standard_user(setup):
     with allure.step("Click login"):
         _retry_action(driver, lambda: wait_and_click(driver, lambda: new_page.get_login_button()))
         attach_screenshot(driver, "Click login")
+        time.sleep(10)
 
     with allure.step("Add backpack to cart"):
         _retry_action(driver, lambda: wait_and_click(driver, lambda: inventory.get_add_to_cart_sauce_labs_backpack()))
         attach_screenshot(driver, "Add backpack to cart")
-
+        time.sleep(10)
     with allure.step("Go to shopping cart"):
         _retry_action(driver, lambda: wait_and_click(driver, lambda: inventory.get_shopping_cart_link()))
         attach_screenshot(driver, "Go to shopping cart")
-
+        time.sleep(10)
     with allure.step("Click checkout"):
         _retry_action(driver, lambda: wait_and_click(driver, lambda: cart.get_checkout_button()))
         attach_screenshot(driver, "Click checkout")
-
+        time.sleep(10)
     with allure.step("Enter checkout information"):
         _retry_action(driver, lambda: wait_and_send_keys(driver, lambda: checkout1.get_first_name_input(), "test"))
         attach_screenshot(driver, "Enter first name")
@@ -217,19 +214,18 @@ def test_TC01_successful_purchase_standard_user(setup):
         attach_screenshot(driver, "Enter postal code")
         _retry_action(driver, lambda: wait_and_click(driver, lambda: checkout1.get_continue_button()))
         attach_screenshot(driver, "Click continue")
-
+        time.sleep(10)
     with allure.step("Finish checkout"):
         _retry_action(driver, lambda: wait_and_click(driver, lambda: checkout2.get_finish_button()))
         attach_screenshot(driver, "Finish checkout")
-
+        time.sleep(10)
     with allure.step("Back to products"):
         _retry_action(driver, lambda: wait_and_click(driver, lambda: checkout_complete.get_back_to_products_button()))
         attach_screenshot(driver, "Back to products")
-
+        time.sleep(10)
     with allure.step("Open burger menu"):
         _retry_action(driver, lambda: wait_and_click(driver, lambda: inventory.get_react_burger_menu_btn()))
         attach_screenshot(driver, "Open burger menu")
-
     with allure.step("Logout"):
         _retry_action(driver, lambda: wait_and_click(driver, lambda: home_logout.get_logout_sidebar_link()))
         attach_screenshot(driver, "Logout")
@@ -240,10 +236,6 @@ def test_TC01_successful_purchase_standard_user(setup):
 
 def test_TC12_logout_from_inventory_page(setup):
     driver, new_page, inventory, cart, checkout1, checkout2, checkout_complete, home_logout = setup
-
-    with allure.step("Switch to new window"):
-        _retry_action(driver, lambda: switch_to_new_window(driver))
-        attach_screenshot(driver, "Switch to new window")
 
     with allure.step("Navigate to login page"):
         _retry_action(driver, lambda: new_page.navigate())
@@ -276,9 +268,6 @@ def test_TC12_logout_from_inventory_page(setup):
 def test_TC05_add_product_to_cart(setup):
     driver, new_page, inventory, cart, checkout1, checkout2, checkout_complete, home_logout = setup
 
-    with allure.step("Switch to new window"):
-        _retry_action(driver, lambda: switch_to_new_window(driver))
-        attach_screenshot(driver, "Switch to new window")
 
     with allure.step("Navigate to login page"):
         _retry_action(driver, lambda: new_page.navigate())
@@ -311,9 +300,6 @@ def test_TC05_add_product_to_cart(setup):
 def test_TC08_login_with_invalid_password(setup):
     driver, new_page, inventory, cart, checkout1, checkout2, checkout_complete, home_logout = setup
 
-    with allure.step("Switch to new window"):
-        _retry_action(driver, lambda: switch_to_new_window(driver))
-        attach_screenshot(driver, "Switch to new window")
 
     with allure.step("Navigate to login page"):
         _retry_action(driver, lambda: new_page.navigate())
@@ -337,10 +323,6 @@ def test_TC08_login_with_invalid_password(setup):
 
 def test_TC10_add_multiple_products_to_cart(setup):
     driver, new_page, inventory, cart, checkout1, checkout2, checkout_complete, home_logout = setup
-
-    with allure.step("Switch to new window"):
-        _retry_action(driver, lambda: switch_to_new_window(driver))
-        attach_screenshot(driver, "Switch to new window")
 
     with allure.step("Navigate to login page"):
         _retry_action(driver, lambda: new_page.navigate())
@@ -376,10 +358,6 @@ def test_TC10_add_multiple_products_to_cart(setup):
 
 def test_TC11_checkout_with_missing_first_name(setup):
     driver, new_page, inventory, cart, checkout1, checkout2, checkout_complete, home_logout = setup
-
-    with allure.step("Switch to new window"):
-        _retry_action(driver, lambda: switch_to_new_window(driver))
-        attach_screenshot(driver, "Switch to new window")
 
     with allure.step("Navigate to login page"):
         _retry_action(driver, lambda: new_page.navigate())

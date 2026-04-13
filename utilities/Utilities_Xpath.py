@@ -1086,6 +1086,43 @@ def generate_test_script(prompt_type,test_file_language,page_file_conetent,test_
     print(final_prompt)
     return final_prompt
 
+def generate_code_review_prompt(test_file_language, page_files_content, test_files_content, action_data, generated_script, review_details):
+    action_section = f"\n4. Recorded Actions:\n{action_data}\n" if action_data else ""
+    review_section = f"\n5. User Review Feedback / Change Requests:\n{review_details}\n" if review_details else ""
+
+    prompt = f"""YOU ARE A SENIOR SDET PERFORMING A COMPREHENSIVE SCRIPT REVIEW AND FIX.
+
+=== LANGUAGE / FRAMEWORK ===
+{test_file_language}
+
+=== INPUTS ===
+1. Page Object Files (POM):
+{page_files_content}
+
+2. Test Case Files:
+{test_files_content}
+
+3. Generated Script (to be reviewed and fixed):
+{generated_script}
+{action_section}{review_section}
+
+=== REVIEW OBJECTIVES ===
+1. COVERAGE: Verify every test case in the test case files has a corresponding test function in the script. Add any missing test functions.
+2. STEPS: For each test case, verify all steps are implemented correctly and in the correct order. No steps should be skipped.
+3. POM ACCURACY: All page object method calls must exactly match the methods defined in the page files — correct class names, method names, and signatures. Fix any mismatches.
+4. EXECUTABILITY: The script must be 100% executable without any modifications. No placeholder values, no TODO comments, no missing imports, no undefined variables.
+5. LANGUAGE STANDARDS: Follow best practices for {test_file_language} — proper imports, fixtures, waits, assertions.
+6. USER FEEDBACK: If review feedback is provided above, address each point specifically and completely.
+7. COMPLETENESS: All test cases must have proper setup, execution steps, meaningful assertions matching expected results, and teardown.
+8. NO REGRESSIONS: Do not break any working test cases while fixing issues.
+
+=== ABSOLUTE OUTPUT RULE ===
+Return ONLY raw code. Zero markdown. Zero backticks. Zero explanation.
+Do NOT wrap output in triple backticks. Return ONLY the complete fixed and reviewed script.
+"""
+    print(prompt)
+    return prompt
+
 def generate_pom_from_excel_with_action(prompt_type,page_name,language,action_data):
     prompt_template = load_prompt_from_file(prompt_type)
     print(prompt_template)

@@ -1,0 +1,3 @@
+Locator.wait_for: Timeout 10000ms exceeded.
+Call log:
+  - waiting for locator("[id*='Username'], [name*='Username']").first to be visible

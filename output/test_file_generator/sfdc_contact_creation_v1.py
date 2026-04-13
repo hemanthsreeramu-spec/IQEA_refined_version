@@ -16,7 +16,7 @@ VERIFICATION_CODE = "123456"   # Supply the live OTP when running
 CONTACT_LAST_NAME       = "TestContact"
 CONTACT_EMAIL           = "testcontact@example.com"
 CONTACT_ASSISTANT_NAME  = "Assistant Smith"
-CONTACT_BIO             = "Automation test contact bio"
+CONTACT_BIO             = "232345"
 CONTACT_ASSISTANT_PHONE = "9876543210"
 
 
@@ -39,7 +39,7 @@ def page():
     """Launch WebKit visibly, yield a Page, then close everything."""
     with sync_playwright() as p:
         browser = p.webkit.launch(headless=False, slow_mo=500)
-        browser = p.Edge.launch(headless=False, slow_mo=500)# ← headed + slowed
+        #browser = p.Edge.launch(headless=False, slow_mo=500)# ← headed + slowed
         context = browser.new_context(viewport={"width": 1280, "height": 800})
         pg      = context.new_page()
         yield pg
@@ -93,6 +93,7 @@ def test_create_sfdc_contact(page: Page):
         homepage = sfdc_homepage(page)
         homepage.login(USERNAME, PASSWORD)
         attach_screenshot(page, "02 - After Login Submit")
+
 
     # ── Step 3: OTP verification ─────────────────────────────────────────────
     with allure.step("Enter OTP verification code"):
