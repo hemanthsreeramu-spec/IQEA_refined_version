@@ -18,6 +18,7 @@ import streamlit as st
 
 from utility_mobile import (
     ADBManager,
+    AVDManager,
     ActionRecorder,
     AppiumManager,
     BrowserStackManager,
@@ -51,6 +52,7 @@ def _init():
     if "logger"   not in st.session_state: st.session_state.logger   = MobileLogger()
     lg = st.session_state.logger
     if "adb"      not in st.session_state: st.session_state.adb      = ADBManager(lg)
+    if "avd_mgr"  not in st.session_state: st.session_state.avd_mgr  = AVDManager(logger=lg)
     if "bs"       not in st.session_state: st.session_state.bs       = BrowserStackManager(logger=lg)
     if "appium"   not in st.session_state: st.session_state.appium   = AppiumManager(logger=lg)
     if "scrcpy"   not in st.session_state: st.session_state.scrcpy   = ScrcpyManager(lg)
@@ -63,6 +65,7 @@ def _init():
         # ── Tab 1 ──────────────────────────────────────────────────
         "usb_devices":    [],
         "bs_devices":     [],
+        "avd_booting":    False,   # True while waiting for emulator boot
         "selected_device": None,
         "session_id":     None,
         "app_path_input": "",
@@ -315,7 +318,92 @@ with tab1:
             dev = st.session_state.selected_device
             st.info(f"**{dev['model']}** · {dev['os']} · {dev['source'].upper()}")
         else:
-            st.info("No devices found. Click Scan USB.")
+            st.info("No devices found. Click Scan USB or launch an AVD below.")
+
+        st.divider()
+
+        # ── Android Emulator (AVD) ─────────────────────────────────────────────
+        avd_mgr = st.session_state.avd_mgr
+        st.subheader("Android Emulator (AVD)")
+        st.caption("Launch Android Studio virtual devices directly from here.")
+
+        if not avd_mgr.is_available():
+            st.warning(
+                "⚠️ `emulator` binary not found.\n\n"
+                "Install **Android Studio** (free) and create an AVD via its AVD Manager, "
+                "or install the [Android SDK command-line tools](https://developer.android.com/studio#command-tools) "
+                "and ensure `ANDROID_HOME/emulator` is on PATH.\n\n"
+                f"Detected SDK path: `{avd_mgr.sdk_path or 'not found'}`"
+            )
+        else:
+            sdk_display = avd_mgr.sdk_path or "on PATH"
+            st.caption(f"SDK: `{sdk_display}`")
+
+            avd_list = avd_mgr.list_avds()
+            running_serials = avd_mgr.get_running_serials()
+
+            if not avd_list:
+                st.info(
+                    "No AVDs found. Open **Android Studio → Device Manager** "
+                    "and create a virtual device first."
+                )
+            else:
+                sel_avd = st.selectbox("Select AVD", avd_list, key="sel_avd")
+                is_running = len(running_serials) > 0
+
+                av1, av2, av3 = st.columns(3)
+                with av1:
+                    if st.button("▶ Launch AVD", use_container_width=True,
+                                 disabled=is_running):
+                        if avd_mgr.launch_avd(sel_avd):
+                            st.session_state.avd_booting = True
+                            st.success(f"✅ Launching **{sel_avd}**…")
+                        else:
+                            st.error("Failed to launch. Check system log.")
+                        st.rerun()
+
+                with av2:
+                    if st.button("⟳ Check Boot", use_container_width=True):
+                        serials = avd_mgr.get_running_serials()
+                        if serials and avd_mgr.is_booted(serials[0]):
+                            st.session_state.avd_booting = False
+                            st.success("✅ Boot complete!")
+                        elif serials:
+                            st.info("Emulator detected but still booting…")
+                        else:
+                            st.warning("Emulator not detected yet. Wait 30s and retry.")
+                        st.rerun()
+
+                with av3:
+                    if st.button("⏹ Stop", use_container_width=True,
+                                 disabled=not is_running):
+                        for s in running_serials:
+                            avd_mgr.stop(s)
+                        st.session_state.avd_booting = False
+                        st.rerun()
+
+                if is_running:
+                    for serial in running_serials:
+                        booted = avd_mgr.is_booted(serial)
+                        label  = "✅ Ready" if booted else "⏳ Booting…"
+                        st.success(f"{label} — `{serial}`")
+
+                    if st.button("➕ Add Emulator to Device List", use_container_width=True):
+                        existing = {d["serial"] for d in st.session_state.usb_devices}
+                        added = 0
+                        for serial in running_serials:
+                            if serial not in existing:
+                                info = avd_mgr.get_device_info(serial)
+                                st.session_state.usb_devices.append(info)
+                                added += 1
+                        if added:
+                            st.success(f"✅ Added {added} emulator(s) to the device list.")
+                        else:
+                            st.info("Already in device list.")
+                        st.rerun()
+
+                elif st.session_state.avd_booting:
+                    st.info("⏳ Emulator starting — takes 30–60 s. Click **Check Boot** to check.")
 
         st.divider()
 
@@ -343,7 +431,7 @@ with tab1:
                 if not dev:
                     st.warning("Select a device first.")
                 else:
-                    with st.spinner("Creating session… (BrowserStack may take 30-60s)"):
+                    with st.spinner("Creating session… (may take 30-60s)"):
                         result = appium.create_session(
                             device          = dev,
                             app_path        = st.session_state.app_path_input,
@@ -1217,7 +1305,7 @@ with tab4:
             )
         with stop_col:
             stop_clicked = st.button(
-                "⏹ Stop", use_container_width=True,
+                "⏹ Stop Session", use_container_width=True,
                 disabled=not st.session_state.exec_running,
             )
         with report_col:

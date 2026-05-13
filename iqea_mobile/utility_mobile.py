@@ -306,7 +306,164 @@ class BrowserStackManager:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 4. APPIUM MANAGER
+# 4. AVD MANAGER  (Android Studio / SDK emulators)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class AVDManager:
+    """
+    Manages Android Virtual Devices via the `emulator` CLI from Android Studio
+    or the Android SDK command-line tools. Auto-discovers the binary from common
+    SDK install paths so the user doesn't need `emulator` on their PATH.
+    """
+
+    _SDK_CANDIDATES = [
+        os.path.join(os.environ.get("LOCALAPPDATA", ""), "Android", "Sdk"),
+        os.path.join(os.path.expanduser("~"), "AppData", "Local", "Android", "Sdk"),
+        os.path.join(os.path.expanduser("~"), "Library", "Android", "sdk"),
+        os.path.join(os.path.expanduser("~"), "Android", "Sdk"),
+        os.environ.get("ANDROID_HOME", ""),
+        os.environ.get("ANDROID_SDK_ROOT", ""),
+    ]
+
+    def __init__(self, logger=None):
+        self.logger    = logger or MobileLogger()
+        self._emulator = self._find("emulator")
+        self._adb      = shutil.which("adb") or "adb"
+        self._procs: dict = {}   # avd_name → Popen
+
+    def _find(self, binary: str) -> str:
+        found = shutil.which(binary)
+        if found:
+            return found
+        for sdk in self._SDK_CANDIDATES:
+            if not sdk:
+                continue
+            for candidate in [
+                os.path.join(sdk, "emulator", binary),
+                os.path.join(sdk, "emulator", binary + ".exe"),
+            ]:
+                if os.path.exists(candidate):
+                    return candidate
+        return binary
+
+    @property
+    def sdk_path(self) -> str:
+        for sdk in self._SDK_CANDIDATES:
+            if sdk and os.path.isdir(os.path.join(sdk, "emulator")):
+                return sdk
+        return ""
+
+    def is_available(self) -> bool:
+        try:
+            subprocess.run([self._emulator, "-version"], capture_output=True, timeout=6)
+            return True
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return False
+
+    def list_avds(self) -> list[str]:
+        try:
+            result = subprocess.run(
+                [self._emulator, "-list-avds"],
+                capture_output=True, text=True, timeout=10,
+            )
+            avds = [l.strip() for l in result.stdout.splitlines() if l.strip()]
+            self.logger.info(f"AVDs found: {avds or 'none'}")
+            return avds
+        except Exception as exc:
+            self.logger.err(f"list_avds: {exc}")
+            return []
+
+    def launch_avd(self, avd_name: str) -> bool:
+        proc = self._procs.get(avd_name)
+        if proc and proc.poll() is None:
+            self.logger.info(f"{avd_name} already running")
+            return True
+        try:
+            proc = subprocess.Popen(
+                [self._emulator, "-avd", avd_name, "-no-audio"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            self._procs[avd_name] = proc
+            self.logger.ok(f"AVD '{avd_name}' launched (PID {proc.pid})")
+            return True
+        except Exception as exc:
+            self.logger.err(f"Launch '{avd_name}': {exc}")
+            return False
+
+    def get_running_serials(self) -> list[str]:
+        try:
+            result = subprocess.run(
+                [self._adb, "devices"], capture_output=True, text=True, timeout=8,
+            )
+            serials = []
+            for line in result.stdout.splitlines()[1:]:
+                parts = line.split()
+                if len(parts) >= 2 and parts[1] == "device" and parts[0].startswith("emulator"):
+                    serials.append(parts[0])
+            return serials
+        except Exception:
+            return []
+
+    def is_booted(self, serial: str) -> bool:
+        try:
+            r = subprocess.run(
+                [self._adb, "-s", serial, "shell", "getprop", "sys.boot_completed"],
+                capture_output=True, text=True, timeout=5,
+            )
+            return r.stdout.strip() == "1"
+        except Exception:
+            return False
+
+    def get_avd_name(self, serial: str) -> str:
+        try:
+            r = subprocess.run(
+                [self._adb, "-s", serial, "emu", "avd", "name"],
+                capture_output=True, text=True, timeout=5,
+            )
+            lines = [l.strip() for l in r.stdout.splitlines()
+                     if l.strip() and "OK" not in l]
+            return lines[0] if lines else ""
+        except Exception:
+            return ""
+
+    def get_device_info(self, serial: str) -> dict:
+        def prop(p):
+            try:
+                r = subprocess.run(
+                    [self._adb, "-s", serial, "shell", "getprop", p],
+                    capture_output=True, text=True, timeout=5,
+                )
+                return r.stdout.strip()
+            except Exception:
+                return ""
+        avd_name = self.get_avd_name(serial)
+        model    = prop("ro.product.model") or avd_name or "Android Emulator"
+        mfr      = prop("ro.product.manufacturer") or "Google"
+        os_ver   = prop("ro.build.version.release") or "?"
+        return {
+            "serial":   serial,
+            "model":    f"{mfr} {model}".strip(),
+            "os":       f"Android {os_ver}",
+            "platform": "Android",
+            "source":   "emulator",
+            "avd_name": avd_name,
+        }
+
+    def stop(self, serial: str) -> bool:
+        try:
+            subprocess.run(
+                [self._adb, "-s", serial, "emu", "kill"],
+                capture_output=True, timeout=6,
+            )
+            self.logger.ok(f"Emulator {serial} stopped")
+            return True
+        except Exception as exc:
+            self.logger.err(f"Stop {serial}: {exc}")
+            return False
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 5. APPIUM MANAGER
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class AppiumManager:
@@ -395,6 +552,13 @@ class AppiumManager:
                 caps["browserName"] = "Chrome" if platform == "Android" else "Safari"
             if device.get("serial"):
                 caps["appium:udid"] = device["serial"]
+            # Emulator-specific extras — help Appium wait for the AVD to boot
+            if source == "emulator":
+                caps["appium:avdLaunchTimeout"]  = 120000
+                caps["appium:avdReadyTimeout"]   = 120000
+                caps["appium:autoGrantPermissions"] = True
+                if device.get("avd_name"):
+                    caps["appium:avd"] = device["avd_name"]
 
         if extra_caps:
             caps.update(extra_caps)
