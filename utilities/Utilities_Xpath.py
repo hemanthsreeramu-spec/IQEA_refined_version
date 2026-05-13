@@ -67,6 +67,7 @@ os.environ["OPENAI_API_KEY"] = os.getenv("AZURE_OPENAI_API_KEY")
 os.environ["OPENAI_API_BASE"] = os.getenv("AZURE_OPENAI_ENDPOINT")
 client = openai.OpenAI(api_key =  os.environ["OPENAI_API_KEY"],
                        base_url = os.environ["OPENAI_API_BASE"])
+
 # # Access the variables
 # api_key = os.getenv("AZURE_OPENAI_API_KEY")
 # endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
@@ -502,8 +503,8 @@ def get_queries_from_ai_duplicate(prompt,formatted_summary):
 
     final_prompt = prompt_template.format(formatted_summary=formatted_summary_json)
     # Collect visible elements
-    os.environ["AZURE_OPENAI_API_KEY"] = "4fed2bedb59744a99b0424622f6d9d1b"
-    os.environ["AZURE_OPENAI_ENDPOINT"] = "https://qepracticekey.openai.azure.com/"
+    # os.environ["AZURE_OPENAI_API_KEY"] = "4fed2bedb59744a99b0424622f6d9d1b"
+    # os.environ["AZURE_OPENAI_ENDPOINT"] = "https://qepracticekey.openai.azure.com/"
 
     model = AzureChatOpenAI(
         openai_api_version="2023-05-15",
@@ -2306,9 +2307,13 @@ def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases,
 
 
         try:
-            response = get_queries_from_ai_updated(prompt) if model_type == "azureopenai" \
+            response = get_queries_from_ai_testcases(prompt) if model_type == "azureopenai" \
                 else llm_pepgenx(prompt)
                 #else get_queries_from_ai_updated_geminiget_queries_from_ai_updated_gemini(prompt)
+            if not response:
+                print("⚠️ Empty or None response from LLM. Skipping this iteration.")
+                attempt += 1
+                continue
             all_raw_responses += "\n" + response
 
             # Parse test cases
@@ -2572,15 +2577,32 @@ def get_queries_from_ai_updated_gemini(formatted_summary):
 
     print(response)
     return response.choices[0].message.content
+
+def get_queries_from_ai_testcases(formatted_summary):
+   print("going inside get_queries_from_ai_testcases")
+   model = "gpt-5"
+   try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": formatted_summary}],
+            max_completion_tokens=16000,
+            timeout=600
+        )
+        print(response)
+        return response.choices[0].message.content
+   except Exception as e:
+        print(f"[ERROR] LLM call failed: {e}")
+        return None
 def get_queries_from_ai_updated(formatted_summary):
    print("going inside get_queries_from_ai_updated")
    model = "gpt-5-mini"
    try:
-        response = client.chat.completions.create(model=model,
-                                          messages=[{"role": "user",
-                                                     "content": formatted_summary
-                                                     }
-                                                    ])
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": formatted_summary}],
+            max_completion_tokens=16000,
+            timeout=600
+        )
         print(response)
         return response.choices[0].message.content
    except Exception as e:

@@ -801,7 +801,7 @@ if st.session_state.checkbox3_state:
                     #
                     # print(f"✅ Recommended total test cases for generation: {target_count}")
                     #st.session_state.testcase_response = utils.generate_testcases_with_retries(constructedprompt)
-                    st.session_state.testcase_response = utils.generate_testcases_with_dynamic_stop(constructedprompt,25,1)
+                    st.session_state.testcase_response = utils.generate_testcases_with_dynamic_stop(constructedprompt,25,5)
                     #st.code(st.session_state.testcase_response)
                     utils.parse_and_display_testcases_categorywise(st.session_state.testcase_response)
                     st.write(" ")

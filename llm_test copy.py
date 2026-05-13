@@ -16,7 +16,7 @@ client = openai.OpenAI(api_key=os.environ["OPENAI_API_KEY"],
 
 def get_queries_from_ai_updated(formatted_summary):
     print("going inside get_queries_from_ai_updated")
-    model = "gpt-5-mini"
+    model = "gpt-5"
     try:
         response = client.chat.completions.create(model=model,
                                                   messages=[{"role": "user",
@@ -190,7 +190,7 @@ Output Format:
 Strict Constraint:
 
 - Do not truncate, summarize, or insert placeholders like “[continued]”.
-- Generate the full table with exactly 10 test cases, each fully written out.
+- Generate the full table with exactly 20 test cases, each fully written out.
 - Follow the step style strictly (plain actions, human-readable, no “page — field — action” format).
 - Ensure every scenario from the provided action file is captured exactly; do not miss any page, click, form, or intermediate interaction."""
 get_queries_from_ai_updated(formatted_summary)
