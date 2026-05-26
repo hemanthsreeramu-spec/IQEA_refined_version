@@ -612,6 +612,23 @@ if st.session_state.checkbox3_state:
 
             if st.button("Clear All Selection"):
                 st.session_state.selected_images = []
+
+            st.markdown("**Upload Wireframe / Additional Images (Optional)**", unsafe_allow_html=True)
+            wireframe_uploads = st.file_uploader(
+                "Upload wireframe or additional images",
+                type=["png", "jpg", "jpeg"],
+                accept_multiple_files=True,
+                key="wireframe_image_uploader"
+            )
+            if wireframe_uploads:
+                for wf_file in wireframe_uploads:
+                    save_path = os.path.join(page_screenshot_folder, wf_file.name)
+                    with open(save_path, "wb") as f:
+                        f.write(wf_file.getbuffer())
+                    if wf_file.name not in st.session_state.selected_images:
+                        st.session_state.selected_images.append(wf_file.name)
+                st.success(f"{len(wireframe_uploads)} wireframe image(s) added to selection.")
+
             st.markdown("**Enter the additional information or requirements** <span style='color:red;'>*</span>",
                         unsafe_allow_html=True)
             prompt = st.text_area("Enter the test requirements", "",key="user_requirements_textarea")
@@ -776,10 +793,11 @@ if st.session_state.checkbox3_state:
                                 st.error(f"Image not found in database: {image_key}")
                     image_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {image_data} """
                     print(image_prompt)
-                    image_data_processed = utils.get_queries_from_ai_updated(image_prompt)
+                    image_data_processed = utils.get_queries_from_ai_updated(image_prompt) or image_data
                     print(image_data_processed)
                     if not Action_data:
                         Action_data = None
+                    # Script updated with new logic by May 14 2026
                     if model_type == "azureopenai":
                         print("Model Type is AzureOpenAi")
                         constructedprompt = utils.generate_pom_from_excel_testcases("Test_case_generation", navigation,
@@ -796,13 +814,27 @@ if st.session_state.checkbox3_state:
                     #                                                            prompt)
                     # coverage_counts=utils.estimate_testcase_coverage(count_prompt)
                     # st.info(coverage_counts)
-                    # # Safely get RecommendedTotal, fallback to 50 if key missing
-                    # target_count = coverage_counts.get("RecommendedTotal", 50)
-                    #
-                    # print(f"✅ Recommended total test cases for generation: {target_count}")
+                    # Safely get RecommendedTotal, fallback to 50 if key missing
+                    #target_count = coverage_counts.get("RecommendedTotal", 50)
+                    
+                    #print(f"✅ Recommended total test cases for generation: {target_count}")
                     #st.session_state.testcase_response = utils.generate_testcases_with_retries(constructedprompt)
-                    st.session_state.testcase_response = utils.generate_testcases_with_dynamic_stop(constructedprompt,25,5)
-                    #st.code(st.session_state.testcase_response)
+                    st.session_state.testcase_response = utils.generate_testcases_with_dynamic_stop(constructedprompt,15,5)
+
+                    # if model_type == "azureopenai":
+                    #     print("Model Type is AzureOpenAi - chunked generation")
+                    #     st.session_state.testcase_response = utils.generate_testcases_with_chunking(
+                    #         navigation, image_data_processed, Action_data, prompt,
+                    #         prompt_type="Test_case_generation"
+                    #     )
+                    # else:
+                    #     print("Model Type is pepgenx")
+                    #     constructedprompt = utils.generate_pom_from_excel_testcases("Test_case_generation_gemini", navigation,
+                    #                                                                 image_data_processed, Action_data,
+                    #                                                                 prompt)
+                    #     print("******final prompt *******")
+                    #     st.session_state.testcase_response = utils.generate_testcases_with_dynamic_stop(constructedprompt, 25, 5)
+                    # #st.code(st.session_state.testcase_response)
                     utils.parse_and_display_testcases_categorywise(st.session_state.testcase_response)
                     st.write(" ")
 
@@ -1060,7 +1092,7 @@ if st.session_state.checkbox5_state:
             default=["Web"])
         tags_placeholder = st.empty()
         if "Web" in selected_app:
-            print("xpath_tags",xpath_tag_keys)
+            # print("xpath_tags",xpath_tag_keys)
 
             selected_tags = tags_placeholder.multiselect(
                 "Select element types to extract:",

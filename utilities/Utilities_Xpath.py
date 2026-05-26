@@ -90,6 +90,7 @@ def load_prompt_from_file(prompt_type):
         page_file_prompt=os.path.join(config_folder,"Page_file_prompts")
         test_file_prompt = os.path.join(config_folder, "Test_file_prompts")
         test_file_validator_prompt = os.path.join(config_folder, "Script_validation")
+        test_cases_prompt = os.path.join(config_folder, "Test_cases_prompts")
 
         prompt_file = ""
 
@@ -168,6 +169,11 @@ def load_prompt_from_file(prompt_type):
             prompt_file = os.path.join(config_folder, "testcase_coverage_plan_document_flow.txt")
         elif prompt_type == "Test_scenarios_finder":
             prompt_file = os.path.join(config_folder, "Test_scenarios_finder.txt")
+        # Script updated with new logic by May 14 2026
+        elif prompt_type == "testcase_workflow_segmenter":
+            prompt_file = os.path.join(test_cases_prompt, "testcase_workflow_segmenter.txt")
+        elif prompt_type == "testcase_gap_analysis":
+            prompt_file = os.path.join(test_cases_prompt, "testcase_gap_analysis.txt")
         else:
             raise ValueError(f"Invalid prompt type: {prompt_type}")
 
@@ -1041,6 +1047,20 @@ def generate_testcases_regeneration_doc(prompt_type,requirements="",existing_pro
     print(final_prompt)
     return final_prompt
 
+# Script updated with new logic by May 14 2026
+def generate_testcase_segment_prompt(action_data, image_data, requirements):
+    prompt_template = load_prompt_from_file("testcase_workflow_segmenter")
+    action_str = "\n".join(f"{k}:\n{v}" for k, v in action_data.items()) \
+        if isinstance(action_data, dict) else (action_data or "")
+    final_prompt = prompt_template.format(
+        action_data=action_str,
+        image_data=image_data or "",
+        requirements=requirements or ""
+    )
+    print(final_prompt)
+    return final_prompt
+
+
 def generate_pom_from_excel_feature(prompt_type,Recorded_Action):
     prompt_template = load_prompt_from_file(prompt_type)
     final_prompt = prompt_template.format(recorded_action=Recorded_Action)
@@ -1824,35 +1844,58 @@ def select_and_read_text_files_xpath(file_type, folder_path):
 def parse_testcases_from_markdown(md_text):
     """
     Parse a Markdown table into structured test case dicts.
-    Handles multi-line cells and extra pipes in descriptions.
-    Returns a list of dicts, each with test case name, step number, description, expected, status, type, category.
+    Handles rows with or without a trailing pipe.
+    Skips separator rows (|---|---:|...) and all-empty rows.
+    Returns a list of dicts with: name, step_number, description, expected, status, type, category.
     """
     import re
     rows = []
+    if isinstance(md_text, list):
+        md_text = "\n".join(str(item) for item in md_text)
+    if not md_text:
+        return rows
     md_text = md_text.strip()
 
-    # Remove header/separator lines
-    lines = [line for line in md_text.splitlines() if line.strip() and not re.match(r'^\|\s*-', line)]
+    for line in md_text.splitlines():
+        line = line.strip()
+        if not line or not line.startswith("|"):
+            continue
+        # Skip separator rows like |---|---:|---|---|---|---|---|
+        if re.match(r'^\|\s*[-:]+\s*\|', line):
+            continue
+        # Normalise: add trailing pipe if missing so split is consistent
+        if not line.endswith("|"):
+            line = line + "|"
+        parts = re.split(r'\s*\|\s*', line)
+        parts = [p.strip() for p in parts[1:-1]]  # drop empty first/last from split
+        if len(parts) != 7:
+            continue
+        # Skip header row
+        if parts[0].lower() == "test case name":
+            continue
+        # Skip rows where all cells are empty or only dashes
+        if all(not p or re.match(r'^[-:]+$', p) for p in parts):
+            continue
+        rows.append({
+            "name":        parts[0],
+            "step_number": parts[1],
+            "description": parts[2],
+            "expected":    parts[3],
+            "status":      parts[4],
+            "type":        parts[5],
+            "category":    parts[6],
+        })
 
-    buffer = ""
-    for line in lines:
-        if line.startswith("|"):
-            buffer += line + "\n"
-            # Count pipes in the line; a full row should have 8 '|' for 7 columns
-            if buffer.count("|") >= 8:
-                parts = re.split(r'\s*\|\s*', buffer.strip())
-                parts = [p.strip() for p in parts[1:-1]]  # skip first and last empty split
-                if len(parts) == 7:
-                    rows.append({
-                        "name": parts[0],
-                        "step_number": parts[1],
-                        "description": parts[2],
-                        "expected": parts[3],
-                        "status": parts[4],
-                        "type": parts[5],
-                        "category": parts[6],
-                    })
-                buffer = ""  # reset for next row
+    # Blank out test case name for every row after the first row of each test case
+    seen_tc_names = set()
+    for row in rows:
+        name = row["name"].strip()
+        if not name:
+            continue
+        if name in seen_tc_names:
+            row["name"] = ""
+        else:
+            seen_tc_names.add(name)
 
     return rows
 def parse_and_display_testcases_categorywise(md_text):
@@ -1860,38 +1903,19 @@ def parse_and_display_testcases_categorywise(md_text):
     import re
     from collections import defaultdict
 
-    # --- Parse Markdown Table ---
-    rows = []
-    md_text = md_text.strip()
-    lines = [line for line in md_text.splitlines() if line.strip() and not re.match(r'^\|\s*-', line)]
-    buffer = ""
+    # --- Parse Markdown Table using shared parser ---
+    # parse_testcases_from_markdown handles: separator rows, duplicate headers,
+    # and blanks the name for rows 2+ of each TC (name is only on step 0).
+    # Category is also only set on step 0 by the LLM prompt.
+    # So we only read rows where name is non-empty — those are step-0 rows with the category.
+    rows = parse_testcases_from_markdown(md_text)
 
-    for line in lines:
-        if line.startswith("|"):
-            buffer += line + "\n"
-            if buffer.count("|") >= 8:  # expecting 7 columns
-                parts = re.split(r'\s*\|\s*', buffer.strip())
-                parts = [p.strip() for p in parts[1:-1]]
-                if len(parts) == 7:
-                    name = parts[0].strip().lower()
-                    category = parts[6].strip().lower()
-                    if name == "name" or category == "category" or not parts[0]:
-                        buffer = ""
-                        continue
-                    rows.append({
-                        "name": parts[0],
-                        "step_number": parts[1],
-                        "description": parts[2],
-                        "expected": parts[3],
-                        "status": parts[4],
-                        "category": parts[6],
-                    })
-                buffer = ""
-
-    # --- Group test cases by category ---
+    # --- Group test cases by category (step-0 rows only — name is non-empty) ---
     category_to_cases = defaultdict(list)
     for row in rows:
         name = row["name"].strip()
+        if not name:
+            continue  # skip rows 2+ of each TC (name blanked by parser)
         category = row["category"].strip().lower() if row["category"].strip() else "others"
         if name not in category_to_cases[category]:
             category_to_cases[category].append(name)
@@ -2271,6 +2295,172 @@ def generate_testcases_dynamically(constructed_prompt, initial_retries=5, max_no
     return all_testcases
 
 
+def analyze_testcase_gaps(existing_tcs, action_data, image_data, requirements):
+    """
+    Compare existing test cases from a Test Management Tool against new recording data.
+
+    Args:
+        existing_tcs (list): [{id, title, steps_summary}] fetched from Azure / Jira.
+        action_data (str|dict): Recorded user interactions.
+        image_data (str): OCR text from screenshots.
+        requirements (str): User stories / acceptance criteria.
+
+    Returns:
+        dict: {
+            "new":    [str, ...],          # new scenario descriptions to generate
+            "update": [{id, title, reason}, ...],  # existing TCs that need revision
+            "skip":   [str, ...]           # TC ids fully covered, no changes needed
+        }
+    """
+    import json as _json
+
+    # Format existing TCs — titles only to keep token count flat regardless of TC count
+    if existing_tcs:
+        existing_summary_lines = [
+            f"ID: {tc.get('id','')} | Title: {tc.get('title','')}"
+            for tc in existing_tcs
+        ]
+        existing_summary = "\n".join(existing_summary_lines)
+    else:
+        existing_summary = "No existing test cases provided."
+
+    # Normalise action_data dict → string
+    if isinstance(action_data, dict):
+        action_str = "\n".join(f"{k}:\n{v}" for k, v in action_data.items())
+    else:
+        action_str = action_data or ""
+
+    prompt_template = load_prompt_from_file("testcase_gap_analysis")
+    final_prompt = prompt_template.format(
+        existing_tcs=existing_summary,
+        action_data=action_str,
+        image_data=image_data or "",
+        requirements=requirements or ""
+    )
+
+    print("Running gap analysis against existing test cases...")
+    response = get_queries_from_ai_updated(final_prompt) if model_type == "azureopenai" \
+        else llm_pepgenx(final_prompt)
+
+    if not response:
+        print("⚠️ Gap analysis returned empty response.")
+        return {"new": [], "update": [], "skip": []}
+
+    # Strip markdown fences if present
+    clean = response.strip()
+    if clean.startswith("```"):
+        clean = "\n".join(
+            line for line in clean.splitlines()
+            if not line.strip().startswith("```")
+        ).strip()
+
+    try:
+        result = _json.loads(clean)
+        result.setdefault("new", [])
+        result.setdefault("update", [])
+        result.setdefault("skip", [])
+        print(f"Gap analysis: {len(result['new'])} new | {len(result['update'])} update | {len(result['skip'])} skip")
+        return result
+    except Exception as e:
+        print(f"⚠️ Failed to parse gap analysis JSON: {e}\nRaw: {clean[:300]}")
+        return {"new": [], "update": [], "skip": []}
+
+
+def generate_targeted_testcases(scenarios, action_data, image_data, requirements):
+    """
+    Generate exactly one test case per scenario from the gap analysis new[] list.
+    Single LLM call — no iterations, no dynamic stop.
+
+    Args:
+        scenarios (list[str]): Exact scenario descriptions from gap analysis.
+        action_data (str|dict): Recorded user interactions.
+        image_data (str): OCR text from screenshots.
+        requirements (str): User stories / acceptance criteria.
+
+    Returns:
+        str: Markdown table containing exactly len(scenarios) test cases.
+    """
+    if not scenarios:
+        return ""
+
+    if isinstance(action_data, dict):
+        action_str = "\n".join(f"{k}:\n{v}" for k, v in action_data.items())
+    else:
+        action_str = action_data or ""
+
+    scenario_list = "\n".join(f"{i+1}. {s}" for i, s in enumerate(scenarios))
+    n = len(scenarios)
+
+    prompt = (
+        f"You are an expert QA test case generator.\n\n"
+        f"Generate exactly {n} test case(s) — one for each scenario listed below.\n"
+        f"These are NEW scenarios identified by gap analysis that are NOT yet covered in the existing test suite.\n\n"
+        f"Scenarios to generate:\n{scenario_list}\n\n"
+        f"Recorded Actions (application context):\n{action_str}\n\n"
+        f"UI Screenshot Context:\n{image_data or ''}\n\n"
+        f"Requirements:\n{requirements or ''}\n\n"
+        f"Rules:\n"
+        f"- Generate EXACTLY {n} test case(s) — one per scenario above, no more, no less.\n"
+        f"- Use sequential names: TC01 - <title> through TC{n:02d} - <title>.\n"
+        f"- Output a single Markdown table with header:\n"
+        f"  | Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type | Category |\n"
+        f"- Status = New, Type = Manual. Category only on Step 0. Minimum 6 steps per test case.\n"
+        f"- Do NOT truncate or add placeholders.\n\n"
+        f"After the table append:\n"
+        f"## Coverage Summary\n"
+        f"2-3 lines describing what scenarios were covered."
+    )
+
+    print(f"Generating {n} targeted test case(s) from gap analysis...")
+    response = get_queries_from_ai_updated(prompt) if model_type == "azureopenai" \
+        else llm_pepgenx(prompt)
+    return response or ""
+
+
+def generate_replacement_testcase(title, reason, action_data, image_data, requirements):
+    """
+    Generate a single replacement test case for an existing TC that needs updating.
+
+    Args:
+        title (str): Title of the existing test case being replaced.
+        reason (str): Why it needs updating (from gap analysis).
+        action_data (str|dict): Recorded user interactions.
+        image_data (str): OCR text from screenshots.
+        requirements (str): User stories / acceptance criteria.
+
+    Returns:
+        str: Markdown table of the replacement test case.
+    """
+    if isinstance(action_data, dict):
+        action_str = "\n".join(f"{k}:\n{v}" for k, v in action_data.items())
+    else:
+        action_str = action_data or ""
+
+    prompt = (
+        f"You are an expert QA test case generator.\n\n"
+        f"An existing test case needs to be replaced because it is outdated.\n\n"
+        f"Existing Test Case Title: {title}\n"
+        f"Reason for replacement: {reason}\n\n"
+        f"Recorded Actions (new application state):\n{action_str}\n\n"
+        f"UI Screenshot Context:\n{image_data or ''}\n\n"
+        f"Requirements:\n{requirements or ''}\n\n"
+        f"Generate exactly ONE replacement test case that accurately reflects the current application state.\n"
+        f"Follow the same output format:\n"
+        f"- Single Markdown table with header: | Test Case Name | Step Number | Test Step Description | Test Step Expected Result | Status | Type | Category |\n"
+        f"- Status = New, Type = Manual\n"
+        f"- Step 0 = Prerequisite, minimum 6 steps\n"
+        f"- Category only on Step 0\n"
+        f"- After the table append:\n"
+        f"## Coverage Summary\n"
+        f"2-3 lines describing what this replacement test case covers."
+    )
+
+    print(f"Generating replacement for: {title}")
+    response = get_queries_from_ai_updated(prompt) if model_type == "azureopenai" \
+        else llm_pepgenx(prompt)
+    return response or ""
+
+
 def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases,
                                          min_new_threshold,max_attempts=50):
     """
@@ -2289,25 +2479,25 @@ def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases,
     all_testcases = []
     seen_steps = set()
     all_raw_responses = ""
+    llm_coverage_summary = ""  # LLM-generated coverage summary from previous iteration
     attempt = 0
 
     while attempt < max_attempts:
         print(f"***********Iteration {attempt + 1}*****************")
 
-        # Build exclusion prompt
-        if all_testcases:
-            existing_names = set(c["name"] for c in all_testcases)
+        # Build exclusion prompt using LLM-generated coverage summary from previous iteration
+        if llm_coverage_summary:
             exclusion_text = (
-                    "Already generated test cases:\n" + "\n".join(existing_names) +
-                    "\nNow generate NEW test cases not in the above list. Continue numbering."
+                f"Previously covered scenarios:\n{llm_coverage_summary}\n\n"
+                f"Generate ONLY test cases for NEW scenarios NOT already covered above. "
+                f"Continue numbering from TC{len(all_testcases) + 1:02d}."
             )
             prompt = constructed_prompt + "\n\n" + exclusion_text
         else:
             prompt = constructed_prompt
 
-
         try:
-            response = get_queries_from_ai_testcases(prompt) if model_type == "azureopenai" \
+            response = get_queries_from_ai_updated(prompt) if model_type == "azureopenai" \
                 else llm_pepgenx(prompt)
                 #else get_queries_from_ai_updated_geminiget_queries_from_ai_updated_gemini(prompt)
             if not response:
@@ -2316,9 +2506,20 @@ def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases,
                 continue
             all_raw_responses += "\n" + response
 
-            # Parse test cases
+            # Extract LLM-generated coverage summary for next iteration
+            if "## Coverage Summary" in response:
+                summary_parts = response.split("## Coverage Summary", 1)
+                llm_coverage_summary = summary_parts[1].strip()
+                print(f"Coverage Summary extracted ({len(llm_coverage_summary)} chars)")
+                # Use only the markdown table part for parsing
+                table_response = summary_parts[0]
+            else:
+                print("⚠️ No '## Coverage Summary' found in response — will use full response for parsing.")
+                table_response = response
+
+            # Parse test cases from table only (exclude coverage summary section)
             try:
-                new_cases = parse_testcases_from_markdown(response)
+                new_cases = parse_testcases_from_markdown(table_response)
             except Exception as parse_err:
                 print(f"⚠️ Parsing error: {parse_err}. Skipping this response.")
                 attempt += 1
@@ -2348,6 +2549,165 @@ def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases,
             attempt += 1
             continue
         attempt += 1
+
+    return all_raw_responses
+
+
+# Script updated with new logic by May 14 2026 — replaced by LLM-based segmentation below
+# def _parse_action_segments(action_data): ...
+# def _parse_image_blocks(image_data_text): ...
+# def _match_images_to_segment(image_blocks, segment_label, segment_url): ...
+# (Python-based URL-parsing helpers — retired because action_data can be dict or string
+#  and blind line-splitting loses workflow context. LLM handles segmentation now.)
+
+
+def generate_testcases_with_chunking(navigation, image_data, action_data, requirements,
+                                     prompt_type="Test_case_generation"):
+    """
+    LLM-based smart chunked test case generation — May 14 2026.
+
+    Step 1 — Segmentation LLM call: sends full action_data + image_data to the
+              testcase_workflow_segmenter prompt → LLM returns JSON workflow segments,
+              each with its own action lines and relevant image keywords.
+    Phase 1 — Per-segment LLM calls: for each segment, filter image_data by keywords,
+              build focused prompt, ask for 3–5 test cases only. Dedup after each call.
+    Phase 2 — Workflow pass: full data, ask for 2–3 complete E2E test cases.
+    """
+    all_testcases     = []
+    seen_names        = set()
+    all_raw_responses = ""
+
+    # Normalise action_data — can arrive as dict {filename: content} or plain string
+    if isinstance(action_data, dict):
+        action_str = "\n".join(f"{k}:\n{v}" for k, v in action_data.items())
+    else:
+        action_str = action_data or ""
+
+    # ── STEP 1: LLM-based segmentation ───────────────────────────────────────
+    print("[Chunking] Step 1: Identifying workflow segments via LLM...")
+    segment_prompt   = generate_testcase_segment_prompt(action_str, image_data, requirements)
+    segment_response = get_queries_from_ai_updated(segment_prompt) if model_type == "azureopenai" \
+        else llm_pepgenx(segment_prompt)
+
+    segments = []
+    if segment_response:
+        try:
+            json_match = re.search(r'\[[\s\S]*\]', segment_response, re.DOTALL)
+            if json_match:
+                segments = json.loads(json_match.group(0))
+                print(f"[Chunking] {len(segments)} segment(s): "
+                      f"{[s.get('segment_name', '') for s in segments]}")
+        except Exception as e:
+            print(f"[Chunking] Segmentation parse error: {e} — using single-segment fallback.")
+
+    if not segments:
+        segments = [{"segment_name": "Full Workflow",
+                     "description":  "Complete recorded workflow",
+                     "actions":      action_str,
+                     "image_keywords": []}]
+
+    # ── PHASE 1: per-segment focused test cases ───────────────────────────────
+    for idx, segment in enumerate(segments):
+        label        = segment.get("segment_name", f"Segment_{idx + 1}")
+        action_chunk = segment.get("actions", "")
+        keywords     = segment.get("image_keywords", [])
+
+        # Filter image_data to only lines relevant to this segment
+        if keywords and image_data:
+            relevant = [l for l in image_data.split('\n')
+                        if any(kw.lower() in l.lower() for kw in keywords)]
+            image_chunk = '\n'.join(relevant) if relevant else image_data
+        else:
+            image_chunk = image_data or ""
+
+        base_prompt = generate_pom_from_excel_testcases(
+            prompt_type, navigation, image_chunk, action_chunk, requirements
+        )
+
+        next_num       = len(all_testcases) + 1
+        count_override = (
+            f"\n\n**SECTION OVERRIDE — Workflow segment: '{label}'**\n"
+            f"Generate exactly 3 to 5 test cases for THIS section only.\n"
+            f"Start numbering from TC{next_num:02d}.\n"
+            f"Focus strictly on the specific actions in this section."
+        )
+
+        exclusion = ""
+        if all_testcases:
+            covered   = "\n".join(f"- {c['name']}" for c in all_testcases)
+            exclusion = (
+                f"\n\nAlready covered (DO NOT duplicate functionality):\n{covered}\n"
+                f"Generate ONLY test cases for NEW functionality not already represented above.\n"
+                f"If this section's functionality is fully covered, return 0 test cases."
+            )
+
+        full_prompt = count_override + exclusion + "\n\n" + base_prompt
+
+        print(f"[Segment {idx + 1}/{len(segments)}] '{label}' — calling LLM...")
+        response = get_queries_from_ai_updated(full_prompt) if model_type == "azureopenai" \
+            else llm_pepgenx(full_prompt)
+
+        if not response:
+            print(f"[Segment {idx + 1}] Empty response — skipping.")
+            continue
+
+        all_raw_responses += "\n" + response
+
+        try:
+            new_cases = parse_testcases_from_markdown(response)
+        except Exception as e:
+            print(f"[Segment {idx + 1}] Parse error: {e}")
+            continue
+
+        added = 0
+        for case in new_cases:
+            key = case["name"].strip().lower()
+            if key not in seen_names:
+                seen_names.add(key)
+                all_testcases.append(case)
+                added += 1
+
+        print(f"[Segment {idx + 1}] +{added} new | Total so far: {len(all_testcases)}")
+
+    # ── PHASE 2: complete E2E workflow test cases ─────────────────────────────
+    print("[Workflow Pass] Generating complete end-to-end workflow test cases...")
+
+    workflow_base = generate_pom_from_excel_testcases(
+        prompt_type, navigation, image_data or "", action_str, requirements
+    )
+
+    next_num = len(all_testcases) + 1
+    covered  = "\n".join(f"- {c['name']}" for c in all_testcases) if all_testcases else "None"
+
+    workflow_override = (
+        f"\n\n**WORKFLOW PASS OVERRIDE**\n"
+        f"Generate 2 to 3 COMPLETE end-to-end workflow test cases that cover the ENTIRE recorded "
+        f"scenario from the very first action to the last, with every detailed step included.\n"
+        f"Start numbering from TC{next_num:02d}.\n"
+        f"These must be full-journey test cases spanning ALL pages — do NOT limit to a single page.\n\n"
+        f"Already generated (DO NOT repeat these functionalities):\n{covered}\n"
+        f"The workflow test cases must represent a DIFFERENT, complete journey not already listed above."
+    )
+
+    wf_response = get_queries_from_ai_testcases(workflow_base + workflow_override) if model_type == "azureopenai" \
+        else llm_pepgenx(workflow_base + workflow_override)
+
+    if wf_response:
+        all_raw_responses += "\n" + wf_response
+        try:
+            wf_cases = parse_testcases_from_markdown(wf_response)
+            added = 0
+            for case in wf_cases:
+                key = case["name"].strip().lower()
+                if key not in seen_names:
+                    seen_names.add(key)
+                    all_testcases.append(case)
+                    added += 1
+            print(f"[Workflow Pass] +{added} E2E cases | Grand total: {len(all_testcases)}")
+        except Exception as e:
+            print(f"[Workflow Pass] Parse error: {e}")
+    else:
+        print("[Workflow Pass] Empty response — skipping.")
 
     return all_raw_responses
 
@@ -2581,11 +2941,14 @@ def get_queries_from_ai_updated_gemini(formatted_summary):
 def get_queries_from_ai_testcases(formatted_summary):
    print("going inside get_queries_from_ai_testcases")
    model = "gpt-5"
+   if not formatted_summary or not isinstance(formatted_summary, str):
+        print("[ERROR] formatted_summary is empty or not a string")
+        return None
    try:
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": formatted_summary}],
-            max_completion_tokens=16000,
+            max_completion_tokens=25000,
             timeout=600
         )
         print(response)
@@ -2600,7 +2963,7 @@ def get_queries_from_ai_updated(formatted_summary):
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": formatted_summary}],
-            max_completion_tokens=16000,
+            max_completion_tokens=25000,
             timeout=600
         )
         print(response)
@@ -2849,70 +3212,18 @@ def covert_response_to_testcases_single_sheet(markdown_text, test_collection, ou
             if not line.strip().startswith("```")
         )
 
-    all_dfs = []  # collect all dataframes here
+    # Parse using parse_testcases_from_markdown:
+    # - skips separator rows (|---|---:|...|)
+    # - skips all header rows across multiple iterations
+    # - blanks out test case name for rows 2+ of each TC
+    rows = parse_testcases_from_markdown(markdown_text)
 
-    # Clean AI formatted table lines
-    table_lines = clean_table_lines(markdown_text)
-
-    # STEP 1: Try single-table format
-    if len(table_lines) >= 2 and "Test Case Name" in table_lines[0]:
-        try:
-            df = pd.read_csv(StringIO("\n".join(table_lines)), sep='|', engine='python', on_bad_lines='skip')
-            df = df.dropna(axis=1, how='all')
-            df.columns = [re.sub(r'\*+', '', col.strip()) for col in df.columns]
-            for col in df.select_dtypes(include='object').columns:
-                df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
-            all_dfs.append(df)
-        except Exception as e:
-            print(f"❌ Failed to parse single-table format: {e}")
-            print("🔁 Attempting markdown section fallback...")
-
-    # STEP 2: Fallback - multiple markdown sections
-    if not all_dfs:
-        test_cases = re.split(r'####\s+\*\*(.*?)\*\*', markdown_text)
-        if len(test_cases) < 3:
-            print("❌ No valid markdown headings found. Exiting.")
-            return
-
-        for i in range(1, len(test_cases), 2):
-            test_case_name = test_cases[i].strip()
-            test_case_body = test_cases[i + 1]
-
-            lines = []
-            for line in test_case_body.strip().splitlines():
-                ln = line.strip()
-                if "|" in ln and not set(ln).issubset(set("|- ")):
-                    lines.append(ln)
-
-            if not lines:
-                print(f"⚠️ No valid table in: {test_case_name}")
-                continue
-
-            try:
-                df = pd.read_csv(StringIO("\n".join(lines)), sep='|', engine='python')
-                df = df.dropna(axis=1, how='all')
-                df.columns = [re.sub(r'\*+', '', col.strip()) for col in df.columns]
-
-                for col in df.select_dtypes(include='object').columns:
-                    df[col] = df[col].map(lambda x: x.strip() if isinstance(x, str) else x)
-
-                if 'Test Case Name' not in df.columns:
-                    df.insert(0, 'Test Case Name', test_case_name)
-                else:
-                    df['Test Case Name'] = df['Test Case Name'].replace('', pd.NA).ffill()
-
-                all_dfs.append(df)
-
-            except Exception as e:
-                print(f"❌ Failed to parse section: {test_case_name}")
-                print(f"   Error: {e}")
-
-    # Merge all dataframes
-    if not all_dfs:
+    if not rows:
         print("⚠️ No valid test cases to save.")
         return
 
-    final_df = pd.concat(all_dfs, ignore_index=True)
+    final_df = pd.DataFrame(rows, columns=["name", "step_number", "description", "expected", "status", "type", "category"])
+    final_df.columns = ["Test Case Name", "Step Number", "Test Step Description", "Test Step Expected Result", "Status", "Type", "Category"]
 
     # Save logic
     if source == "file":

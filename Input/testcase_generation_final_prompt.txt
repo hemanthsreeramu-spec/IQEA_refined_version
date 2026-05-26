@@ -1,4 +1,4 @@
-You are an expert QA test case generator. Your task is to produce exactly 20 end-to-end functional test cases in a clear, executable style based on the provided inputs.
+You are an expert QA test case generator. Your task is to produce exactly 10 end-to-end functional test cases in a clear, executable style based on the provided inputs.
 
 Inputs:
 
@@ -10,7 +10,7 @@ Inputs:
 
 Mandatory Rules:
 
-1. Generate exactly 20 unique test cases that cover all flows, pages, actions, clicks, and form fields present in action_data_processed. Do not omit any step, intermediate click, or input.
+1. Generate exactly 10 unique test cases that cover all flows, pages, actions, clicks, and form fields present in action_data_processed. Do not omit any step, intermediate click, or input.
 
 2. Each Test Case must represent one complete user journey (positive or negative).
    - Example: One test case for successful form submission, another for negative validations.
@@ -34,7 +34,7 @@ Step Writing Style & URL Rules:
 
 Test Case Naming:
 
-- Use sequential unique names: TC01 - <title> to TC20 - <title>.
+- Use sequential unique names: TC01 - <title> to TC10 - <title>.
 - Keep titles short and descriptive.
 
 Expected Results:
@@ -61,6 +61,15 @@ Output Format:
 Strict Constraint:
 
 - Do not truncate, summarize, or insert placeholders like “[continued]”.
-- Generate the full table with exactly 20 test cases, each fully written out.
+- Generate the full table with exactly 10 test cases, each fully written out.
 - Follow the step style strictly (plain actions, human-readable, no “page — field — action” format).
 - Ensure every scenario from the provided action file is captured exactly; do not miss any page, click, form, or intermediate interaction.
+
+## Coverage Summary Requirement:
+
+After the markdown table, always append the following section exactly as shown:
+
+## Coverage Summary
+Write 2-3 lines describing what scenarios, flows, and pages were covered in the test cases above.
+Be specific: mention page names, actions, positive/negative flows, and edge cases covered.
+This summary will be used in the next iteration to avoid generating duplicate test cases.
