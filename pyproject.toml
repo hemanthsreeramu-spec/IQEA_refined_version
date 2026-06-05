@@ -1,3 +1,11 @@
+[tool.pytest.ini_options]
+markers = [
+    "smoke: smoke tests — core happy-path coverage",
+    "regression: full regression suite",
+    "negative: negative / error-path tests",
+    "boundary: boundary and edge-case tests",
+]
+
 [project]
 name = "ai-accelerator"
 version = "0.1.0"

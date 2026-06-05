@@ -895,15 +895,47 @@ JS_action_listeners = """/**
             : (["input", "change", "input_others", "select"].includes(type)
                 ? (target.value || target.innerText || "") : "");
 
+        // ── Element metadata for accurate script generation ──────────────────
+        const tag       = (target.tagName || "").toLowerCase();
+        const elId      = target.id || "";
+        const elName    = target.getAttribute("name") || target.name || "";
+        const elType    = target.getAttribute("type") || target.type || "";
+        const elHref    = tag === "a" ? (target.getAttribute("href") || target.href || "") : "";
+        const dataTest  = target.getAttribute("data-testid") ||
+                          target.getAttribute("data-test")   ||
+                          target.getAttribute("data-qa")     ||
+                          target.getAttribute("data-cy")     || "";
+        const ariaLabel = target.getAttribute("aria-label") || "";
+        const cssClasses = (typeof target.className === "string")
+            ? target.className.split(/\s+/).filter(c => c && !c.match(/^\d/)).join(" ")
+            : "";
+        // isNavLink: true only for real page-navigation anchors (not same-page hash, not JS)
+        const isNavLink = tag === "a" &&
+            elHref &&
+            !elHref.startsWith("javascript") &&
+            !elHref.startsWith("#")          &&
+            !elHref.startsWith("mailto");
+
         const actionObj = {
-            step:      nextStepNumber(),
-            action:    type,
+            step:       nextStepNumber(),
+            action:     type,
             xpath,
-            label:     label?.trim(),
-            value:     String(value).trim(),
-            url:       window.location.href,
-            windowId:  window.name || statusKey,
-            timestamp: new Date().toISOString(),
+            label:      label?.trim(),
+            value:      String(value).trim(),
+            url:        window.location.href,
+            // ── new metadata fields ──────────────────────────────────────────
+            tagName:    tag,
+            elementId:  elId,
+            elementName: elName,
+            elementType: elType,
+            href:       elHref,
+            dataTestId: dataTest,
+            ariaLabel:  ariaLabel,
+            cssClasses: cssClasses,
+            isNavLink:  isNavLink,
+            // ────────────────────────────────────────────────────────────────
+            windowId:   window.name || statusKey,
+            timestamp:  new Date().toISOString(),
             ...extra
         };
 
@@ -2454,6 +2486,105 @@ def humanize_action(action_dict):
 
     else:
         return f'Perform action on "{display_label}"'
+
+
+# ── Record & Playback: Script Generation ──────────────────────────────────────
+def format_actions_for_script_generation(actions):
+    """
+    Convert raw recorded action dicts into a structured format for LLM script
+    generation.  Uses the enriched element metadata captured by the JS recorder
+    (tagName, elementId, elementName, href, dataTestId, isNavLink) to produce
+    EXACT Selenium locators — no guessing needed by the LLM.
+
+    Outputs one line per step plus [PAGE_CHANGE] markers between URL transitions.
+    Each line includes all fields the LLM needs to write the correct Selenium call.
+    """
+    if not actions:
+        return ""
+
+    lines = []
+    prev_url = None
+
+    for idx, act in enumerate(actions, start=1):
+        action_type  = (act.get("action") or "").strip().lower()
+        url          = (act.get("url") or "").strip()
+        value        = (act.get("value") or "").strip()
+
+        # ── New enriched fields (may be absent for old recordings — handle gracefully)
+        tag          = (act.get("tagName") or act.get("tag") or "").strip().lower()
+        el_id        = (act.get("elementId") or "").strip()
+        el_name      = (act.get("elementName") or "").strip()
+        el_type      = (act.get("elementType") or "").strip().lower()
+        href         = (act.get("href") or "").strip()
+        data_test    = (act.get("dataTestId") or "").strip()
+        aria_label   = (act.get("ariaLabel") or "").strip()
+        css_classes  = (act.get("cssClasses") or "").strip()
+        is_nav_link  = act.get("isNavLink", False)
+        raw_label    = (act.get("label") or "").strip()
+        xpath        = (act.get("xpath") or "").strip()
+
+        # ── Insert page-transition marker ────────────────────────────────────
+        if prev_url is not None and url and url != prev_url:
+            lines.append(f"--- [PAGE_CHANGE: {prev_url} → {url}] ---")
+        prev_url = url or prev_url
+
+        # ── Build the best possible Selenium locator from recorded metadata ──
+        # Priority: elementId > dataTestId > ariaLabel > elementName > label-derived > xpath
+        if el_id:
+            locator = f"By.ID='{el_id}'"
+        elif data_test:
+            locator = f"By.CSS_SELECTOR='[data-testid=\"{data_test}\"]'"
+        elif aria_label:
+            locator = f"By.XPATH='//{tag or '*'}[@aria-label=\"{aria_label}\"]'" if tag else f"By.XPATH='//*[@aria-label=\"{aria_label}\"]'"
+        elif el_name:
+            locator = f"By.NAME='{el_name}'"
+        elif raw_label and not raw_label.isdigit() and len(raw_label) >= 3:
+            clean = raw_label.replace("-", "").replace("_", "")
+            if clean.isalnum():
+                locator = f"By.ID='{raw_label}' (derived-from-label)"
+            elif css_classes:
+                first_class = css_classes.split()[0]
+                locator = f"By.CLASS_NAME='{first_class}'"
+            else:
+                locator = f"By.XPATH='{xpath}'"
+        elif raw_label and raw_label.isdigit():
+            # Numeric label = badge/counter text — find the parent nav link instead
+            locator = f"badge_text={raw_label} USE_PARENT_NAV_LINK css_classes='{css_classes}'"
+        else:
+            locator = f"By.XPATH='{xpath}'"
+
+        # ── Nav-link flag: SPA anchors need JS click ─────────────────────────
+        nav_flag  = f" | NAV_LINK href='{href}'" if is_nav_link else ""
+        tag_info  = f" | tag={tag}" if tag else ""
+        type_info = f" | inputType={el_type}" if el_type and tag == "input" else ""
+
+        display = el_id or raw_label or xpath[:60] or "unknown"
+
+        if action_type == "click":
+            line = (f"Step {idx}: [CLICK]"
+                    f" | Element: {display}"
+                    f" | Locator: {locator}"
+                    f"{nav_flag}{tag_info}{type_info}"
+                    f" | URL: {url}")
+        elif action_type in ("input", "change", "input_others"):
+            line = (f"Step {idx}: [TYPE '{value}']"
+                    f" | Element: {display}"
+                    f" | Locator: {locator}"
+                    f"{tag_info}{type_info}"
+                    f" | URL: {url}")
+        elif action_type in ("key_tab", "key_enter", "key_escape"):
+            # Skip tab/escape — not needed in automation; flag for LLM to skip
+            line = f"Step {idx}: [SKIP_{action_type.upper()}] (keyboard nav — not needed in automation)"
+        else:
+            line = (f"Step {idx}: [{action_type.upper()}]"
+                    f" | Element: {display}"
+                    f" | Locator: {locator}"
+                    f"{nav_flag}{tag_info}"
+                    f" | URL: {url}")
+
+        lines.append(line)
+
+    return "\n".join(lines)
 
 
 

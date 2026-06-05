@@ -162,6 +162,14 @@ if "xpath_for_new_page" not in st.session_state:
 if "xpath_for_new_page_user_info" not in st.session_state:
     st.session_state.xpath_for_new_page_user_info = False
 
+# ── Record & Playback session state ──
+if "recorded_script" not in st.session_state:
+    st.session_state.recorded_script = None
+if "recorded_script_language" not in st.session_state:
+    st.session_state.recorded_script_language = "Python-Selenium"
+if "rb_actions_snapshot" not in st.session_state:
+    st.session_state.rb_actions_snapshot = []
+
 # --- Track expander state only for collection ---
 if "open_expander_collection" not in st.session_state:
     st.session_state.open_expander_collection = False
@@ -287,6 +295,8 @@ if st.session_state.checkbox1_state:
                     # --- CLEAR action buffers so this recording starts fresh ---
                     st.session_state.actions = []
                     st.session_state.workflow_text = []
+                    st.session_state.recorded_script = None
+                    st.session_state.rb_actions_snapshot = []
                     handle=st.session_state.driver.current_window_handle
                     st.session_state.driver.execute_script(action_utils.injection_script_updated_fixed())
                     print(f"✅ JS injected in new window {handle} ({st.session_state.driver.current_url})")
@@ -353,12 +363,15 @@ if st.session_state.checkbox1_state:
 
                 st.session_state.actions = action_utils.get_recorded_actions(
                     st.session_state.driver)
+                # Snapshot for Record & Playback — survives the post-save actions.clear()
+                st.session_state.rb_actions_snapshot = list(st.session_state.actions)
                 st.session_state.recording_started = False
 
                 # Signal all threads to stop
                 st.session_state.stop_monitor["stop"] = True
 
-                # Join all monitor threads
+                # Join all monitor threads — timeout=2 is enough since threads now use
+                # 0.5s sleep chunks and check stop_flag between each chunk
                 for t in st.session_state.get("monitor_threads", []):
                     if t and t.is_alive():
                         t.join(timeout=2)
@@ -414,6 +427,7 @@ if st.session_state.checkbox1_state:
                             st.session_state.workflow_text.clear()
                             st.session_state.show_popup = True
                             st.session_state.show_form = False
+
         if option == 'Desktop':
 
             st.subheader("Record User Actions & Capture Screenshots of User Navigation")
@@ -486,6 +500,60 @@ if st.session_state.checkbox1_state:
                                            file_name=f"{file_name}_actions.txt")
                         st.session_state.recorder = None
                         st.session_state.workflow_text_desktop=[]
+
+        # ── Record & Playback: Quick Script Generator ─────────────────────
+        if st.session_state.rb_actions_snapshot:
+            with st.expander("⚡ Quick Script Generator (Record & Playback)", expanded=False):
+                st.caption(
+                    "Generate an automation script directly from your recorded actions — "
+                    "no page file or test case needed."
+                )
+                rb_language = st.selectbox(
+                    "Select target language / framework",
+                    ["Python-Selenium", "Python-Playwright", "Java-Selenium", "Java-Playwright", "UTAM-JavaScript"],
+                    key="rb_language_select"
+                )
+                rb_script_name = st.text_input("Script file name (without extension):", key="rb_script_name")
+
+                if st.button("⚡ Generate Script from Recording", key="rb_generate_btn"):
+                    with st.spinner("Generating script from recorded actions..."):
+                        actions_formatted = action_utils.format_actions_for_script_generation(
+                            st.session_state.rb_actions_snapshot
+                        )
+                        script = utils.generate_script_from_recorded_actions(actions_formatted, rb_language)
+                        st.session_state.recorded_script = script
+                        st.session_state.recorded_script_language = rb_language
+                    st.success("✅ Script generated from recording.")
+
+                if st.session_state.recorded_script:
+                    _rb_lang = st.session_state.recorded_script_language
+                    _code_lang = (
+                        "java" if "java" in _rb_lang.lower()
+                        else ("javascript" if "javascript" in _rb_lang.lower() else "python")
+                    )
+                    st.subheader("📝 Generated Script")
+                    st.code(st.session_state.recorded_script, language=_code_lang)
+
+                    with st.expander("✏️ Edit before saving", expanded=False):
+                        st.text_area(
+                            "Edit the script:",
+                            value=st.session_state.recorded_script,
+                            key="rb_script_editor",
+                            height=500
+                        )
+
+                    if st.button("💾 Save Script", key="rb_save_btn"):
+                        if not rb_script_name:
+                            st.warning("Please enter a script file name.")
+                        else:
+                            final_rb_script = st.session_state.get(
+                                "rb_script_editor", st.session_state.recorded_script
+                            )
+                            utils.create_test_file(Test_file_generator, rb_script_name,
+                                                   _rb_lang, final_rb_script)
+                            st.success(f"✅ Script saved: {rb_script_name}")
+        # ── End Record & Playback ──────────────────────────────────────────
+
         # if option == 'Desktop':
         #
         #     st.subheader("Record User Actions & Capture Screenshots of User Navigation")

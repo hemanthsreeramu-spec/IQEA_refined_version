@@ -174,7 +174,7 @@ if page == "🏠 Home":
         </div>""", unsafe_allow_html=True)
 
 elif page == "🧠 IQEA":
-    run_page(os.path.join(BASE_DIR, "action_new_xpath_subway.py"))
+    run_page(os.path.join(BASE_DIR, "action_new_xpath_subway_TMT.py"))
 
 elif page == "🔁 Self Healing":
     run_page(os.path.join(BASE_DIR, "Self_healing_web_application", "Self_healing_streamlet.py"))

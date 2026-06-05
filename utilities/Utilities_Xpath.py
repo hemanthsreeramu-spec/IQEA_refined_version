@@ -174,6 +174,8 @@ def load_prompt_from_file(prompt_type):
             prompt_file = os.path.join(test_cases_prompt, "testcase_workflow_segmenter.txt")
         elif prompt_type == "testcase_gap_analysis":
             prompt_file = os.path.join(test_cases_prompt, "testcase_gap_analysis.txt")
+        elif prompt_type == "script_from_recording":
+            prompt_file = os.path.join(test_cases_prompt, "script_from_recording_prompt.txt")
         else:
             raise ValueError(f"Invalid prompt type: {prompt_type}")
 
@@ -1408,9 +1410,14 @@ def thread_new_window_checker(driver, injected_windows, last_urls, stop_flag, sc
             print("thread 1 ended")
         except Exception as e:
             print("New window monitor error:", e)
+            if stop_flag["stop"]:
+                break
 
-        # Check every 2-3 seconds
-        time.sleep(3)
+        # Check every 2 seconds (interruptible: 4 x 0.5s so stop is noticed within 0.5s)
+        for _ in range(4):
+            if stop_flag["stop"]:
+                break
+            time.sleep(0.5)
 def thread_focus_screenshot_jan29_backup(driver,stop_flag,screenshot_folder,source="file"):
     """
     Screenshots
@@ -1458,10 +1465,10 @@ def thread_focus_screenshot(driver, stop_flag, screenshot_folder, source="file")
 
     while not stop_flag["stop"]:
         try:
-            with st.session_state.driver_lock:
-                current_url = driver.current_url
-                all_elements = driver.find_elements(By.XPATH, "//*")
-                current_count = len(all_elements)
+            # Access driver directly — no session-state lock needed; ChromeDriver handles concurrency
+            current_url = driver.current_url
+            all_elements = driver.find_elements(By.XPATH, "//*")
+            current_count = len(all_elements)
 
             if first_run:
                 page_changed = True
@@ -1476,28 +1483,34 @@ def thread_focus_screenshot(driver, stop_flag, screenshot_folder, source="file")
                 last_url = current_url
                 prev_element_count = current_count
 
-                # wait for load
+                # wait for page ready
                 for _ in range(50):
-                    with st.session_state.driver_lock:
-                        state = driver.execute_script("return document.readyState")
+                    if stop_flag["stop"]:
+                        break
+                    state = driver.execute_script("return document.readyState")
                     if state == "complete":
                         break
                     time.sleep(0.1)
 
-                with st.session_state.driver_lock:
+                if not stop_flag["stop"]:
                     if source == "file":
                         filepath = action_utils.take_screenshot(driver, screenshot_folder)
                     elif source == "database":
                         filepath = db_handler.take_screenshot_db(driver, "sathanantham")
                     else:
                         filepath = None
-
-                print(f"📸 Screenshot taken => {filepath}")
+                    print(f"📸 Screenshot taken => {filepath}")
 
         except Exception as e:
             print("❌ Screenshot thread error:", e)
+            if stop_flag["stop"]:
+                break
 
-        time.sleep(1)
+        # Interruptible 1-second sleep (2 x 0.5s)
+        for _ in range(2):
+            if stop_flag["stop"]:
+                break
+            time.sleep(0.5)
 
 # def thread_focus_screenshot(driver, stop_flag, screenshot_folder, source="file"):
 #     print("📸 screenshot thread started")
@@ -1705,8 +1718,14 @@ def thread_reinject_action_check(driver, stop_flag,
 
         except Exception as e:
             print("Idle reinject monitor error:", e)
+            if stop_flag["stop"]:
+                break
 
-        time.sleep(2)
+        # Interruptible 2-second sleep (4 x 0.5s)
+        for _ in range(4):
+            if stop_flag["stop"]:
+                break
+            time.sleep(0.5)
 
     print("🛑 thread 3 stopped (idle reinject checker)")
 
@@ -1749,8 +1768,17 @@ def thread_focus_and_url_monitor(driver, injected_windows, last_urls, stop_flag,
 
         except Exception as e:
             print("Focus/URL monitor error:", e)
+            if stop_flag["stop"]:
+                break
 
-        time.sleep(2)
+        # Interruptible 2-second sleep (4 x 0.5s)
+        for _ in range(4):
+            if stop_flag["stop"]:
+                break
+            time.sleep(0.5)
+
+    print("🛑 Focus/URL monitor stopped")
+
 def select_and_read_text_files_xpath(file_type, folder_path):
     # Step 1: List all files in the folder
     files = [f for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
@@ -2458,6 +2486,45 @@ def generate_replacement_testcase(title, reason, action_data, image_data, requir
     print(f"Generating replacement for: {title}")
     response = get_queries_from_ai_updated(prompt) if model_type == "azureopenai" \
         else llm_pepgenx(prompt)
+    return response or ""
+
+
+# ── Record & Playback: Script Generation ──────────────────────────────────────
+def generate_script_from_recorded_actions(actions_formatted, language):
+    """
+    Build the LLM prompt for multi-scenario Record & Playback script generation.
+
+    The prompt instructs the LLM to:
+      1. Analyse the action sequence and derive 4-7 independent test scenarios
+         (happy path + negatives + boundaries from the same recording).
+      2. Generate one pytest function per scenario with smart retry
+         (only post-navigation elements) and screenshots at key steps.
+
+    Args:
+        actions_formatted (str): Structured steps from
+            utils_action.format_actions_for_script_generation() — includes
+            [PAGE_CHANGE] markers between URL transitions.
+        language (str): e.g. 'Python-Selenium'.
+
+    Returns:
+        str: Complete, runnable pytest file as a string.
+    """
+    prompt_template = load_prompt_from_file("script_from_recording")
+    final_prompt = prompt_template.format(
+        language=language,
+        recorded_actions=actions_formatted
+    )
+    print("***** Record & Playback — multi-scenario prompt *****")
+    print(final_prompt[:600])
+    response = get_queries_from_ai_updated(final_prompt) if model_type == "azureopenai" \
+        else llm_pepgenx(final_prompt)
+
+    # Strip accidental markdown fences the LLM might add despite instructions
+    if response:
+        lines = response.splitlines()
+        cleaned = [l for l in lines if not l.strip().startswith("```")]
+        response = "\n".join(cleaned).strip()
+
     return response or ""
 
 
