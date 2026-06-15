@@ -6,9 +6,9 @@ SET PYTHONPATH=%CD%
 SET VENV_DIR=.venv
 SET REQUIREMENTS=requirements.txt
 SET INIT_DB_FILE=utilities\db_utils\init_db.py
-SET STREAMLIT_SCRIPT=action_new_xpath.py
+SET STREAMLIT_SCRIPT=IQEA.py
 SET SETTINGS_FILE=config\settings.ini
-SET POSTGRES_PATH=C:\postgresql\data
+SET POSTGRES_PATH=D:\My_Programs\PostgreSQL\data
 REM Check if virtual environment exists
 IF NOT EXIST %VENV_DIR% (
     echo Creating virtual environment...
@@ -22,7 +22,7 @@ REM Install dependencies
 IF EXIST %REQUIREMENTS% (
     python.exe -m pip install --upgrade pip
     echo Installing all dependencies...
-    pip install -u -r %REQUIREMENTS%
+    pip install -r %REQUIREMENTS%
 ) ELSE (
     echo No requirements.txt found, skipping installation.
 )

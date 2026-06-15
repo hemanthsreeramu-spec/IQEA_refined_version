@@ -104,7 +104,7 @@ def run_page(file_path):
 # ==============================
 with st.sidebar:
     img_base64 = __import__('base64').b64encode(
-        open(r"C:\Users\sathanantham.aru\Downloads\IQEA.ai.png", "rb").read()
+        open("utilities/IQEA.ai_logo.png", "rb").read()
     ).decode()
 
     st.markdown(f"""
