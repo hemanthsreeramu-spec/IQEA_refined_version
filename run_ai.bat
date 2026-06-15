@@ -20,7 +20,7 @@ CALL %VENV_DIR%\Scripts\activate
 
 REM Install dependencies
 IF EXIST %REQUIREMENTS% (
-    python.exe -m pip install --upgrade pip
+    python.exe -m pip install --upgrade pip setuptools wheel
     echo Installing all dependencies...
     pip install -r %REQUIREMENTS%
 ) ELSE (
