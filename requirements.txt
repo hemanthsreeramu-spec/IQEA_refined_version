@@ -150,7 +150,7 @@ python-gitlab==7.1.0
 # ── Windows & Desktop Automation ───────────────────────────────
 pywin32==311
 pywinauto==0.6.8
-comtypes==1.4.4
+comtypes==1.4.16
 pygetwindow==0.0.9
 pyautogui==0.9.54
 keyboard==0.13.5
