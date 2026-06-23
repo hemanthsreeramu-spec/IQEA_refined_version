@@ -83,12 +83,12 @@ Apply retry ONLY to the FIRST interaction after a [PAGE_CHANGE] marker:
             break
         except Exception as e:
             last_err = e
-            attach_screenshot(driver, f"retry_<label>_{attempt}")
+            attach_screenshot(driver, f"retry_<label>_{{attempt}}")
             time.sleep(0.5)
             attempt += 1
     if attempt == 2:
         attach_screenshot(driver, "failed_<label>")
-        raise RuntimeError(f"<label> failed: {last_err}")
+        raise RuntimeError(f"<label> failed: {{last_err}}")
 
 Do NOT retry stable same-page elements (login fields, static buttons).
 

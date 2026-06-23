@@ -403,7 +403,5 @@ if mode == "Swagger":
 # ============================================================
 st.divider()
 st.markdown("""
-### 📞 Contact
-QE Core Team  
-📧 sahil.gupta@tigeranalytics.com
+### Reach us at QE Core Team
 """)

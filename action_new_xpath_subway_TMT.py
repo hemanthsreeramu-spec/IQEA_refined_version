@@ -248,23 +248,27 @@ page_url = st.text_input("Enter the URL of the page:")
 st.session_state.page_url = page_url
 if st.button("Open Browser"):
     if page_url:
-        chromedriver_path = os.path.join(input_folder, "chromedriver.exe")
-        chrome_options = Options()
-        chrome_options.add_argument("--disable-gpu")  # 🔑 prevents Skia/SharedImage GPU errors
-        chrome_options.add_argument("--disable-software-rasterizer")
-        chrome_options.add_argument("--remote-debugging-port=9222")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--remote-allow-origins=*")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        #chrome_options.binary_location = chromedriver_path
-        #service = Service(executable_path=chromedriver_path)
-        #service = Service(ChromeDriverManager().install())
-        st.session_state.driver = webdriver.Chrome(options=chrome_options)
-        #st.session_state.driver = webdriver.Chrome(service=service, options=chrome_options)
-        st.session_state.driver.get(page_url)
-        st.session_state.driver.maximize_window()
-        WebDriverWait(st.session_state.driver, 30).until(utils.is_page_loaded)
-        st.success("✅ Browser opened and ready.")
+        clean_url = page_url.strip()
+        if clean_url and not clean_url.startswith(("http://", "https://")):
+            clean_url = "https://" + clean_url
+        if not clean_url:
+            st.warning("⚠️ Please enter a valid URL.")
+        else:
+            chromedriver_path = os.path.join(input_folder, "chromedriver.exe")
+            chrome_options = Options()
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--disable-software-rasterizer")
+            chrome_options.add_argument("--remote-debugging-port=9222")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--remote-allow-origins=*")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            st.session_state.driver = webdriver.Chrome(options=chrome_options)
+            st.session_state.driver.get(clean_url)
+            st.session_state.driver.maximize_window()
+            WebDriverWait(st.session_state.driver, 30).until(utils.is_page_loaded)
+            st.success("✅ Browser opened and ready.")
+    else:
+        st.warning("⚠️ Please enter a URL before opening the browser.")
 
 # Display sections based on checkboxes
 if st.session_state.checkbox1_state:
@@ -521,9 +525,13 @@ if st.session_state.checkbox1_state:
                             st.session_state.rb_actions_snapshot
                         )
                         script = utils.generate_script_from_recorded_actions(actions_formatted, rb_language)
-                        st.session_state.recorded_script = script
-                        st.session_state.recorded_script_language = rb_language
-                    st.success("✅ Script generated from recording.")
+                        if script:
+                            st.session_state.recorded_script = script
+                            st.session_state.recorded_script_language = rb_language
+                            st.success("✅ Script generated from recording.")
+                        else:
+                            st.error("Failed to generate script from recording.check the error logs")
+                    
 
                 if st.session_state.recorded_script:
                     _rb_lang = st.session_state.recorded_script_language

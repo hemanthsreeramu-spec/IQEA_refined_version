@@ -52,7 +52,7 @@ source = get_source()
 model_type=get_model()
 # api_key=get_api_key()
 
-load_dotenv()
+load_dotenv(override=True)
 current_path = os.getcwd()
 output_folder = os.path.join(current_path, "output")
 xpath_generator_folder = os.path.join(output_folder, "xpath_generator")
@@ -63,10 +63,11 @@ os.makedirs(xpath_generator_folder, exist_ok=True)
 os.makedirs(Page_file_generator, exist_ok=True)
 os.makedirs(Test_file_generator, exist_ok=True)
 
+load_dotenv(override=True)
 os.environ["OPENAI_API_KEY"] = os.getenv("AZURE_OPENAI_API_KEY")
 os.environ["OPENAI_API_BASE"] = os.getenv("AZURE_OPENAI_ENDPOINT")
-client = openai.OpenAI(api_key =  os.environ["OPENAI_API_KEY"],
-                       base_url = os.environ["OPENAI_API_BASE"])
+client = openai.OpenAI(api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+                       base_url=os.getenv("AZURE_OPENAI_ENDPOINT"))
 
 # # Access the variables
 # api_key = os.getenv("AZURE_OPENAI_API_KEY")
@@ -243,6 +244,8 @@ def get_queries_from_ai(prompt, formatted_summary):
     model = "gpt-5-mini"
     prompt_template = load_prompt_from_file(prompt)
     print(prompt_template)
+    client = openai.OpenAI(api_key =  os.environ["OPENAI_API_KEY"],
+                       base_url = os.environ["OPENAI_API_BASE"])
 
     if prompt == "PowerBi":
         # print("formatted_summary:", {formatted_summary})
@@ -2992,9 +2995,12 @@ def get_queries_from_ai_updated_again(formatted_summary, previous_output):
 
 def get_queries_from_ai_updated_gemini(formatted_summary):
     # Access the variables
+    client = openai.OpenAI(api_key =  os.environ["OPENAI_API_KEY"],
+                       base_url = os.environ["OPENAI_API_BASE"])
+
     model = "gemini-2.5-pro"
 
-
+   
 
     response = client.chat.completions.create(model=model,
                                           messages=[{"role": "user",
@@ -3007,6 +3013,9 @@ def get_queries_from_ai_updated_gemini(formatted_summary):
 
 def get_queries_from_ai_testcases(formatted_summary):
    print("going inside get_queries_from_ai_testcases")
+   client = openai.OpenAI(api_key =  os.environ["OPENAI_API_KEY"],
+                       base_url = os.environ["OPENAI_API_BASE"])
+
    model = "gpt-5"
    if not formatted_summary or not isinstance(formatted_summary, str):
         print("[ERROR] formatted_summary is empty or not a string")
@@ -3025,6 +3034,9 @@ def get_queries_from_ai_testcases(formatted_summary):
         return None
 def get_queries_from_ai_updated(formatted_summary):
    print("going inside get_queries_from_ai_updated")
+   load_dotenv(override=True)
+   client = openai.OpenAI(api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+                          base_url=os.getenv("AZURE_OPENAI_ENDPOINT"))
    model = "gpt-5-mini"
    try:
         response = client.chat.completions.create(
