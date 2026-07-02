@@ -1443,7 +1443,10 @@ class Apicore:
         return request_details
 
     def validate_post_response(self, response, request_payload):
-        print("validate_post_response-response",response.json())
+        try:
+            print("validate_post_response-response", response.json())
+        except Exception:
+            print("validate_post_response-response (empty/non-JSON body)")
         print("validate_post_response-requestpayload", request_payload)
         if response.status_code not in [200, 201]:
             return "FAIL"

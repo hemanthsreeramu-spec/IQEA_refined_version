@@ -222,17 +222,12 @@ footer                                  { display: none !important; }
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def run_page(file_path):
-    """Run a page file with its own directory as working directory."""
+    """Run a page file in-place without changing the process CWD."""
     page_dir = os.path.dirname(file_path)
     if page_dir not in sys.path:
         sys.path.insert(0, page_dir)
-    original_dir = os.getcwd()
-    os.chdir(page_dir)
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            exec(f.read(), {"__file__": file_path})
-    finally:
-        os.chdir(original_dir)
+    with open(file_path, "r", encoding="utf-8") as f:
+        exec(f.read(), {"__file__": file_path})
 
 # ==============================
 # SIDEBAR
@@ -349,7 +344,7 @@ with st.sidebar:
 
     page = st.radio(
         "Go to",
-        ["🏠  Home", "🧠  IQEA", "🔁  Self Healing", "🔗  API Validator"],
+        ["🏠  Home", "🧠  IQEA", "🔁  Self Healing", "🔗  API Validator", "📊  PBI Validator"],
         index=0,
         label_visibility="collapsed"
     )
@@ -360,7 +355,7 @@ if page == "🏠  Home":
     st.markdown("""
     <div style="padding: 28px 0 24px 0;">
         <div style="font-size:34px; font-weight:900; color:#1B2A4A; margin-bottom:8px;">
-            🤖 TigerQE AI Platform — iQEA
+            🤖 TigerQE AI Platform — iQEA (Intelligent QE Assistant)
         </div>
         <div style="font-size:17px; color:#666; font-weight:500;">
             AI-powered end-to-end test automation — from recording to execution, all in one place.
@@ -468,3 +463,6 @@ elif page == "🔁  Self Healing":
 
 elif page == "🔗  API Validator":
     run_page(os.path.join(BASE_DIR, "api_validator.py"))
+
+elif page == "📊  PBI Validator":
+    run_page(os.path.join(BASE_DIR, "pbi_validator", "pbi_validator_streamlit.py"))

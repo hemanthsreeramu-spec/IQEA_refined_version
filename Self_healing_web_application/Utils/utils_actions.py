@@ -7,7 +7,7 @@ from collections import defaultdict
 from urllib.parse import urlparse
 #from utilities.db_utils.models import Screenshot
 # Setup output folder
-current_path = os.getcwd()
+current_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 output_folder = os.path.join(current_path, "output")
 Action_collection = os.path.join(output_folder, "Action_collection")
 JS_EVENT_LISTENER_allsite="""(function () {

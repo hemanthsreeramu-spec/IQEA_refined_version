@@ -1,7 +1,6 @@
 {
     "self_inventory": [
         "Inventory_Page:",
-        "InventoryPage:",
         "//button[@id='add-to-cart-sauce1-labs-backpack']",
         "//button[@id='add-to-cart-sauce1-labs-bike-light']",
         "//button[@id='add-to-cart-sauce-labs-bolt-t-shirt']",
@@ -12,9 +11,8 @@
     ],
     "self_login": [
         "Login_Page:",
-        "LoginPage:",
         "//input[@id='user-name']",
-        "//input[@id='password']",
-        "//input[@id='login-button']"
+        "//input[@id='pass-word']",
+        "//input[@id='sign-button']"
     ]
 }

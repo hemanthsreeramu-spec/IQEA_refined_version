@@ -3,6 +3,7 @@ import re
 import docx2txt
 from langchain_openai import AzureChatOpenAI
 from langchain_core.messages import HumanMessage
+import openai
 from src.mcp_use_client import *
 import json
 import asyncio
@@ -17,7 +18,7 @@ from src.mcp_use_client import start_mcp_client, execute_mcp_use, close_mcp_clie
 from dotenv import load_dotenv
 load_dotenv()
 ### define output path #####
-current_path = os.getcwd()
+current_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 output_folder = os.path.join(current_path, "output")
 output_script = os.path.join(output_folder, "Dom_script")
 output_dom = os.path.join(output_folder, "Dom_details")
@@ -132,7 +133,11 @@ def read_json_file(file_path):
     with open(file_path, "r", encoding="utf-8") as f:
         return json.load(f)
 def split_xpath_page_wise(content):
-    model = AzureChatOpenAI(openai_api_version="2023-05-15", azure_deployment="qepracticekey")
+    #model = AzureChatOpenAI(openai_api_version="2023-05-15", azure_deployment="qepracticekey")
+    os.environ["OPENAI_API_KEY"] = os.getenv("AZURE_OPENAI_API_KEY")
+    os.environ["OPENAI_API_BASE"] = os.getenv("AZURE_OPENAI_ENDPOINT")
+    client = openai.OpenAI(api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+                        base_url=os.getenv("AZURE_OPENAI_ENDPOINT"))
     script_text = run_mcp_prompt_compare(
         'input/Xpath_page_wise.txt',
         {
@@ -141,13 +146,30 @@ def split_xpath_page_wise(content):
         }
     )
     #print(model([HumanMessage(content=script_text)]).content.strip())
-    return model.invoke([HumanMessage(content=script_text)]).content.strip()
+    #return model.invoke([HumanMessage(content=script_text)]).content.strip()
+    model = "gpt-5-mini"
+    try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": script_text}],
+                max_completion_tokens=25000,
+                timeout=600
+            )
+            print(response)
+            return response.choices[0].message.content
+    except Exception as e:
+            print(f"[ERROR] LLM call failed: {e}")
+            return None
 
 def compare_xpathdetails_dom(xpath_content,dom_content):
     # xpath_chunks=split_xpath_page_wise(xpath_content)
     # dom_chunks=split_xpath_page_wise(dom_content)
-    model = AzureChatOpenAI(openai_api_version="2023-05-15", azure_deployment="qepracticekey")
+    #model = AzureChatOpenAI(openai_api_version="2023-05-15", azure_deployment="qepracticekey")
     #for dom_chunk,xpath_chunk in dom_chunks,xpath_chunks:
+    os.environ["OPENAI_API_KEY"] = os.getenv("AZURE_OPENAI_API_KEY")
+    os.environ["OPENAI_API_BASE"] = os.getenv("AZURE_OPENAI_ENDPOINT")
+    client = openai.OpenAI(api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+                        base_url=os.getenv("AZURE_OPENAI_ENDPOINT"))
     script_text = run_mcp_prompt_compare(
         'input/validte_xpath.txt',
         {
@@ -156,8 +178,20 @@ def compare_xpathdetails_dom(xpath_content,dom_content):
         }
     )
     #print(model([HumanMessage(content=script_text)]).content.strip())
-    return model.invoke([HumanMessage(content=script_text)]).content.strip()
-
+    #return model.invoke([HumanMessage(content=script_text)]).content.strip()
+    model = "gpt-5-mini"
+    try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": script_text}],
+                max_completion_tokens=25000,
+                timeout=600
+            )
+            print(response)
+            return response.choices[0].message.content
+    except Exception as e:
+            print(f"[ERROR] LLM call failed: {e}")
+            return None
 
 
 def save_ai_response_to_excel_1(ai_response_list, output_folder=output_xpath_validate, file_name="validated_xpath.xlsx"):
@@ -173,8 +207,15 @@ def save_ai_response_to_excel_1(ai_response_list, output_folder=output_xpath_val
         clean_text = re.sub(r"```[a-zA-Z]*", "", response).replace("```", "").strip()
 
         # Only process if it looks like a markdown table
-        if "|" in clean_text and "---" in clean_text:
+        if "|" in clean_text:
             try:
+                # Remove separator rows (| --- | --- |) that gpt-5-mini may omit
+                lines = [
+                    line for line in clean_text.splitlines()
+                    if not re.match(r'^\s*\|[\s|:\-]+\|\s*$', line)
+                ]
+                clean_text = "\n".join(lines)
+
                 df = pd.read_csv(StringIO(clean_text), sep="|", engine="python")
 
                 # Drop empty columns (caused by leading/trailing pipes in markdown)
@@ -216,8 +257,15 @@ def save_ai_response_to_excel(ai_response_list, output_folder=output_xpath_valid
         clean_text = re.sub(r"```[a-zA-Z]*", "", response).replace("```", "").strip()
 
         # Only process if it looks like a markdown table
-        if "|" in clean_text and "---" in clean_text:
+        if "|" in clean_text:
             try:
+                # Remove separator rows (| --- | --- |) that gpt-5-mini may omit
+                lines = [
+                    line for line in clean_text.splitlines()
+                    if not re.match(r'^\s*\|[\s|:\-]+\|\s*$', line)
+                ]
+                clean_text = "\n".join(lines)
+
                 df = pd.read_csv(StringIO(clean_text), sep="|", engine="python")
 
                 # Drop empty columns (caused by leading/trailing pipes in markdown)
@@ -320,7 +368,9 @@ def normalize_content(content, details_key=None):
         # For xpath_file
         for page_name, details in content.items():
             if details_key:
-                normalized[page_name] = {details_key: details}
+                # Filter out page-label entries (e.g. "self_login:", "Inventory_Page:")
+                xpath_list = [x for x in details if isinstance(x, str) and x.strip().startswith('/')]
+                normalized[page_name] = {details_key: xpath_list}
             else:
                 normalized[page_name] = details
 

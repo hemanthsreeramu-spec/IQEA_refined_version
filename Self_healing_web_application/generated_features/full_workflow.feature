@@ -1,41 +1,41 @@
-Feature: Purchase a product from Saucedemo
+Feature: Checkout and Logout Workflow
 
   Background:
     Given I navigate to "https://www.saucedemo.com/"
-    When I enter "standard_user" in the "user-name" field
-    And I enter "secret_sauce" in the "password" field
-    And I click on "login-button"
-    Then I should be on the inventory page
+    And I log in with username "standard_user" and password "secret_sauce"
 
-  Scenario: Add a product to the cart
-    When I click on "add-to-cart-sauce-labs-backpack"
-    Then the product should be added to the cart
+  Scenario: Add product to cart and view cart
+    When I add the "Sauce Labs Backpack" product to the cart
+    And I open the cart
+    Then I should see "Sauce Labs Backpack" in the cart
+    And the cart badge should display "1"
 
-  Scenario: View the cart
-    When I click on "1"
-    Then I should be on the cart page
-
-  Scenario: Proceed to checkout
-    When I click on "checkout"
+  Scenario: Proceed to checkout from cart
+    Given I am viewing my cart
+    When I click the "checkout" button
     Then I should be on the checkout information page
 
   Scenario: Enter checkout information
-    When I enter "test" in the "firstName" field
-    And I enter "test" in the "lastName" field
-    And I enter "67857" in the "postalCode" field
-    And I click on "continue"
-    Then I should be on the checkout summary page
+    Given I am on the checkout information page
+    When I enter first name "test"
+    And I enter last name "teest"
+    And I enter postal code "7657"
+    And I click the "continue" button
+    Then I should be on the checkout overview page
 
   Scenario: Complete the checkout
-    When I click on "checkout_summary_container"
-    And I click on "finish"
-    Then I should see the order confirmation on the checkout complete page
+    Given I am on the checkout overview page
+    When I click the "finish" button
+    Then I should be on the checkout complete page
+    And I should see an order confirmation
 
-  Scenario: Return to the product page
-    When I click on "back-to-products"
+  Scenario: Return to products
+    Given I am on the checkout complete page
+    When I click the "back to products" button
     Then I should be on the inventory page
 
   Scenario: Logout
-    When I click on "react-burger-menu-btn"
-    And I click on "logout_sidebar_link"
-    Then I should be logged out and redirected to the login page
+    Given I am on the inventory page
+    When I open the side menu
+    And I click the "logout" link
+    Then I should be redirected to the login page

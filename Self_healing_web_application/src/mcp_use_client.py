@@ -2,6 +2,7 @@ import asyncio
 import time
 from .common_methods import *
 from mcp_use import MCPAgent, MCPClient  # Ensure 'mcp_use.py' is in the same directory or installed as a package
+from langchain_openai import ChatOpenAI
 
 import mcp_use
 mcp_use.set_debug(1) # 1 - INFO, 2 - DEBUG
@@ -51,8 +52,13 @@ async def test_server_startup():
 async def start_mcp_client():
     # 2️⃣ Wire the LLM to the MCP client
     server_status = await test_server_startup()
+    mcp_llm = ChatOpenAI(
+        model="gpt-5-mini",
+        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+        base_url=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    )
     global agent
-    agent = MCPAgent(llm=llm, client=mcpclient, memory_enabled=False,
+    agent = MCPAgent(llm=mcp_llm, client=mcpclient, memory_enabled=False,
                      auto_initialize=True, max_steps=15)
     return server_status
     

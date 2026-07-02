@@ -139,6 +139,7 @@ pyodbc
 psycopg2
 sqlalchemy
 snowflake-connector-python
+databricks-sql-connector
 
 # ── Git & Version Control ──────────────────────────────────────
 GitPython==3.1.46

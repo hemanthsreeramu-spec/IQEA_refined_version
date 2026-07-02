@@ -5,6 +5,7 @@ from langchain_openai import AzureChatOpenAI
 from langchain_core.messages import HumanMessage
 from src.mcp_use_client import *
 import json
+import openai
 ### Load env ####
 from dotenv import load_dotenv
 load_dotenv()
@@ -43,32 +44,69 @@ def read_workflow_document(file_path):
 
 
 def collect_xpath_from_external_file(content):
-    model = AzureChatOpenAI(openai_api_version="2023-05-15", azure_deployment="qepracticekey")
+    os.environ["OPENAI_API_KEY"] = os.getenv("AZURE_OPENAI_API_KEY")
+    os.environ["OPENAI_API_BASE"] = os.getenv("AZURE_OPENAI_ENDPOINT")
+    client = openai.OpenAI(api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+                        base_url=os.getenv("AZURE_OPENAI_ENDPOINT"))
+    # model = AzureChatOpenAI(openai_api_version="2023-05-15", azure_deployment="qepracticekey")
     script_text = run_mcp_prompt_compare(
         'input/framework_prompt/read_OR_file.txt',
         {
             '{content}': content,
         }
     )
-    return model.invoke([HumanMessage(content=script_text)]).content.strip()
-
+    #return model.invoke([HumanMessage(content=script_text)]).content.strip()
+    model = "gpt-5-mini"
+    try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": script_text}],
+                max_completion_tokens=25000,
+                timeout=600
+            )
+            print(response)
+            return response.choices[0].message.content
+    except Exception as e:
+            print(f"[ERROR] LLM call failed: {e}")
+            return None
 
 def collect_xpath_from_page_file(page_file_content):
-    model = AzureChatOpenAI(openai_api_version="2023-05-15", azure_deployment="qepracticekey")
+    os.environ["OPENAI_API_KEY"] = os.getenv("AZURE_OPENAI_API_KEY")
+    os.environ["OPENAI_API_BASE"] = os.getenv("AZURE_OPENAI_ENDPOINT")
+    client = openai.OpenAI(api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+                        base_url=os.getenv("AZURE_OPENAI_ENDPOINT"))
+    # model = AzureChatOpenAI(openai_api_version="2023-05-15", azure_deployment="qepracticekey")
     script_text = run_mcp_prompt_compare(
         'input/framework_prompt/read_pagefile.txt',
         {
             '{page_file_content}': page_file_content,
         }
     )
-    return model.invoke([HumanMessage(content=script_text)]).content.strip()
+    # return model.invoke([HumanMessage(content=script_text)]).content.strip()
+    model = "gpt-5-mini"
+    try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": script_text}],
+                max_completion_tokens=25000,
+                timeout=600
+            )
+            print(response)
+            return response.choices[0].message.content
+    except Exception as e:
+            print(f"[ERROR] LLM call failed: {e}")
+            return None
 
 
 def generate_page_wise_xpath(page_name, page_references,or_response=None):
     print(or_response)
     print(page_name)
     print(page_references)
-    model = AzureChatOpenAI(openai_api_version="2023-05-15", azure_deployment="qepracticekey")
+    #model = AzureChatOpenAI(openai_api_version="2023-05-15", azure_deployment="qepracticekey")
+    os.environ["OPENAI_API_KEY"] = os.getenv("AZURE_OPENAI_API_KEY")
+    os.environ["OPENAI_API_BASE"] = os.getenv("AZURE_OPENAI_ENDPOINT")
+    client = openai.OpenAI(api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+                        base_url=os.getenv("AZURE_OPENAI_ENDPOINT"))
     script_text = run_mcp_prompt_compare(
         'input/framework_prompt/generate_xpath.txt',
         {
@@ -77,11 +115,27 @@ def generate_page_wise_xpath(page_name, page_references,or_response=None):
             '{or_response}':or_response
         }
     )
-    return model.invoke([HumanMessage(content=script_text)]).content.strip()
-
+    #return model.invoke([HumanMessage(content=script_text)]).content.strip()
+    model = "gpt-5-mini"
+    try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": script_text}],
+                max_completion_tokens=25000,
+                timeout=600
+            )
+            print(response)
+            return response.choices[0].message.content
+    except Exception as e:
+            print(f"[ERROR] LLM call failed: {e}")
+            return None
 
 def extract_workflow_details(workflow_content):
-    model = AzureChatOpenAI(openai_api_version="2023-05-15", azure_deployment="qepracticekey")
+    #model = AzureChatOpenAI(openai_api_version="2023-05-15", azure_deployment="qepracticekey")
+    os.environ["OPENAI_API_KEY"] = os.getenv("AZURE_OPENAI_API_KEY")
+    os.environ["OPENAI_API_BASE"] = os.getenv("AZURE_OPENAI_ENDPOINT")
+    client = openai.OpenAI(api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+                        base_url=os.getenv("AZURE_OPENAI_ENDPOINT"))
     prompt = f"""
 You are an expert test analyst.
 
@@ -106,19 +160,48 @@ Repeat this structure for all pages.
 Workflow Document:
 {workflow_content}
 """
-    return model.invoke([HumanMessage(content=prompt)]).content.strip()
+    #return model.invoke([HumanMessage(content=prompt)]).content.strip()
+    model = "gpt-5-mini"
+    try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_completion_tokens=25000,
+                timeout=600
+            )
+            print(response)
+            return response.choices[0].message.content
+    except Exception as e:
+            print(f"[ERROR] LLM call failed: {e}")
+            return None
 
 
 def workflow_feature_file(page_workflow):
-    model = AzureChatOpenAI(openai_api_version="2023-05-15", azure_deployment="qepracticekey")
+    #model = AzureChatOpenAI(openai_api_version="2023-05-15", azure_deployment="qepracticekey")
+    os.environ["OPENAI_API_KEY"] = os.getenv("AZURE_OPENAI_API_KEY")
+    os.environ["OPENAI_API_BASE"] = os.getenv("AZURE_OPENAI_ENDPOINT")
+    client = openai.OpenAI(api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+                        base_url=os.getenv("AZURE_OPENAI_ENDPOINT"))
     script_text = run_mcp_prompt_compare(
         'input/framework_prompt/feature_file_generate.txt',
         {
             '{page_workflow}': page_workflow,
         }
     )
-    
-    return model.invoke([HumanMessage(content=script_text)]).content.strip()
+    model = "gpt-5-mini"
+    try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": script_text}],
+                max_completion_tokens=25000,
+                timeout=600
+            )
+            print(response)
+            return response.choices[0].message.content
+    except Exception as e:
+            print(f"[ERROR] LLM call failed: {e}")
+            return None
+    #return model.invoke([HumanMessage(content=script_text)]).content.strip()
 
 
 def write_feature_file(page_name, feature_content, output_folder="generated_features"):

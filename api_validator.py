@@ -65,7 +65,11 @@ st.title("🤖 TigerQE AI Platform - API Validator")
 st.subheader("Select Input Mode")
 mode = st.radio("Choose API Source", ["Document", "Swagger"])
 if mode is "Document":
-    performance_flag = st.checkbox("Performance Required?")
+    flag_col1, flag_col2 = st.columns(2)
+    with flag_col1:
+        performance_flag = st.checkbox("Performance Required?")
+    with flag_col2:
+        recommendation_flag = st.checkbox("API Recommendation?")
 
 # ============================================================
 # DOCUMENT MODE
@@ -170,22 +174,6 @@ if mode == "Document":
                 progress.progress((i + 1) / len(api_list))
 
             df = pd.DataFrame(results)
-            api_response_analysis_prompt=swagger_utils.api_response_prompt(results)
-            st.session_state.api_response_analysis=swagger_utils.get_queries_from_ai_updated(api_response_analysis_prompt)
-            api_response_html=swagger_utils.save_html_report(st.session_state.api_response_analysis,REPORT_DIR,"Api_Response")
-            performance_extracted_data=swagger_utils.collect_locust_csv_from_paths(performance_result)
-
-            print("******performance_extracted_data****",performance_extracted_data)
-            locust_covert_prompt=swagger_utils.locust_convert_prompt(performance_extracted_data,performance_config)
-            print("******locust_covert_prompt****", locust_covert_prompt)
-            st.session_state.locust_convert_response=swagger_utils.get_queries_from_ai_updated(locust_covert_prompt)
-            print("******locust_convert_response****", st.session_state.locust_convert_response)
-            # api_performance_analysis_prompt=swagger_utils.api_performace_reponse_prompt(st.session_state.locust_convert_response,performance_config)
-            # print("******api_performance_analysis_prompt****", api_performance_analysis_prompt)
-            # st.session_state.api_performance_analysis=swagger_utils.get_queries_from_ai_updated(api_performance_analysis_prompt)
-            # print("******api_performance_analysis****", st.session_state.api_performance_analysis)
-            api_performance_response_html = swagger_utils.save_html_report(st.session_state.locust_convert_response, REPORT_DIR,
-                                                               "Api_Performance_Response")
 
             def color_rows(row):
                 return [
@@ -196,9 +184,23 @@ if mode == "Document":
             st.success("API Testing Completed")
             st.dataframe(df.style.apply(color_rows, axis=1), use_container_width=True)
 
-            api_utils.Apicore().show_locust_report(performance_result)
-            api_utils.Apicore().show_llm_response(api_response_html,"API_response")
-            api_utils.Apicore().show_llm_response(api_performance_response_html,"Performance_response")
+            if recommendation_flag:
+                api_response_analysis_prompt=swagger_utils.api_response_prompt(results)
+                st.session_state.api_response_analysis=swagger_utils.get_queries_from_ai_updated(api_response_analysis_prompt)
+                api_response_html=swagger_utils.save_html_report(st.session_state.api_response_analysis,REPORT_DIR,"Api_Response")
+                api_utils.Apicore().show_llm_response(api_response_html,"API_response")
+
+            if performance_result:
+                performance_extracted_data=swagger_utils.collect_locust_csv_from_paths(performance_result)
+                print("******performance_extracted_data****",performance_extracted_data)
+                locust_covert_prompt=swagger_utils.locust_convert_prompt(performance_extracted_data,performance_config)
+                print("******locust_covert_prompt****", locust_covert_prompt)
+                st.session_state.locust_convert_response=swagger_utils.get_queries_from_ai_updated(locust_covert_prompt)
+                print("******locust_convert_response****", st.session_state.locust_convert_response)
+                api_performance_response_html = swagger_utils.save_html_report(st.session_state.locust_convert_response, REPORT_DIR,
+                                                                   "Api_Performance_Response")
+                api_utils.Apicore().show_locust_report(performance_result)
+                api_utils.Apicore().show_llm_response(api_performance_response_html,"Performance_response")
 
 
 # ==============================
@@ -304,7 +306,19 @@ if mode == "Swagger":
             results = []
             performance_result = []
             print("swegger_api_data_core", st.session_state.swagger_apis)
-            for api in st.session_state.swagger_apis:
+
+            apis_to_run = [
+                api for api in st.session_state.swagger_apis
+                if api.get("Validate?") or api.get("Performance?")
+            ]
+            total = len(apis_to_run)
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
+            for idx, api in enumerate(apis_to_run):
+                endpoint_label = f"{api.get('httpMethod', '')} {api.get('endpoint', '')}"
+                status_text.markdown(f"**Running {idx + 1} / {total}** — `{endpoint_label}`")
+                progress_bar.progress((idx + 1) / total)
 
                 # ======================
                 # VALIDATION FLOW
@@ -316,23 +330,8 @@ if mode == "Swagger":
 
                     if response:
                         status = response.status_code
-
-                        if http_method in ["POST", "PUT"]:
-                            print("swegger_api_data",api)
-                            request_payload = api.get("**********payload*************", {})
-                            result = api_utils.Apicore().validate_post_response(
-                                response, request_payload
-                            )
-                        else:
-                            expected_output = api.get("expectedOutput", {})
-                            try:
-                                response_json = response.json()
-                            except:
-                                response_json = response.text
-
-                            result = api_utils.Apicore().validate_api_result(
-                                response_json, expected_output
-                            )
+                        expected_status = api.get("Expected-StatusCode", 200)
+                        result = "PASS" if response.status_code == expected_status else "FAIL"
                     else:
                         status = "NO RESPONSE"
                         result = "FAIL"
@@ -351,6 +350,9 @@ if mode == "Swagger":
                     path,locust_csv_path = api_utils.Apicore().makeperformancecall(api, "Swegger")
                     if path:
                         performance_result.append(path)
+
+            status_text.markdown(f"**Completed {total} / {total} APIs**")
+            progress_bar.progress(1.0)
 
             # ======================
             # SHOW VALIDATION RESULT
@@ -387,12 +389,12 @@ if mode == "Swagger":
                 print("******locust_covert_prompt****", locust_covert_prompt)
                 st.session_state.locust_convert_response = swagger_utils.get_queries_from_ai_updated(locust_covert_prompt)
                 print("******locust_convert_response****", st.session_state.locust_convert_response)
-            api_performance_analysis_prompt = swagger_utils.api_performace_reponse_prompt(
-                st.session_state.locust_convert_response, performance_config)
-            print("******api_performance_analysis_prompt****", api_performance_analysis_prompt)
-            st.session_state.api_performance_analysis = swagger_utils.get_queries_from_ai_updated(
-                api_performance_analysis_prompt)
-            if performance_result:
+
+                api_performance_analysis_prompt = swagger_utils.api_performace_reponse_prompt(
+                    st.session_state.locust_convert_response, performance_config)
+                print("******api_performance_analysis_prompt****", api_performance_analysis_prompt)
+                st.session_state.api_performance_analysis = swagger_utils.get_queries_from_ai_updated(
+                    api_performance_analysis_prompt)
                 print("******api_performance_analysis****", st.session_state.api_performance_analysis)
                 api_performance_response_html = swagger_utils.save_html_report(st.session_state.api_performance_analysis,
                                                                            REPORT_DIR,
@@ -402,6 +404,7 @@ if mode == "Swagger":
 # FOOTER
 # ============================================================
 st.divider()
-st.markdown("""
-### Reach us at QE Core Team
+st.markdown("""    
+    ### Contact Us
+    - Reach us at [QE Core Team](mailto:sahil.gupta@tigeranalytics.com)
 """)
