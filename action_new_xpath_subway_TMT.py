@@ -243,6 +243,10 @@ if "desktop_action_name" not in st.session_state:
     st.session_state.desktop_action_name = ""
 if "recorder" not in st.session_state:
     st.session_state.recorder = DesktopRecorder()
+
+##playback
+if "rb_language" not in st.session_state:
+    st.session_state.rb_language = "Python-Selenium"
 # 1. Open the browser
 page_url = st.text_input("Enter the URL of the page:")
 st.session_state.page_url = page_url
@@ -270,9 +274,53 @@ if st.button("Open Browser"):
     else:
         st.warning("⚠️ Please enter a URL before opening the browser.")
 
-# Display sections based on checkboxes
-if st.session_state.checkbox1_state:
-    with (st.expander("🔴 User Workflow Recorder")):
+# ==============================
+# TOOL RAIL  (one tool at a time — replaces the 9-accordion stack)
+# ==============================
+from contextlib import contextmanager
+
+@contextmanager
+def _workspace(title):
+    """Render the active tool inside a single bordered card."""
+    with st.container(border=True):
+        yield
+
+st.markdown(
+    "<style>.stButton>button[kind=\"primary\"]{background:#F47B20;border-color:#F47B20;}"
+    ".stButton>button{font-weight:600;}</style>",
+    unsafe_allow_html=True,
+)
+
+_IQEA_PHASES = [
+    ("🎬 Capture", [("recorder", "🔴 Recorder")]),
+    ("📝 Author", [("testcases", "🧮 Test Cases"), ("bdd", "🧾 BDD Feature"), ("testdata", "🧪 Test Data")]),
+    ("🔧 Build", [("pom", "🔎 Locators / POM"), ("scripts", "📜 Script Gen")]),
+    ("🚀 Run & Report", [("execute", "▶️ Execute"), ("artifacts", "📥 Artifacts")]),
+    ("🔗 Integrate", [("repo", "⚙️ Repo Push")]),
+]
+
+if "iqea_active_tool" not in st.session_state:
+    st.session_state.iqea_active_tool = "recorder"
+
+st.markdown("##### 🧰 Select Agent")
+_rail_cols = st.columns(len(_IQEA_PHASES))
+for _col, (_phase, _tools) in zip(_rail_cols, _IQEA_PHASES):
+    with _col:
+        st.caption(_phase)
+        for _tid, _label in _tools:
+            if st.button(
+                _label,
+                key=f"iqea_nav_{_tid}",
+                use_container_width=True,
+                type="primary" if st.session_state.iqea_active_tool == _tid else "secondary",
+            ):
+                st.session_state.iqea_active_tool = _tid
+                st.rerun()
+
+_tool = st.session_state.iqea_active_tool
+st.divider()
+if _tool == "recorder":
+    with _workspace("🔴 User Workflow Recorder"):
         option = st.radio(
             "Choose where to record:",
             ('Web', 'Desktop')
@@ -302,7 +350,7 @@ if st.session_state.checkbox1_state:
                     st.session_state.recorded_script = None
                     st.session_state.rb_actions_snapshot = []
                     handle=st.session_state.driver.current_window_handle
-                    st.session_state.driver.execute_script(action_utils.injection_script_updated_fixed())
+                    st.session_state.driver.execute_script(action_utils.injection_script_agentflow())
                     print(f"✅ JS injected in new window {handle} ({st.session_state.driver.current_url})")
                     st.session_state.injected_windows[handle] = True
                     # --- Thread 1: New windows checker ---
@@ -512,7 +560,7 @@ if st.session_state.checkbox1_state:
                     "Generate an automation script directly from your recorded actions — "
                     "no page file or test case needed."
                 )
-                rb_language = st.selectbox(
+                st.session_state.rb_language  = st.selectbox(
                     "Select target language / framework",
                     ["Python-Selenium", "Python-Playwright", "Java-Selenium", "Java-Playwright", "UTAM-JavaScript"],
                     key="rb_language_select"
@@ -524,10 +572,10 @@ if st.session_state.checkbox1_state:
                         actions_formatted = action_utils.format_actions_for_script_generation(
                             st.session_state.rb_actions_snapshot
                         )
-                        script = utils.generate_script_from_recorded_actions(actions_formatted, rb_language)
+                        script = utils.generate_script_from_recorded_actions(actions_formatted, st.session_state.rb_language )
                         if script:
                             st.session_state.recorded_script = script
-                            st.session_state.recorded_script_language = rb_language
+                            st.session_state.recorded_script_language = st.session_state.rb_language 
                             st.success("✅ Script generated from recording.")
                         else:
                             st.error("Failed to generate script from recording.check the error logs")
@@ -617,8 +665,8 @@ if st.session_state.checkbox1_state:
         #                 st.session_state.recorder.save(file_name)
         #
         #                 st.success(f"Workflow saved as {file_name}")
-if st.session_state.checkbox2_state:
-    with st.expander("🧾 BDD Feature File Generator"):
+if _tool == "bdd":
+    with _workspace("🧾 BDD Feature File Generator"):
         st.title("Feature file Generator using recorded actions")
         Feature_file_name = st.text_input("Enter feature file Name")
         Action_data = ""
@@ -654,8 +702,8 @@ if st.session_state.checkbox2_state:
             if source == "database":
                 db_handler.save_featurefile_to_db(Feature_file_name, feature_response, get_update_user())
                 st.success(f"feature file save in database for '{Feature_file_name}'")
-if st.session_state.checkbox3_state:
-    with (st.expander("🧮 E2E Scenario Based Test Case Generator")):
+if _tool == "testcases":
+    with _workspace("🧮 E2E Scenario Based Test Case Generator"):
 
         st.title("E2E Scenario Based Test Case Generation")
 
@@ -1344,8 +1392,8 @@ if st.session_state.checkbox3_state:
         # ─────────────────────────────────────────────────────────────────────
 
 
-if st.session_state.checkbox4_state:
-    with st.expander("🧪 Action-Driven Test Data Generator"):
+if _tool == "testdata":
+    with _workspace("🧪 Action-Driven Test Data Generator"):
         st.title("Enhanced Test Data Generator (Based on Action File)")
         st.session_state.test_data_action_data = ""
         st.session_state.test_files_content = ""
@@ -1404,8 +1452,8 @@ if st.session_state.checkbox4_state:
                 else:
                     st.error("Please select test data file name")
 
-if st.session_state.checkbox5_state:
-    with st.expander("🔎 Locators 🧾 POM File Generator",expanded=st.session_state.open_expander_collection):
+if _tool == "pom":
+    with _workspace("🔎 Locators / POM File Generator"):
         st.title("Locator Generator for Visible Elements")
 
         # page_url = st.text_input("Enter the URL of the page:")
@@ -1578,181 +1626,181 @@ if st.session_state.checkbox5_state:
             st.info(
                 "Please change to the new page in the browser and click 'Collecting Elements' again.")
             st.session_state.xpath_for_new_page_user_info = False
-    if st.session_state.checkbox6_state:
-        st.session_state.failed_files = []
-        with st.expander("🧾 Test Automation Script Generator"):
-            st.title("Automation Script Generator using page file and test cases")
-            test_file_name=st.text_input("Enter the test File Name")
-            test_file_language = st.selectbox("Select Language for test file",["Java-Selenium","Java-Playwright","Python-Selenium", "Python-Playwright","Desktop & Web[python-Selenium]","UTAM-JavaScript"] )
-            if test_file_language != "Desktop & Web[python-Selenium]":
-                page_files_content=""
-                test_files_content=""
-                Action_data=""
-                if source == "file":
-                    page_files_content = utils.select_and_read_text_files_xpath("page_test", Page_collection)
-                    test_files_content = utils.select_and_read_text_files_xpath("testcase_test",Test_case_collection)
-                    Action_data = utils.select_and_read_text_files_xpath("recorded action (Optional)", Action_collection)
-                elif source == "database":
-                    all_page_files = db_handler.get_all_pagefile_names()
-                    all_testcase_files=db_handler.get_all_testcasefile_names()
-                    selected_page_files = st.multiselect("Select saved page files from database", all_page_files)
-                    selected_testcase_files = st.multiselect("Select saved testcase files from database", all_testcase_files)
-                    if selected_page_files:
-                        merged_page_content = ""
+if _tool == "scripts":
+    st.session_state.failed_files = []
+    with _workspace("🧾 Test Automation Script Generator"):
+        st.title("Automation Script Generator using page file and test cases")
+        test_file_name=st.text_input("Enter the test File Name")
+        test_file_language = st.selectbox("Select Language for test file",["Java-Selenium","Java-Playwright","Python-Selenium", "Python-Playwright","Desktop & Web[python-Selenium]","UTAM-JavaScript"] )
+        if test_file_language != "Desktop & Web[python-Selenium]":
+            page_files_content=""
+            test_files_content=""
+            Action_data=""
+            if source == "file":
+                page_files_content = utils.select_and_read_text_files_xpath("page_test", Page_collection)
+                test_files_content = utils.select_and_read_text_files_xpath("testcase_test",Test_case_collection)
+                Action_data = utils.select_and_read_text_files_xpath("recorded action (Optional)", Action_collection)
+            elif source == "database":
+                all_page_files = db_handler.get_all_pagefile_names()
+                all_testcase_files=db_handler.get_all_testcasefile_names()
+                selected_page_files = st.multiselect("Select saved page files from database", all_page_files)
+                selected_testcase_files = st.multiselect("Select saved testcase files from database", all_testcase_files)
+                if selected_page_files:
+                    merged_page_content = ""
 
-                        for file in selected_page_files:
-                            content = db_handler.get_action_content_by_name(file,"page")
-                            if content:
-                                merged_page_content += f"\n### {file} ###\n{content}\n"
-                            else:
-                                # st.warning(f"⚠️ Could not load content for: {file}")
-                                st.session_state.failed_files.append(file)
-                            if st.session_state.failed_files:
-                                st.warning("⚠️ Could not load content for the following files:\n- " + "\n- ".join(
-                                    st.session_state.failed_files))
-                        page_files_content = merged_page_content
-                    if selected_testcase_files:
-                        merged_testcase_content = ""
-
-                        for file in selected_testcase_files:
-                            content = db_handler.get_action_content_by_name(file,"testcase")
-                            if content:
-                                merged_testcase_content += f"\n### {file} ###\n{content}\n"
-                            else:
-                                # st.warning(f"⚠️ Could not load content for: {file}")
-                                st.session_state.failed_files.append(file)
-
-                        test_files_content = merged_testcase_content
+                    for file in selected_page_files:
+                        content = db_handler.get_action_content_by_name(file,"page")
+                        if content:
+                            merged_page_content += f"\n### {file} ###\n{content}\n"
+                        else:
+                            # st.warning(f"⚠️ Could not load content for: {file}")
+                            st.session_state.failed_files.append(file)
                         if st.session_state.failed_files:
                             st.warning("⚠️ Could not load content for the following files:\n- " + "\n- ".join(
                                 st.session_state.failed_files))
-                    all_files = db_handler.get_all_action_names()
-                    selected_files = st.multiselect("Select saved action files from database for Testscript (optional)", all_files)
+                    page_files_content = merged_page_content
+                if selected_testcase_files:
+                    merged_testcase_content = ""
 
-                    if selected_files:
-                        merged_content = ""
+                    for file in selected_testcase_files:
+                        content = db_handler.get_action_content_by_name(file,"testcase")
+                        if content:
+                            merged_testcase_content += f"\n### {file} ###\n{content}\n"
+                        else:
+                            # st.warning(f"⚠️ Could not load content for: {file}")
+                            st.session_state.failed_files.append(file)
 
-                        for file in selected_files:
-                            content = db_handler.get_action_content_by_name(file, "action")
-                            if content:
-                                merged_content += f"\n### {file} ###\n{content}\n"
-                            else:
-                                st.warning(f"⚠️ Could not load content for: {file}")
-                        Action_data = merged_content
-                    # action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
-                    # action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
-                if st.button("Generate_Test_Script", key="gen_script_main"):
-                    Lang_lib= "Test-" + test_file_language
-                    Prompt = utils.generate_test_script(Lang_lib, test_file_language, page_files_content,test_files_content,Action_data)
-                    print("**********Script validator prompt************"+Prompt)
-                    test_script_response= utils.get_queries_from_ai_updated(Prompt)
-                    # Lang_lib_validate = "Test-validate-" + test_file_language
-                    # script_validator_prompt=utils.generate_script_validator(Lang_lib_validate,page_files_content,test_script_response)
-                    # test_script_response = utils.get_queries_from_ai_updated(script_validator_prompt)
-                    st.session_state.generated_test_script = test_script_response
-                    st.session_state.script_gen_inputs = {
-                        "test_file_language": test_file_language,
-                        "page_files_content": page_files_content,
-                        "test_files_content": test_files_content,
-                        "Action_data": Action_data,
-                        "source": source,
-                        "flow": "standard"
-                    }
-                    st.session_state.script_editor_version = st.session_state.get("script_editor_version", 0) + 1
-                    st.rerun()
-            else:
-                test_windows_application_path = st.text_input("Enter the test_windows_application_path ")
-                Action_data = ""
-                if source == "file":
-                    Action_data = utils.select_and_read_text_files_xpath("recorded action",
-                                                                         Action_collection)
-                elif source == "database":
-                    all_files = db_handler.get_all_action_names()
-                    selected_files = st.multiselect("Select saved action files from database for Testscript (optional)",
-                                                    all_files)
+                    test_files_content = merged_testcase_content
+                    if st.session_state.failed_files:
+                        st.warning("⚠️ Could not load content for the following files:\n- " + "\n- ".join(
+                            st.session_state.failed_files))
+                all_files = db_handler.get_all_action_names()
+                selected_files = st.multiselect("Select saved action files from database for Testscript (optional)", all_files)
 
-                    if selected_files:
-                        merged_content = ""
+                if selected_files:
+                    merged_content = ""
 
-                        for file in selected_files:
-                            content = db_handler.get_action_content_by_name(file, "action")
-                            if content:
-                                merged_content += f"\n### {file} ###\n{content}\n"
-                            else:
-                                st.warning(f"⚠️ Could not load content for: {file}")
-                        Action_data = merged_content
-                    # action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
-                    # action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
-                if st.button("Generate_Test_Script", key="gen_script_desktop"):
-                    Lang_lib = "Test-" + test_file_language
-                    Prompt = utils.generate_test_script_windows_web(Lang_lib,Action_data,test_windows_application_path)
-                    test_script_response = utils.get_queries_from_ai_updated(Prompt)
-                    st.session_state.generated_test_script = test_script_response
-                    st.session_state.script_gen_inputs = {
-                        "test_file_language": test_file_language,
-                        "page_files_content": "",
-                        "test_files_content": "",
-                        "Action_data": Action_data,
-                        "source": source,
-                        "flow": "desktop"
-                    }
-                    st.session_state.script_editor_version = st.session_state.get("script_editor_version", 0) + 1
-                    st.rerun()
-            if st.session_state.get("generated_test_script"):
-                ver = st.session_state.get("script_editor_version", 0)
-                _lang = st.session_state.script_gen_inputs.get("test_file_language", "")
-                _code_lang = "java" if "java" in _lang.lower() else ("javascript" if "javascript" in _lang.lower() else "python")
+                    for file in selected_files:
+                        content = db_handler.get_action_content_by_name(file, "action")
+                        if content:
+                            merged_content += f"\n### {file} ###\n{content}\n"
+                        else:
+                            st.warning(f"⚠️ Could not load content for: {file}")
+                    Action_data = merged_content
+                # action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
+                # action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
+            if st.button("Generate_Test_Script", key="gen_script_main"):
+                Lang_lib= "Test-" + test_file_language
+                Prompt = utils.generate_test_script(Lang_lib, test_file_language, page_files_content,test_files_content,Action_data)
+                print("**********Script validator prompt************"+Prompt)
+                test_script_response= utils.get_queries_from_ai_updated(Prompt)
+                # Lang_lib_validate = "Test-validate-" + test_file_language
+                # script_validator_prompt=utils.generate_script_validator(Lang_lib_validate,page_files_content,test_script_response)
+                # test_script_response = utils.get_queries_from_ai_updated(script_validator_prompt)
+                st.session_state.generated_test_script = test_script_response
+                st.session_state.script_gen_inputs = {
+                    "test_file_language": test_file_language,
+                    "page_files_content": page_files_content,
+                    "test_files_content": test_files_content,
+                    "Action_data": Action_data,
+                    "source": source,
+                    "flow": "standard"
+                }
+                st.session_state.script_editor_version = st.session_state.get("script_editor_version", 0) + 1
+                st.rerun()
+        else:
+            test_windows_application_path = st.text_input("Enter the test_windows_application_path ")
+            Action_data = ""
+            if source == "file":
+                Action_data = utils.select_and_read_text_files_xpath("recorded action",
+                                                                     Action_collection)
+            elif source == "database":
+                all_files = db_handler.get_all_action_names()
+                selected_files = st.multiselect("Select saved action files from database for Testscript (optional)",
+                                                all_files)
 
-                st.subheader("📝 Generated Script")
-                st.code(st.session_state.generated_test_script, language=_code_lang)
+                if selected_files:
+                    merged_content = ""
 
-                with st.expander("✏️ Edit Script (expand to modify before saving)"):
-                    edited_script = st.text_area(
-                        "Edit the script here:",
-                        value=st.session_state.generated_test_script,
-                        key=f"script_editor_{ver}",
-                        height=500
-                    )
+                    for file in selected_files:
+                        content = db_handler.get_action_content_by_name(file, "action")
+                        if content:
+                            merged_content += f"\n### {file} ###\n{content}\n"
+                        else:
+                            st.warning(f"⚠️ Could not load content for: {file}")
+                    Action_data = merged_content
+                # action_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Action_data} """
+                # action_data_processed = utils.get_queries_from_ai_updated(action_prompt)
+            if st.button("Generate_Test_Script", key="gen_script_desktop"):
+                Lang_lib = "Test-" + test_file_language
+                Prompt = utils.generate_test_script_windows_web(Lang_lib,Action_data,test_windows_application_path)
+                test_script_response = utils.get_queries_from_ai_updated(Prompt)
+                st.session_state.generated_test_script = test_script_response
+                st.session_state.script_gen_inputs = {
+                    "test_file_language": test_file_language,
+                    "page_files_content": "",
+                    "test_files_content": "",
+                    "Action_data": Action_data,
+                    "source": source,
+                    "flow": "desktop"
+                }
+                st.session_state.script_editor_version = st.session_state.get("script_editor_version", 0) + 1
+                st.rerun()
+        if st.session_state.get("generated_test_script"):
+            ver = st.session_state.get("script_editor_version", 0)
+            _lang = st.session_state.script_gen_inputs.get("test_file_language", "")
+            _code_lang = "java" if "java" in _lang.lower() else ("javascript" if "javascript" in _lang.lower() else "python")
 
-                st.subheader("💬 Review Feedback")
-                review_details = st.text_area(
-                    "Enter specific review details, issues, or requirements (optional):",
-                    value="",
-                    key=f"script_review_{ver}",
-                    height=150,
-                    placeholder="e.g., 'TC02 step 3 is missing', 'Add wait for page load after login', ..."
+            st.subheader("📝 Generated Script")
+            st.code(st.session_state.generated_test_script, language=_code_lang)
+
+            with st.expander("✏️ Edit Script (expand to modify before saving)"):
+                edited_script = st.text_area(
+                    "Edit the script here:",
+                    value=st.session_state.generated_test_script,
+                    key=f"script_editor_{ver}",
+                    height=500
                 )
-                col_save, col_regen = st.columns(2)
-                with col_save:
-                    if st.button("💾 Save Generated Script", key="save_script_btn"):
-                        final_script = st.session_state.get(f"script_editor_{ver}", st.session_state.generated_test_script)
-                        gen_source = st.session_state.script_gen_inputs.get("source", source)
-                        if gen_source == "file":
-                            utils.create_test_file(Test_file_generator, test_file_name, test_file_language, final_script)
-                        elif gen_source == "database":
-                            db_handler.save_testfile_to_db(test_file_name, final_script, get_update_user(), test_file_language)
-                        st.success("✅ Script saved successfully!")
-                        st.session_state.generated_test_script = None
-                with col_regen:
-                    if st.button("🔄 Regenerate Script", key="regen_script_btn"):
-                        current_script = st.session_state.get(f"script_editor_{ver}", st.session_state.generated_test_script)
-                        current_review = st.session_state.get(f"script_review_{ver}", "")
-                        inputs = st.session_state.script_gen_inputs
-                        regen_prompt = utils.generate_code_review_prompt(
-                            inputs["test_file_language"],
-                            inputs.get("page_files_content", ""),
-                            inputs.get("test_files_content", ""),
-                            inputs.get("Action_data", ""),
-                            current_script,
-                            current_review
-                        )
-                        regenerated_script = utils.get_queries_from_ai_updated(regen_prompt)
-                        st.session_state.generated_test_script = regenerated_script
-                        st.session_state.script_editor_version = ver + 1
-                        st.rerun()
 
-if st.session_state.checkbox7_state:
-    with st.expander("⚙️ Source Code 📡 Automation Bridge"):
+            st.subheader("💬 Review Feedback")
+            review_details = st.text_area(
+                "Enter specific review details, issues, or requirements (optional):",
+                value="",
+                key=f"script_review_{ver}",
+                height=150,
+                placeholder="e.g., 'TC02 step 3 is missing', 'Add wait for page load after login', ..."
+            )
+            col_save, col_regen = st.columns(2)
+            with col_save:
+                if st.button("💾 Save Generated Script", key="save_script_btn"):
+                    final_script = st.session_state.get(f"script_editor_{ver}", st.session_state.generated_test_script)
+                    gen_source = st.session_state.script_gen_inputs.get("source", source)
+                    if gen_source == "file":
+                        utils.create_test_file(Test_file_generator, test_file_name, test_file_language, final_script)
+                    elif gen_source == "database":
+                        db_handler.save_testfile_to_db(test_file_name, final_script, get_update_user(), test_file_language)
+                    st.success("✅ Script saved successfully!")
+                    st.session_state.generated_test_script = None
+            with col_regen:
+                if st.button("🔄 Regenerate Script", key="regen_script_btn"):
+                    current_script = st.session_state.get(f"script_editor_{ver}", st.session_state.generated_test_script)
+                    current_review = st.session_state.get(f"script_review_{ver}", "")
+                    inputs = st.session_state.script_gen_inputs
+                    regen_prompt = utils.generate_code_review_prompt(
+                        inputs["test_file_language"],
+                        inputs.get("page_files_content", ""),
+                        inputs.get("test_files_content", ""),
+                        inputs.get("Action_data", ""),
+                        current_script,
+                        current_review
+                    )
+                    regenerated_script = utils.get_queries_from_ai_updated(regen_prompt)
+                    st.session_state.generated_test_script = regenerated_script
+                    st.session_state.script_editor_version = ver + 1
+                    st.rerun()
+
+if _tool == "repo":
+    with _workspace("⚙️ Source Code / Automation Bridge"):
         st.title("Upload code to Repository")
         if source == "file":
             pytest_files = utils.select_and_read_text_files_xpath("test_file", utils.Test_file_generator)
@@ -1823,9 +1871,9 @@ if st.session_state.checkbox7_state:
                 st.warning("⚠️ Please enter both folder names in the repo.")
 
 
-if st.session_state.checkbox8_state:
+if _tool == "artifacts":
     if source == "database":
-        with st.expander("📥 Download Artifacts"):
+        with _workspace("📥 Download Artifacts"):
             st.title("Download Artifacts from Database")
             file_type = st.selectbox("Select FileType",
                             ["Recorded_Action_file", "Page_file", "Test_file", "Testcase_file"])
@@ -1860,8 +1908,8 @@ if st.session_state.checkbox8_state:
                         st.warning("⚠️ Could not prepare the ZIP.")
                 else:
                     st.warning("⚠️ Please select at least one file.")
-if st.session_state.checkbox9_state:
-    with st.expander("🚀 Test Execution & Allure Reporting"):
+if _tool == "execute":
+    with _workspace("🚀 Test Execution & Allure Reporting"):
         st.title("Execute Generated Test Scripts and View Allure Reports")
 
         # List test files
@@ -1921,57 +1969,4 @@ st.markdown("""
     ### Contact Us
     - Reach us at [QE Core Team](mailto:sahil.gupta@tigeranalytics.com)
 """)
-
-
-# Create 10 columns
-col0, col1, col2, col3, col4, col5, col6, col7,col8,col9= st.columns(10)
-
-with col0:
-    st.write("Choose display")
-with col1:
-    checkbox1 = st.checkbox("(1)", value=st.session_state.checkbox1_state)
-    if st.session_state.checkbox1_state != checkbox1:
-        st.session_state.checkbox1_state = checkbox1  # Update session state
-        st.rerun()
-with col2:
-    checkbox2 = st.checkbox("(2)", value=st.session_state.checkbox2_state)
-    if st.session_state.checkbox2_state != checkbox2:
-        st.session_state.checkbox2_state = checkbox2  # Update session state
-        st.rerun()
-with col3:
-    checkbox3 = st.checkbox("(3)", value=st.session_state.checkbox3_state)
-    if st.session_state.checkbox3_state != checkbox3:
-        st.session_state.checkbox3_state = checkbox3  # Update session state
-        st.rerun()
-with col4:
-    checkbox4 = st.checkbox("(4)", value=st.session_state.checkbox4_state)
-    if st.session_state.checkbox4_state != checkbox4:
-        st.session_state.checkbox4_state = checkbox4  # Update session state
-        st.rerun()
-with col5:
-    checkbox5 = st.checkbox("(5)", value=st.session_state.checkbox5_state)
-    if st.session_state.checkbox5_state != checkbox5:
-        st.session_state.checkbox5_state = checkbox5  # Update session state
-        st.rerun()
-with col6:
-    checkbox6 = st.checkbox("(6)", value=st.session_state.checkbox6_state)
-    if st.session_state.checkbox6_state != checkbox6:
-        st.session_state.checkbox6_state = checkbox6  # Update session state
-        st.rerun()
-with col7:
-    checkbox7= st.checkbox("(7)", value=st.session_state.checkbox7_state)
-    if st.session_state.checkbox7_state != checkbox7:
-        st.session_state.checkbox7_state = checkbox7  # Update session state
-        st.rerun()
-
-with col8:
-    checkbox8= st.checkbox("(8)", value=st.session_state.checkbox8_state)
-    if st.session_state.checkbox8_state != checkbox8:
-        st.session_state.checkbox8_state = checkbox8  # Update session state
-        st.rerun()
-with col9:
-    checkbox9= st.checkbox("(9)", value=st.session_state.checkbox9_state)
-    if st.session_state.checkbox9_state != checkbox9:
-        st.session_state.checkbox9_state = checkbox9  # Update session state
-        st.rerun()
 

@@ -1166,6 +1166,381 @@ JS_action_listeners = """/**
 
 })(window.__iqea_windowId);"""
 
+# ─────────────────────────────────────────────────────────────────────────────
+# AgentFlow (React Flow / xyflow) dedicated listener  — IQEA v3.0
+# Built on the v2.0 architecture (smart-xpath, cross-window relay, SPA history
+# patch) PLUS React-Flow-specific capture:
+#   • node-aware labels           -> "<node title> (<CATEGORY>)"
+#   • palette drag (HTML5 DnD)    -> add_node with the dragged node type
+#   • Slate.js prompt editor      -> serialized text with {{smart-chips}}
+#   • MUI Select / react-select   -> select_option with the chosen option text
+#   • flow graph snapshot         -> nodes + edges captured on Save/Test/Deploy
+# Login is handled by a pre-authenticated Chrome profile, so OAuth origins are
+# simply skipped here (belt-and-braces).
+# ─────────────────────────────────────────────────────────────────────────────
+JS_action_listeners_agentflow_v2 = """(function (statusKey) {
+
+    const _currentUrl = window.location.href;
+    if (window.__iqeaAF_url === _currentUrl) return;
+    window.__iqeaAF_url = _currentUrl;
+
+    // ─── Skip cross-origin OAuth pages (pre-auth profile handles login) ───────
+    function onAuthPage() {
+        const h = location.hostname.toLowerCase();
+        const p = location.pathname.toLowerCase();
+        return h.includes("google") || h.includes("microsoft") ||
+               h.includes("login.microsoftonline") || h.includes("accounts.") ||
+               p.includes("/signin") || p.includes("/auth");
+    }
+
+    function nextStepNumber() {
+        const n = parseInt(localStorage.getItem("__iqea_step") || "0") + 1;
+        localStorage.setItem("__iqea_step", String(n));
+        return n;
+    }
+
+    // ─── Persistence + cross-window relay (same as v2.0) ──────────────────────
+    if (!window.__recordedActions) {
+        window.__recordedActions = JSON.parse(localStorage.getItem("recordedActions") || "[]");
+    }
+    function saveAction(action) {
+        const existing = JSON.parse(localStorage.getItem("recordedActions") || "[]");
+        const last = existing.length > 0 ? existing[existing.length - 1] : null;
+        // de-dupe identical rapid-fire events (but never drop snapshots/drops)
+        if (last && !["flow_snapshot","add_node"].includes(action.action) &&
+            last.action === action.action &&
+            last.label === action.label &&
+            last.url === action.url &&
+            (!action.value || action.value === last.value) &&
+            (new Date(action.timestamp) - new Date(last.timestamp)) < 500) {
+            return;
+        }
+        existing.push(action);
+        localStorage.setItem("recordedActions", JSON.stringify(existing));
+        window.__recordedActions.push(action);
+        try {
+            window.dispatchEvent(new CustomEvent("__action_recorded", { detail: action }));
+            if (window.opener && window.opener !== window)
+                window.opener.postMessage({ __relay: true, payload: action }, "*");
+            if (window.__iqeaChannel)
+                window.__iqeaChannel.postMessage({ __relay: true, payload: action });
+        } catch (err) { console.warn("Relay failed:", err); }
+    }
+    try {
+        if (!window.__iqeaChannel) {
+            window.__iqeaChannel = new BroadcastChannel("__iqea_channel");
+            window.__iqeaChannel.onmessage = (e) => {
+                if (e.data && e.data.__relay && e.data.payload) saveAction(e.data.payload);
+            };
+        }
+    } catch (_) {}
+    if (!window.__iqeaAF_msg) {
+        window.__iqeaAF_msg = true;
+        window.addEventListener("message", function (event) {
+            if (event.data && event.data.__relay && event.data.payload) {
+                saveAction(event.data.payload);
+                if (window.opener && window.opener !== window)
+                    window.opener.postMessage(event.data, "*");
+            }
+        });
+    }
+
+    // ─── Small helpers ─────────────────────────────────────────────────────────
+    // Collapse whitespace/newlines and cap length so a container's innerText can
+    // never become a giant multi-line label.
+    function clean(s, max) {
+        s = (s || "").replace(/[\\u200B\\uFEFF]/g, "").replace(/\\s+/g, " ").trim();
+        max = max || 60;
+        return s.length > max ? s.slice(0, max) : s;
+    }
+    // react-select / MUI-Select carry hidden <input>s that fire change/blur with
+    // the option value — we already capture the visible option click, so ignore.
+    function isWidgetInternalInput(el) {
+        if (!el || !el.closest) return false;
+        return el.classList?.contains("select__input") ||
+               el.classList?.contains("MuiSelect-nativeInput") ||
+               !!el.closest(".select__control") ||
+               !!el.closest(".MuiSelect-root") ||
+               el.getAttribute("aria-hidden") === "true";
+    }
+    // Elements worth recording a click on. Anything else (empty div/span, bare
+    // svg icon, canvas background) is skipped.
+    const CLICK_SEL = "a,button,[role='button'],[role='option'],[role='menuitem']," +
+        "[role='tab'],[role='switch'],[role='checkbox'],[role='combobox'],[role='textbox']," +
+        "input,select,textarea,label,summary," +
+        ".react-flow__node[data-id],.react-flow__handle,[draggable='true']," +
+        ".MuiButtonBase-root,.select__option,li[role='option']";
+
+    // ─── React-Flow helpers ───────────────────────────────────────────────────
+    function flowNode(el) {
+        return el && el.closest ? el.closest(".react-flow__node[data-id]") : null;
+    }
+    function nodeInfo(node) {
+        if (!node) return null;
+        const title = (node.querySelector(".font-semibold")?.innerText || "").trim();
+        const cat   = (node.querySelector(".text-gray-500")?.innerText || "").trim();
+        const pos   = (node.getAttribute("style")?.match(/translate\\(([^)]+)\\)/) || [])[1] || "";
+        const kind  = (node.className || "").includes("node-core_node") ? "core" : "custom";
+        return {
+            id: node.getAttribute("data-id"),
+            title: title, category: cat, pos: pos, kind: kind
+        };
+    }
+
+    // ─── Slate.js prompt serializer (keeps {{smart-chips}}) ───────────────────
+    function serializeSlate(editor) {
+        let out = "";
+        (function walk(n) {
+            n.childNodes.forEach(ch => {
+                if (ch.nodeType === Node.TEXT_NODE) { out += ch.nodeValue; return; }
+                if (ch.nodeType !== Node.ELEMENT_NODE) return;
+                if (ch.getAttribute && ch.getAttribute("data-cy") === "smart-chip") {
+                    const name = (ch.textContent || "").replace(/[\\u200B\\uFEFF\\u00A0]/g, "").trim();
+                    if (name) out += " {{" + name + "}} ";
+                    return;
+                }
+                if (ch.getAttribute && ch.getAttribute("data-slate-spacer") !== null) return;
+                walk(ch);
+            });
+        })(editor);
+        return out.replace(/[\\u200B\\uFEFF]/g, "").replace(/\\u00A0/g, " ")
+                  .replace(/[ \\t]+/g, " ").trim();
+    }
+
+    // ─── Smart XPath (id / testid / data-id / aria / name -> positional) ──────
+    function getSmartXPath(el) {
+        if (!el || el.nodeType !== Node.ELEMENT_NODE) return "";
+        const node = flowNode(el);
+        if (node) {
+            const tid = node.getAttribute("data-testid");
+            if (tid) return '//div[@data-testid="' + tid + '"]';
+        }
+        if (el.id && !/^[0-9]/.test(el.id) && el.id !== "submit-btn")
+            return '//*[@id="' + el.id + '"]';
+        for (const a of ["data-testid","data-cy","data-id","data-handleid"]) {
+            const v = el.getAttribute(a);
+            if (v) return '//' + el.tagName.toLowerCase() + '[@' + a + '="' + v + '"]';
+        }
+        const it = ["input","button","select","textarea","a"];
+        if (it.includes(el.tagName.toLowerCase())) {
+            for (const a of ["aria-label","name","placeholder","title"]) {
+                const v = el.getAttribute(a);
+                if (v) return '//' + el.tagName.toLowerCase() + '[@' + a + '="' + v + '"]';
+            }
+        }
+        const parts = [];
+        let cur = el;
+        while (cur && cur.nodeType === Node.ELEMENT_NODE) {
+            let i = 1, sib = cur.previousElementSibling;
+            while (sib) { if (sib.tagName === cur.tagName) i++; sib = sib.previousElementSibling; }
+            const t = cur.tagName.toLowerCase();
+            parts.unshift(i > 1 ? t + "[" + i + "]" : t);
+            cur = cur.parentNode;
+        }
+        return "/" + parts.join("/");
+    }
+
+    // ─── Label extractor (node-aware) ─────────────────────────────────────────
+    function getLabel(el) {
+        if (!el) return "";
+        const node = flowNode(el);
+        if (node) {
+            const info = nodeInfo(node);
+            // prefer the button intent (Edit/Clone) inside the node when present
+            const btn = el.closest("button[title]");
+            const btnT = btn ? btn.getAttribute("title") : "";
+            const base = info.title ? (info.title + " (" + info.category + ")") : "flow-node";
+            return btnT ? (btnT + " · " + base) : base;
+        }
+        return clean(
+            el.getAttribute("aria-label") ||
+            el.getAttribute("title") ||
+            el.getAttribute("data-testid") ||
+            el.getAttribute("name") ||
+            (el.id && el.id !== "submit-btn" ? el.id : "") ||
+            el.getAttribute("placeholder") ||
+            el.innerText ||
+            el.type || ""
+        );
+    }
+
+    // ─── Core record ──────────────────────────────────────────────────────────
+    function recordAction(type, target, extra = {}) {
+        if (onAuthPage()) return;
+        if (!target || ["script","style","html","body","head"].includes(
+            target.tagName?.toLowerCase())) return;
+        const node = flowNode(target);
+        const info = node ? nodeInfo(node) : null;
+        const actionObj = {
+            step: nextStepNumber(),
+            action: type,
+            xpath: getSmartXPath(target),
+            label: (getLabel(target) || "").trim(),
+            value: extra.value !== undefined ? String(extra.value).trim()
+                   : (["input","change","select"].includes(type)
+                        ? (target.value || target.innerText || "") : ""),
+            url: window.location.href,
+            tagName: (target.tagName || "").toLowerCase(),
+            nodeId: info ? info.id : "",
+            nodeTitle: info ? info.title : "",
+            nodeCategory: info ? info.category : "",
+            windowId: window.name || statusKey,
+            timestamp: new Date().toISOString(),
+            ...extra
+        };
+        saveAction(actionObj);
+        console.log("IQEA-AF:", actionObj);
+    }
+
+    // ─── Flow graph snapshot (the real source of truth for the built flow) ────
+    function snapshotFlow(trigger) {
+        const nodes = [...document.querySelectorAll(".react-flow__node[data-id]")]
+            .map(n => nodeInfo(n));
+        const edges = [...document.querySelectorAll(".react-flow__edge[data-id]")]
+            .map(e => ({ id: e.getAttribute("data-id"),
+                         label: e.getAttribute("aria-label") || "" }));
+        saveAction({
+            step: nextStepNumber(),
+            action: "flow_snapshot",
+            label: "flow after " + (trigger || "change"),
+            value: JSON.stringify({ nodes, edges }),
+            url: window.location.href,
+            nodeCount: nodes.length,
+            edgeCount: edges.length,
+            windowId: window.name || statusKey,
+            timestamp: new Date().toISOString()
+        });
+        console.log("IQEA-AF snapshot:", nodes.length, "nodes,", edges.length, "edges");
+    }
+
+    // ─── Listeners (AbortController = exactly one set per document) ────────────
+    let _dragType = null;
+
+    function attachListeners(root) {
+        if (root.__iqeaAF_ctl) root.__iqeaAF_ctl.abort();
+        const ctl = new AbortController();
+        const opts = { signal: ctl.signal, capture: true };
+        root.__iqeaAF_ctl = ctl;
+        const doc = root.ownerDocument || root;
+
+        // CLICK — record ONLY meaningful intents (never bare wrappers/icons)
+        doc.addEventListener("click", e => {
+            // 1) dropdown option chosen (MUI menu item or react-select option)
+            const opt = e.target.closest(
+                "[role='option'],.select__option,.MuiMenuItem-root,li[role='option']");
+            if (opt) { recordAction("select_option", opt, { value: clean(opt.innerText) }); return; }
+
+            // 2) resolve to the nearest interactive element; ignore clicks that
+            //    land on empty <div>/<span>/<svg> wrappers or the canvas background
+            const t = e.target.closest(CLICK_SEL);
+            if (!t) return;
+
+            recordAction("click", t);
+
+            // snapshot the flow after meaningful saves
+            const btn = t.closest("button");
+            const label = clean(btn ? btn.innerText : t.innerText).toLowerCase();
+            if (/^(save|deploy|test|publish|continue)$/.test(label)) {
+                setTimeout(() => snapshotFlow(label), 700);
+            }
+        }, opts);
+
+        doc.addEventListener("contextmenu", e => recordAction("right_click", e.target), opts);
+
+        // Non-text form controls only. Text/number <input> and <textarea> are
+        // intentionally NOT captured here — they are committed once on blur by
+        // the focusout handler below. Recording them in both places produced
+        // duplicate "Enter ..." lines (change + focusout fire on the same blur).
+        // Skip react-select / MUI-Select hidden inputs (captured as select_option).
+        doc.addEventListener("change", e => {
+            const el = e.target, tag = el.tagName.toLowerCase();
+            if (isWidgetInternalInput(el)) return;
+            if      (tag === "select")       recordAction("select",   el, { value: el.options[el.selectedIndex]?.text || el.value });
+            else if (el.type === "checkbox") recordAction("checkbox", el, { value: el.checked ? "checked" : "unchecked" });
+            else if (el.type === "radio")    recordAction("radio",    el, { value: el.value });
+        }, opts);
+
+        // Commit text / Slate prompt on blur
+        doc.addEventListener("focusout", e => {
+            const el = e.target;
+            const slate = el.closest ? el.closest("[data-slate-editor='true']") : null;
+            if (slate) {
+                const txt = serializeSlate(slate);
+                if (txt && txt !== slate.__iqeaLastVal) {
+                    slate.__iqeaLastVal = txt;
+                    recordAction("enter_prompt", slate, { value: txt });
+                }
+                return;
+            }
+            if (isWidgetInternalInput(el)) return;
+            const tag = el.tagName ? el.tagName.toLowerCase() : "";
+            if (["input","textarea"].includes(tag) && el.value)
+                recordAction("enter_text", el, { value: el.value });
+        }, opts);
+
+        // Keyboard (Enter/Escape only — enough for this app)
+        doc.addEventListener("keydown", e => {
+            if (e.key === "Enter")  recordAction("key_enter",  e.target, { value: "Enter" });
+            if (e.key === "Escape") recordAction("key_escape", e.target, { value: "Escape" });
+        }, opts);
+
+        // ── Palette drag-and-drop (HTML5 DnD) ────────────────────────────────
+        // Palette items are MUI buttons [draggable=true]; node type = button text.
+        doc.addEventListener("dragstart", e => {
+            const btn = e.target.closest ? e.target.closest("[draggable='true']") : null;
+            if (!btn) return;
+            // ignore drags that originate inside the canvas (moving a node / slate chip)
+            if (btn.closest(".react-flow__renderer") || btn.closest("[data-slate-editor]")) {
+                _dragType = null; return;
+            }
+            _dragType = (btn.innerText || "").trim() || getLabel(btn);
+        }, opts);
+
+        doc.addEventListener("drop", e => {
+            if (!_dragType) return;
+            const onCanvas = e.target.closest &&
+                (e.target.closest(".react-flow__pane") || e.target.closest(".react-flow__renderer"));
+            recordAction("add_node", e.target, {
+                value: _dragType,
+                dropX: Math.round(e.clientX),
+                dropY: Math.round(e.clientY),
+                onCanvas: !!onCanvas
+            });
+            _dragType = null;
+            // capture the graph shortly after the node lands
+            setTimeout(() => snapshotFlow("add_node"), 700);
+        }, opts);
+
+        console.log("IQEA-AF listeners attached:", root);
+    }
+
+    // ─── SPA route changes (React Router pushState) ───────────────────────────
+    if (!window.__iqeaAF_history) {
+        window.__iqeaAF_history = true;
+        const wrap = orig => function (...a) {
+            const r = orig.apply(this, a);
+            window.dispatchEvent(new Event("__iqeaAF_nav"));
+            return r;
+        };
+        history.pushState = wrap(history.pushState);
+        history.replaceState = wrap(history.replaceState);
+        window.addEventListener("popstate", () => window.dispatchEvent(new Event("__iqeaAF_nav")));
+        window.addEventListener("__iqeaAF_nav", () => {
+            window.__iqeaAF_url = null;
+            setTimeout(() => attachListeners(document), 300);
+        });
+    }
+
+    function init() {
+        if (onAuthPage()) { console.log("IQEA-AF: auth page skipped"); return; }
+        attachListeners(document);
+        console.log("IQEA-AF v3.0 ready. statusKey:", statusKey);
+    }
+    if (document.readyState === "complete" || document.readyState === "interactive") init();
+    else window.addEventListener("load", init, { once: true });
+
+})(window.__iqea_windowId || window.name);"""
+
 JS_action_listeners_clode_mar17="""/**
  * IQEA Enhanced Action Listener v2.0
  * Supports: click, keyboard, scroll, drag-drop, right-click, copy/paste,
@@ -1888,6 +2263,45 @@ def injection_script_updated_fixed():
     }})();
     """
 
+def injection_script_agentflow():
+    """
+    Injection wrapper for the AgentFlow (React Flow) recorder — IQEA v3.0.
+    Mirrors injection_script_updated_fixed() (stable windowId + heartbeat +
+    cross-window relay) but loads JS_action_listeners_agentflow_v2, which adds
+    React-Flow node capture, palette drag, Slate prompt serialization and flow
+    graph snapshots. Use this instead of injection_script_updated_fixed() when
+    recording on AgentFlow; every other app keeps using the generic recorder.
+    """
+    return f"""
+    (function() {{
+        if (window.__recorderInjected) return;
+        window.__recorderInjected = true;
+
+        if (!window.name || window.name.trim() === "") {{
+            window.name = "recorder_" + Math.random().toString(36).substr(2, 9);
+        }}
+        const windowId = window.name;
+        const statusKey = "recorder_status_" + windowId;
+        window.__iqea_windowId = statusKey;
+
+        function updateStatus(alive = true) {{
+            localStorage.setItem(statusKey, JSON.stringify({{
+                windowId: windowId, alive: alive,
+                url: window.location.href, ts: Date.now()
+            }}));
+        }}
+        updateStatus(true);
+        setInterval(() => updateStatus(true), 2000);
+        window.addEventListener("beforeunload", () => updateStatus(false));
+
+        // ---- Inject the AgentFlow listeners ----
+        {JS_action_listeners_agentflow_v2}
+        window.__reinjectionGrace = Date.now();
+
+        console.log("✅ AgentFlow recorder (v3.0) injected + heartbeat active");
+    }})();
+    """
+
 FINAL_JS_ACTION_LISTENER="""(function () {
     if (!window.__recordedActions) {
         window.__recordedActions = JSON.parse(localStorage.getItem("recordedActions") || "[]");
@@ -2438,15 +2852,49 @@ def humanize_action(action_dict):
     Converts a recorded action into a human-readable sentence suitable for AI consumption.
     """
     action_type = action_dict.get("action")
-    tag = (action_dict.get("tag") or "").lower()
+    # v3.0 stores tag under "tagName" and id under "elementId"; keep back-compat
+    tag = (action_dict.get("tag") or action_dict.get("tagName") or "").lower()
     label = (action_dict.get("label") or "").strip()
     raw = action_dict.get("value")
     value = str(raw).strip() if raw is not None else ""
     placeholder = (action_dict.get("placeholder") or "").strip()
-    element_id = (action_dict.get("id") or "").strip()
+    element_id = (action_dict.get("id") or action_dict.get("elementId") or "").strip()
 
     display_label = label or placeholder or element_id.replace("-", " ").replace("_", " ").title()
 
+    # ── AgentFlow (React Flow) specific actions — additive only; the generic
+    #    recorder never emits these, so existing apps are unaffected. All
+    #    AgentFlow noise filtering happens in the listener, not here. ──────────
+    if action_type == "add_node":
+        return f'Drag and drop a "{value}" node onto the canvas'
+
+    elif action_type == "enter_prompt":
+        return f'Enter the prompt: "{value}"'
+
+    elif action_type == "select_option":
+        return f'Select "{value}" from the dropdown'
+
+    elif action_type == "enter_text":
+        return f'Enter "{value}" in the "{display_label}" field'
+
+    elif action_type == "flow_snapshot":
+        n = action_dict.get("nodeCount", "?")
+        m = action_dict.get("edgeCount", "?")
+        return f'[Flow state: {n} node(s), {m} connection(s)]'
+
+    elif action_type == "key_enter":
+        return f'Press Enter in "{display_label}"'
+
+    elif action_type == "key_escape":
+        return f'Press Escape'
+
+    elif action_type == "checkbox":
+        return f'{"Check" if value == "checked" else "Uncheck"} "{display_label}"'
+
+    elif action_type == "radio":
+        return f'Select radio option "{value}" ({display_label})'
+
+    # ── Generic web actions ───────────────────────────────────────────────────
     if action_type == "click":
         if tag == "button" or "btn" in element_id.lower():
             return f'Click the "{display_label}" button'

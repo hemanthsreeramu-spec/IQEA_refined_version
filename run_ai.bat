@@ -47,6 +47,12 @@ REM Run the Streamlit script
 IF EXIST %STREAMLIT_SCRIPT% (
     echo Running %STREAMLIT_SCRIPT%...
     set PYTHONUTF8=1
+    REM Force protobuf's pure-Python implementation. The native "upb" C-extension
+    REM access-violates (segfaults) when pages import heavy libs that touch
+    REM protobuf's descriptor pool, silently killing the Streamlit server and
+    REM producing "Failed to fetch dynamically imported module" in the browser.
+    REM Must be set BEFORE streamlit starts (streamlit imports protobuf on launch).
+    set PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
     streamlit run %STREAMLIT_SCRIPT%
 ) ELSE (
     echo %STREAMLIT_SCRIPT% not found!

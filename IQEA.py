@@ -226,6 +226,18 @@ def run_page(file_path):
     page_dir = os.path.dirname(file_path)
     if page_dir not in sys.path:
         sys.path.insert(0, page_dir)
+    # NOTE: We deliberately do NOT evict cached submodules from sys.modules here.
+    # An earlier version evicted every module whose __file__ lived under the
+    # project root to hot-reload edits to utils/*.py without a restart. That was
+    # harmful:
+    #   * The virtualenv (.venv) sits inside the project root, so it also evicted
+    #     Streamlit's own modules -> re-import mid-run with fresh ContextVars ->
+    #     "FragmentThreadState not initialized" and pages failing to load.
+    #   * Even limited to the app's own modules, it forced heavy re-imports of
+    #     desktop.recorder etc. (native keyboard/mouse hooks, pywinauto) on every
+    #     navigation, which intermittently hung or crashed the server.
+    # Modules are now imported once and cached. If you edit utils/*.py during
+    # development, restart the Streamlit server to pick up the changes.
     with open(file_path, "r", encoding="utf-8") as f:
         exec(f.read(), {"__file__": file_path})
 

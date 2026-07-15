@@ -1391,7 +1391,7 @@ def thread_new_window_checker(driver, injected_windows, last_urls, stop_flag, sc
                 if handle not in injected_windows:
                     # New window detected
                     driver.switch_to.window(handle)
-                    driver.execute_script(action_utils.injection_script_updated_fixed())
+                    driver.execute_script(action_utils.injection_script_agentflow())
                     # Mark as injected
                     injected_windows[handle] = True
                     last_urls[handle] = driver.current_url
@@ -1753,7 +1753,7 @@ def thread_focus_and_url_monitor(driver, injected_windows, last_urls, stop_flag,
             # Compare last URL for current handle
             print("last_urls.get(current_handle)",last_urls.get(current_handle))
             if last_urls.get(current_handle) != current_url:
-                driver.execute_script(action_utils.injection_script_updated_fixed())
+                driver.execute_script(action_utils.injection_script_agentflow())
                 last_urls[current_handle] = current_url
                 print(f"🔄 URL changed in window {current_handle}, JS reinjected ({current_url})")
 

@@ -1,3 +1,6 @@
+
+
+
 SCHEMA: tiger_data_engineering.global_superstore_gold
 =====================================================
 
@@ -53,11 +56,37 @@ market               string
 
 Total Columns: 3
 
-
-
-
 http: /sql/1.0/warehouses/2c6c012178222d1b
 hots: dbc-35255fb7-9e4c.cloud.databricks.com
 token:dapi4281b3da3ea39c5f58a2eb57844038ef
 catelog:tiger_data_engineering
 schema:global_superstore_gold
+
+
+
+Buddy I think we have to work in pahse 1:
+
+Expectation:
+we need to extract all visuals and kpis from teh report our current approach is doing that
+but we need to finnd slicers from repotrt along with values listed 
+
+So our extraction must be:
+
+Find all visuals and slicer example in our sample reportL
+Slicer:
+REegion
+Segment
+Date
+visuals (Kpi's):
+Top 10 total sales by product name
+Subcategory (profit margin,return rate graph)
+Table with region wise data 
+total sale by year segment
+total order by Ship mode
+From all visual we can able to right click and select show as tabel and extarct all values 
+
+now we got visual wise data (kpi's) and slicer details 
+so 5 visual and 3 slicer
+we have to create visual wise sheet each sheet with each visual and data and seperate sheet fro visuals 
+
+Will first complete this and do you have any other idea or chnage in plan please let me know

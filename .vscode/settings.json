@@ -7,5 +7,6 @@
         "--tb=short"
     ],
     "python.testing.unittestEnabled": false,
-    "python.terminal.activateEnvironment": true
+    "python.terminal.activateEnvironment": true,
+    "python-envs.defaultEnvManager": "ms-python.python:system"
 }
