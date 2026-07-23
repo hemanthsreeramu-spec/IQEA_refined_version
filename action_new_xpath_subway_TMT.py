@@ -285,17 +285,34 @@ def _workspace(title):
     with st.container(border=True):
         yield
 
-st.markdown(
-    "<style>.stButton>button[kind=\"primary\"]{background:#F47B20;border-color:#F47B20;}"
-    ".stButton>button{font-weight:600;}</style>",
-    unsafe_allow_html=True,
-)
+st.markdown("""
+<style>
+.stButton>button[kind="primary"]{background:#F47B20;border-color:#F47B20;}
+.stButton>button{font-weight:600;}
+/* highlighted phase header inside each panel */
+.iqea-phase{
+    background:transparent;
+    color:#E8650A !important;
+    font-weight:800; font-size:15px; letter-spacing:.6px; text-transform:uppercase;
+    text-align:center; padding:2px 0 8px 0;
+    margin:0 0 12px 0; border-bottom:2px solid #F47B20;
+}
+/* give every phase panel an even height + subtle lift */
+.iqea-rail [data-testid="stVerticalBlockBorderWrapper"]{
+    background:#ffffff; border:1px solid #E3E6EC !important; border-radius:12px;
+    box-shadow:0 3px 10px rgba(0,0,0,.05); min-height:170px;
+}
+</style>
+""", unsafe_allow_html=True)
 
 _IQEA_PHASES = [
     ("🎬 Capture", [("recorder", "🔴 Recorder")]),
-    ("📝 Author", [("testcases", "🧮 Test Cases"), ("bdd", "🧾 BDD Feature"), ("testdata", "🧪 Test Data")]),
+    ("📝 Author", [("testcases", "🧮 Test Cases"), ("testdata", "🧪 Test Data"),*([("bdd", "🧾 BDD Feature")] if source == "database" else []),]),
     ("🔧 Build", [("pom", "🔎 Locators / POM"), ("scripts", "📜 Script Gen")]),
-    ("🚀 Run & Report", [("execute", "▶️ Execute"), ("artifacts", "📥 Artifacts")]),
+    ("🚀 Run & Report", [
+        ("execute", "▶️ Execute & Report"),
+        *([("artifacts", "📥 Artifacts")] if source == "database" else []),
+    ]),
     ("🔗 Integrate", [("repo", "⚙️ Repo Push")]),
 ]
 
@@ -303,19 +320,22 @@ if "iqea_active_tool" not in st.session_state:
     st.session_state.iqea_active_tool = "recorder"
 
 st.markdown("##### 🧰 Select Agent")
+st.markdown("<div class='iqea-rail'>", unsafe_allow_html=True)
 _rail_cols = st.columns(len(_IQEA_PHASES))
 for _col, (_phase, _tools) in zip(_rail_cols, _IQEA_PHASES):
     with _col:
-        st.caption(_phase)
-        for _tid, _label in _tools:
-            if st.button(
-                _label,
-                key=f"iqea_nav_{_tid}",
-                use_container_width=True,
-                type="primary" if st.session_state.iqea_active_tool == _tid else "secondary",
-            ):
-                st.session_state.iqea_active_tool = _tid
-                st.rerun()
+        with st.container(border=True):
+            st.markdown(f"<div class='iqea-phase'>{_phase}</div>", unsafe_allow_html=True)
+            for _tid, _label in _tools:
+                if st.button(
+                    _label,
+                    key=f"iqea_nav_{_tid}",
+                    use_container_width=True,
+                    type="primary" if st.session_state.iqea_active_tool == _tid else "secondary",
+                ):
+                    st.session_state.iqea_active_tool = _tid
+                    st.rerun()
+st.markdown("</div>", unsafe_allow_html=True)
 
 _tool = st.session_state.iqea_active_tool
 st.divider()

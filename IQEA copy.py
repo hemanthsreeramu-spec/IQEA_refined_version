@@ -356,7 +356,7 @@ with st.sidebar:
 
     page = st.radio(
         "Go to",
-        ["🏠  Home", "💬  Chat Agent", "🧠  IQEA", "🔁  Self Healing", "🔗  API Validator", "📊  PBI Validator"],
+        ["🏠  Home", "🧠  IQEA", "🔁  Self Healing", "🔗  API Validator", "📊  PBI Validator"],
         index=0,
         label_visibility="collapsed"
     )
@@ -466,9 +466,6 @@ if page == "🏠  Home":
     </style>           
     """, unsafe_allow_html=True)
     
-
-elif page == "💬  Chat Agent":
-    run_page(os.path.join(BASE_DIR, "chat_agent.py"))
 
 elif page == "🧠  IQEA":
     run_page(os.path.join(BASE_DIR, "action_new_xpath_subway_TMT.py"))

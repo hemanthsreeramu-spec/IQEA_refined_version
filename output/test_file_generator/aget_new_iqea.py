@@ -50,6 +50,7 @@ def test_happy_path_full_flow(setup):
     driver = setup
     wait = WebDriverWait(driver, 10)
     driver.get(BASE_URL)
+    
     driver.implicitly_wait(50)  # Wait for page to load fully, adjust as needed
     attach_screenshot(driver, "start")
 
