@@ -10,6 +10,7 @@ wheels/
 logfile
 .pytest_cache
 allure-results
+output/Test_Cases_collection/
 
 # Virtual environments
 .venv

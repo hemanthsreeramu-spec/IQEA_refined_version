@@ -150,6 +150,8 @@ def load_prompt_from_file(prompt_type):
             prompt_file = os.path.join(config_folder, "Testcase_generate_prompt_with_document.txt")
         elif prompt_type== "Test_case_generation_document_gemini":
             prompt_file = os.path.join(config_folder, "Testcase_generate_prompt_with_document_gemini.txt")
+        elif prompt_type== "Test_case_generation_pbi":
+            prompt_file = os.path.join(config_folder, "Testcase_generate_prompt_powerbi.txt")
         elif prompt_type== "Test_case_generation_withaction":
             prompt_file = os.path.join(config_folder, "Testcase_generate_prompt_with_action.txt")
         elif prompt_type == "featureaction":
@@ -2532,7 +2534,8 @@ def generate_script_from_recorded_actions(actions_formatted, language):
 
 
 def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases,
-                                         min_new_threshold,max_attempts=50):
+                                         min_new_threshold,max_attempts=50,
+                                         image_payload=None):
     """
     Generate test cases dynamically, stopping when new unique test cases are too few.
 
@@ -2541,6 +2544,10 @@ def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases,
         max_testcases (int): Safety cap to avoid infinite generation.
         max_attempts (int): Maximum AI calls allowed.
         min_new_threshold (int): Minimum new test cases required to continue generation.
+        image_payload (list[tuple[str, str]] | None): Optional list of
+            (mime_type, base64_str) images fed directly to a vision-capable model
+            (used by the Power BI wireframe flow). When provided, every iteration
+            uses the vision call so the model can reason about the actual UI.
 
     Returns:
         list: All unique test cases.
@@ -2567,8 +2574,12 @@ def generate_testcases_with_dynamic_stop(constructed_prompt, max_testcases,
             prompt = constructed_prompt
 
         try:
-            response = get_queries_from_ai_updated(prompt) if model_type == "azureopenai" \
-                else llm_pepgenx(prompt)
+            if image_payload:
+                # Vision flow (e.g. Power BI wireframe) — send images alongside the prompt
+                response = get_queries_from_ai_with_images(prompt, image_payload)
+            else:
+                response = get_queries_from_ai_updated(prompt) if model_type == "azureopenai" \
+                    else llm_pepgenx(prompt)
                 #else get_queries_from_ai_updated_geminiget_queries_from_ai_updated_gemini(prompt)
             if not response:
                 print("⚠️ Empty or None response from LLM. Skipping this iteration.")
@@ -3050,6 +3061,52 @@ def get_queries_from_ai_updated(formatted_summary):
    except Exception as e:
         print(f"[ERROR] LLM call failed: {e}")
         return None
+
+def get_queries_from_ai_with_images(formatted_summary, image_payload=None):
+    """Vision-capable variant of get_queries_from_ai_updated.
+
+    Sends the text prompt together with one or more images so the model can
+    reason about the actual UI (e.g. Power BI wireframes — which visuals are
+    present, their type and position) instead of relying on OCR-extracted text.
+
+    Args:
+        formatted_summary (str): The text prompt.
+        image_payload (list[tuple[str, str]] | None): list of (mime_type, base64_str)
+            tuples. When empty/None this falls back to the text-only call.
+
+    Returns:
+        str | None: model response content, or None on failure.
+    """
+    if not image_payload:
+        return get_queries_from_ai_updated(formatted_summary)
+
+    print("going inside get_queries_from_ai_with_images")
+    load_dotenv(override=True)
+    client = openai.OpenAI(api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+                           base_url=os.getenv("AZURE_OPENAI_ENDPOINT"))
+    model = "gpt-5-mini"
+
+    content = [{"type": "text", "text": formatted_summary}]
+    for mime_type, b64 in image_payload:
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{mime_type};base64,{b64}"}
+        })
+
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": content}],
+            max_completion_tokens=25000,
+            timeout=600
+        )
+        print(response)
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"[ERROR] Vision LLM call failed: {e}")
+        # Fall back to text-only so generation still produces something usable
+        return get_queries_from_ai_updated(formatted_summary)
+
 # def get_queries_from_ai_updated(formatted_summary):
 #
 #
@@ -3275,7 +3332,7 @@ def covert_response_to_testcases(markdown_text, test_collection, output_file="Sa
                 print("\n⚠️ No test cases were parsed to save to the database.")
 
 
-def covert_response_to_testcases_single_sheet(markdown_text, test_collection, output_file="SauceDemo"+generate_random_prefix()+".xlsx"):
+def covert_response_to_testcases_single_sheet(markdown_text, test_collection, output_file="IQEA_testcases_"+generate_random_prefix()+".xlsx"):
     print("\n🚀 Starting test case parsing (Single Sheet Version)...")
 
     # Normalize input

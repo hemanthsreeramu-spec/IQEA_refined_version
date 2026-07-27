@@ -24,6 +24,7 @@ import utilities.TMT_Connection.Test_management_tool_utils as tmt_utils
 from PIL import Image
 import pytesseract
 import io
+import base64
 from langchain_core.messages import HumanMessage
 from langchain_openai import AzureChatOpenAI
 from dotenv import load_dotenv; load_dotenv()
@@ -825,6 +826,11 @@ if _tool == "testcases":
                             st.warning(f"⚠️ Could not load content for: {file}")
                     Action_data = merged_content
         elif option == 'Documents':
+            # Defaults — overridden inside the Files branch below. Kept here so the
+            # Generate handler can safely reference them for any source type.
+            pbi_mode = "Web"
+            wireframe_files = None
+
             source_type = st.selectbox(
                 "Select Source Type",
                 options=["Files", "Azure Board", "Jira"],
@@ -834,12 +840,44 @@ if _tool == "testcases":
             st.session_state.document_source_selector = source_type
             # Show only document upload section
             if source_type == "Files":
+                # Application under test: Web (current flow) or Power BI (new flow —
+                # feeds the wireframe image directly to a vision model to understand
+                # which visuals are present, their type and position).
+                pbi_mode = st.radio(
+                    "Application Type",
+                    options=["Web", "Power BI"],
+                    index=0,
+                    horizontal=True,
+                    key="doc_app_type_radio",
+                    help="Web keeps the standard functional test case flow. Power BI generates "
+                         "manual test cases to validate a Power BI report (visuals, filters, slicers) "
+                         "from the requirements document and wireframe."
+                )
             # Show only document upload section
                 uploaded_file = st.file_uploader(
                     "Upload a PDF, Text, Word, or Excel document",
                     type=['pdf', 'docx', 'xlsx', 'txt'],
                     key="uploaded_file_uploader"  # this will populate st.session_state.uploaded_file_uploader
                 )
+
+                if pbi_mode == "Power BI":
+                    st.markdown(
+                        "**Upload Power BI wireframe image(s)** <span style='color:red;'>*</span> "
+                        "— fed directly to the AI to detect visuals, visual type & position",
+                        unsafe_allow_html=True
+                    )
+                    st.caption(
+                        "💡 Upload **one wireframe per report page** (e.g. a separate image for the "
+                        "Summary page and the Sales Operations page). Pages without a wireframe are "
+                        "still covered from the requirements text, but an image gives far better "
+                        "visual-type and layout validation."
+                    )
+                    wireframe_files = st.file_uploader(
+                        "Upload wireframe image(s) for the Power BI report — one per page",
+                        type=["png", "jpg", "jpeg", "bmp", "webp"],
+                        accept_multiple_files=True,
+                        key="pbi_wireframe_uploader"
+                    )
                 if uploaded_file is not None:
                     filename = uploaded_file.name.lower()
 
@@ -1160,32 +1198,70 @@ if _tool == "testcases":
                             st.stop()
                     except Exception as e:
                         st.error("Invalid Work Item")
-                image_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Document_image_data} """
-                if model_type == "azureopenai":
-                    Document_image_data_processed = utils.get_queries_from_ai_updated(image_prompt)
-                else:
-                    Document_image_data_processed = utils.llm_pepgenx(image_prompt)
-                print(Document_image_data_processed)
+                if source_type == "Files" and pbi_mode == "Power BI":
+                    # ── Power BI report validation flow ──────────────────────────
+                    # Feed the wireframe image(s) DIRECTLY to a vision model so it can
+                    # detect which visuals are present, their type and position —
+                    # OCR text is still extracted and passed as a fallback context.
+                    if not wireframe_files:
+                        st.warning("⚠️ Please upload at least one wireframe image for Power BI test case generation.")
+                        st.stop()
 
-                st.session_state.testcase_response = []
-                st.session_state.scenario_response = []
-                st.session_state.all_testcases = []
-                # scenarios_prompt=utils.generate_excel_testcases_with_document("Test_scenarios_finder",extracted_data,Document_image_data_processed,Navigation_details)
-                # st.session_state.scenario_response=utils.get_queries_from_ai_updated(scenarios_prompt)
-                # st.write(st.session_state.scenario_response)
-                if model_type == "azureopenai":
-                    print("Model Type is AzureOpenAi")
-                    constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document",
-                                                                                     extracted_data,Document_image_data_processed,Navigation_details)
+                    mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+                                "bmp": "image/bmp", "webp": "image/webp"}
+                    wireframe_payload = []   # list of (mime_type, base64) for direct vision input
+                    wireframe_ocr = ""       # pytesseract fallback text
+                    for wf in wireframe_files:
+                        raw = wf.getvalue()
+                        ext = os.path.splitext(wf.name)[1].lower().lstrip(".")
+                        wireframe_payload.append((mime_map.get(ext, "image/png"),
+                                                  base64.b64encode(raw).decode()))
+                        try:
+                            wf_img = Image.open(io.BytesIO(raw))
+                            st.image(wf_img, caption=wf.name, use_container_width=True)
+                            ocr_txt = pytesseract.image_to_string(wf_img)
+                            wireframe_ocr += f"\nWireframe: {wf.name}\nExtracted Text:\n{(ocr_txt or '').strip()}\n"
+                        except Exception as e:
+                            wireframe_ocr += f"\nWireframe: {wf.name}\nExtracted Text: (OCR failed: {e})\n"
+
+                    st.session_state.testcase_response = []
+                    st.session_state.scenario_response = []
+                    st.session_state.all_testcases = []
+
+                    constructedprompt = utils.generate_excel_testcases_with_document(
+                        "Test_case_generation_pbi", extracted_data, wireframe_ocr, Navigation_details)
+                    with st.spinner("🔍 Analyzing wireframe & generating Power BI validation test cases..."):
+                        st.session_state.testcase_response = utils.generate_testcases_with_dynamic_stop(
+                            constructedprompt, 20, 5, image_payload=wireframe_payload)
+                    utils.parse_and_display_testcases_categorywise(st.session_state.testcase_response)
                 else:
-                    print("Model Type is gimini")
-                    constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document_gemini",
-                                                                                 extracted_data)
-                st.session_state.testcase_response = utils.generate_testcases_with_dynamic_stop(constructedprompt,120,5)
-                #st.code(st.session_state.testcase_response)
-                # test_categories=utils.categorize_testcases_with_full_requirements(st.session_state.all_testcases  , extracted_data,Document_image_data_processed,Navigation_details)
-                # ui_display=utils.format_categories_for_ui(test_categories)
-                utils.parse_and_display_testcases_categorywise(st.session_state.testcase_response)
+                    # ── Web document flow (existing behaviour) ───────────────────
+                    image_prompt = f"""Summarize the following context into a concise and structured format (under 100 lines), preserving key actions, entities, and sequences. The goal is to retain essential meaning for AI understanding, automation, or test case generation. Avoid repetition, and group related items logically. Context: {Document_image_data} """
+                    if model_type == "azureopenai":
+                        Document_image_data_processed = utils.get_queries_from_ai_updated(image_prompt)
+                    else:
+                        Document_image_data_processed = utils.llm_pepgenx(image_prompt)
+                    print(Document_image_data_processed)
+
+                    st.session_state.testcase_response = []
+                    st.session_state.scenario_response = []
+                    st.session_state.all_testcases = []
+                    # scenarios_prompt=utils.generate_excel_testcases_with_document("Test_scenarios_finder",extracted_data,Document_image_data_processed,Navigation_details)
+                    # st.session_state.scenario_response=utils.get_queries_from_ai_updated(scenarios_prompt)
+                    # st.write(st.session_state.scenario_response)
+                    if model_type == "azureopenai":
+                        print("Model Type is AzureOpenAi")
+                        constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document",
+                                                                                         extracted_data,Document_image_data_processed,Navigation_details)
+                    else:
+                        print("Model Type is gimini")
+                        constructedprompt = utils.generate_excel_testcases_with_document("Test_case_generation_document_gemini",
+                                                                                     extracted_data)
+                    st.session_state.testcase_response = utils.generate_testcases_with_dynamic_stop(constructedprompt,120,5)
+                    #st.code(st.session_state.testcase_response)
+                    # test_categories=utils.categorize_testcases_with_full_requirements(st.session_state.all_testcases  , extracted_data,Document_image_data_processed,Navigation_details)
+                    # ui_display=utils.format_categories_for_ui(test_categories)
+                    utils.parse_and_display_testcases_categorywise(st.session_state.testcase_response)
 
         # ── BLOCK 2: Show gap analysis results + Approve button (persisted in session state) ──
         if st.session_state.gap_analysis_result and not st.session_state.tmt_gap_approved:
