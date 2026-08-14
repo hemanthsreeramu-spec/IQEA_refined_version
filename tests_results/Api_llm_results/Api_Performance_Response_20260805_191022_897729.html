@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>API Performance Test Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    h1, h2, h3 { color: #2c3e50; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f4f6f8; }
+    .good { color: green; font-weight: bold; }
+    .moderate { color: orange; font-weight: bold; }
+    .poor { color: red; font-weight: bold; }
+    .na { color: gray; }
+  </style>
+</head>
+
+<body>
+
+<h1>Test Execution Configuration</h1>
+<table>
+  <tr><th>Parameter</th><th>Value</th></tr>
+  <tr><td>Ramp Users</td><td>20</td></tr>
+  <tr><td>Spawn Rate (users/sec)</td><td>0.5</td></tr>
+  <tr><td>Run Time</td><td>10s</td></tr>
+  <tr><td>Stop Time</td><td>100</td></tr>
+</table>
+
+<hr/>
+
+<h1>Overall Performance Summary</h1>
+<ul>
+  <li><strong>Total APIs Tested:</strong> 1</li>
+  <li><strong>Overall Health:</strong> <span class="na">Not Available</span></li>
+</ul>
+
+<h2>Key Risks</h2>
+<ul>
+  <li>Unable to validate throughput or latency targets because no statistical data was captured (stats.csv and stats_history.csv are empty).</li>
+  <li>Potential functional or reliability issues cannot be quantified (failures.csv and exceptions.csv are empty), increasing risk for undetected regressions in production.</li>
+</ul>
+
+<hr/>
+
+<h1>API-wise Performance Analysis</h1>
+
+<!-- One section per API -->
+<section>
+  <h2>API: C:\Users\sathanantham.aru\PycharmProjects\ai-accelerator\tests_results\locust_reports\locust_report_POST__aiapi_agents_save_draft_20260805_190906_963616.html</h2>
+
+  <h3>Throughput</h3>
+  <table>
+    <tr><th>Metric</th><th>Value</th></tr>
+    <tr><td>Requests / Second</td><td><span class="na">Not Available</span></td></tr>
+    <tr><td>Total Requests</td><td><span class="na">Not Available</span></td></tr>
+  </table>
+
+  <h3>Latency</h3>
+  <table>
+    <tr><th>Metric</th><th>Value</th></tr>
+    <tr><td>Average Response Time</td><td><span class="na">Not Available</span></td></tr>
+    <tr><td>P95 Response Time</td><td><span class="na">Not Available</span></td></tr>
+  </table>
+
+  <h3>Reliability</h3>
+  <table>
+    <tr><th>Metric</th><th>Value</th></tr>
+    <tr><td>Failure Count</td><td><span class="na">Not Available</span></td></tr>
+    <tr><td>Failure Rate</td><td><span class="na">Not Available</span></td></tr>
+    <tr><td>Observations</td><td><span class="na">Not Available</span></td></tr>
+  </table>
+
+  <h3>Stability Assessment</h3>
+  <p><span class="na">Not Available</span></p>
+
+  <h3>Recommendations</h3>
+  <ul>
+    <li>Ensure Locust is configured to write stats.csv and stats_history.csv successfully. Verify file permissions and that the test run completes long enough to generate steady-state history data.</li>
+    <li>Rerun the test with a longer steady-state run_time to capture representative throughput and latency metrics (current extracted data shows no metrics captured).</li>
+    <li>Enable or collect failures.csv and exceptions.csv from the test run. If files are empty but issues are suspected, enable more verbose logging or hooks to capture client/server errors.</li>
+    <li>Validate the report generation path used by the test harness (the base_path shown is the report file location). Confirm that the summary CSVs are produced alongside the HTML report in the same directory.</li>
+    <li>Add infrastructure and application-level monitoring (CPU, memory, GC, request logs) during the next run to correlate load and system behavior once metrics are available.</li>
+  </ul>
+</section>
+
+<hr/>
+
+<h1>Final Recommendation</h1>
+<p>
+Because the extracted CSV artifacts contain no statistical entries, no performance conclusions can be drawn from this test execution. Before considering production readiness, repeat the test ensuring CSV outputs are successfully generated and include adequate steady-state duration to observe representative behavior. Complement the load test with application and infrastructure monitoring to capture end-to-end observability.
+</p>
+
+</body>
+</html>

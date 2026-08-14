@@ -1210,19 +1210,23 @@ if _tool == "testcases":
                     mime_map = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
                                 "bmp": "image/bmp", "webp": "image/webp"}
                     wireframe_payload = []   # list of (mime_type, base64) for direct vision input
-                    wireframe_ocr = ""       # pytesseract fallback text
+                    wireframe_ocr = ""       # vision-extracted wireframe details (was pytesseract OCR)
                     for wf in wireframe_files:
                         raw = wf.getvalue()
                         ext = os.path.splitext(wf.name)[1].lower().lstrip(".")
-                        wireframe_payload.append((mime_map.get(ext, "image/png"),
-                                                  base64.b64encode(raw).decode()))
+                        wf_mime = mime_map.get(ext, "image/png")
+                        wf_b64 = base64.b64encode(raw).decode()
+                        wireframe_payload.append((wf_mime, wf_b64))
                         try:
                             wf_img = Image.open(io.BytesIO(raw))
                             st.image(wf_img, caption=wf.name, use_container_width=True)
-                            ocr_txt = pytesseract.image_to_string(wf_img)
-                            wireframe_ocr += f"\nWireframe: {wf.name}\nExtracted Text:\n{(ocr_txt or '').strip()}\n"
                         except Exception as e:
-                            wireframe_ocr += f"\nWireframe: {wf.name}\nExtracted Text: (OCR failed: {e})\n"
+                            print(f"[WARN] Could not preview wireframe {wf.name}: {e}")
+                        # Vision LLM reads the wireframe under a QA instruction prompt
+                        # (same approach as the PBI validator screenshot → Extract KPIs flow)
+                        with st.spinner(f"🖼️ Reading wireframe '{wf.name}' with vision model..."):
+                            wireframe_ocr += utils.extract_wireframe_details_via_llm(
+                                wf_b64, wf_mime, wf.name)
 
                     st.session_state.testcase_response = []
                     st.session_state.scenario_response = []

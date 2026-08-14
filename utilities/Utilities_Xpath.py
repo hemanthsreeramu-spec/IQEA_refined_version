@@ -3107,6 +3107,90 @@ def get_queries_from_ai_with_images(formatted_summary, image_payload=None):
         # Fall back to text-only so generation still produces something usable
         return get_queries_from_ai_updated(formatted_summary)
 
+
+def extract_wireframe_details_via_llm(image_b64, mime_type="image/png", file_name="wireframe"):
+    """LLM (vision) replacement for pytesseract OCR on Power BI wireframes.
+
+    Instead of dumping raw OCR text, the model reads the wireframe under an
+    instruction prompt and returns a structured, test-case-oriented description
+    of the report page: visuals, their type/position, KPI labels, slicers,
+    axis/legend fields, navigation elements and any interaction hints.
+
+    Same approach as the PBI validator screenshot flow
+    (pbi_validator/utils/pbi_browser.py :: extract_kpis_via_llm) — only the
+    instruction differs, because here we need coverage information for test
+    case generation, not KPI values for comparison.
+
+    Args:
+        image_b64 (str): base64-encoded image bytes (no data: prefix).
+        mime_type (str): image mime type, e.g. "image/png".
+        file_name (str): wireframe file name, used only for labelling output.
+
+    Returns:
+        str: human/LLM readable description block for the wireframe. On failure
+             returns a short marker line so generation can still proceed.
+    """
+    print(f"going inside extract_wireframe_details_via_llm for {file_name}")
+    load_dotenv(override=True)
+
+    instruction = (
+        "You are a Power BI QA analyst. Analyze this Power BI report wireframe / mock-up "
+        "image and extract EVERYTHING a tester needs to write validation test cases for "
+        "this report page. Do NOT invent anything that is not visible in the image.\n\n"
+        "Report the following sections in plain text (skip a section if nothing is visible):\n\n"
+        "1. PAGE: page/report title and any tab or page-navigation names.\n"
+        "2. VISUALS: for every visual on the page give — visual title, visual type "
+        "(card, KPI, table, matrix, bar chart, column chart, line chart, pie/donut, map, "
+        "gauge, treemap, scatter, text box, image, other), and its approximate position "
+        "(top-left, top-centre, top-right, middle-left, centre, bottom-right, etc.).\n"
+        "3. KPI / MEASURES: every metric label shown, with its displayed value and format "
+        "(currency, percentage, number, date, text) exactly as rendered.\n"
+        "4. CHART FIELDS: for each chart — axis labels, legend entries, series names, "
+        "data labels and any units visible.\n"
+        "5. TABLE/MATRIX: column headers, row groupings, totals/subtotals rows if shown.\n"
+        "6. SLICERS & FILTERS: every slicer/filter control, its label, control type "
+        "(dropdown, list, date range, buttons, search box) and its default/selected value.\n"
+        "7. INTERACTIONS & NAVIGATION: buttons, drill-down/drill-through indicators, "
+        "tooltips, bookmarks, hyperlinks, export/reset icons, cross-filter hints.\n"
+        "8. LAYOUT NOTES: grouping of visuals, headers/footers, logos, colour-coded "
+        "conditional formatting or status indicators (RAG/up-down arrows).\n"
+        "9. DATA OBSERVATIONS: date ranges, hierarchy levels, aggregation hints "
+        "(YTD, MTD, YoY), and any note/disclaimer text.\n\n"
+        "Be exhaustive and specific — use the exact wording shown in the image for every "
+        "label. Where text is unclear, write '(unclear)' rather than guessing.\n"
+        "Return plain readable text under the numbered headings above. No markdown fences."
+    )
+
+    try:
+        client = openai.OpenAI(api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+                               base_url=os.getenv("AZURE_OPENAI_ENDPOINT"))
+        print(f"Sending wireframe image to LLM for analysis: {file_name} ({mime_type}, {len(image_b64)} bytes)")
+        response = client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image_url",
+                     "image_url": {"url": f"data:{mime_type};base64,{image_b64}",
+                                   "detail": "high"}},
+                    {"type": "text", "text": instruction},
+                ],
+            }],
+            max_completion_tokens=8000,
+            timeout=600,
+        )
+        details = (response.choices[0].message.content or "").strip()
+        details = re.sub(r"^```(?:\w+)?\s*", "", details)
+        details = re.sub(r"\s*```$", "", details).strip()
+        if not details:
+            return f"\nWireframe: {file_name}\nExtracted Details: (vision model returned nothing)\n"
+        print(f"[INFO] Wireframe vision extraction completed for {file_name} ({len(details)} chars and {details.count('\\n')} lines)")
+        return f"\nWireframe: {file_name}\nExtracted Details:\n{details}\n"
+    except Exception as e:
+        print(f"[ERROR] Wireframe vision extraction failed for {file_name}: {e}")
+        return f"\nWireframe: {file_name}\nExtracted Details: (vision extraction failed: {e})\n"
+
+
 # def get_queries_from_ai_updated(formatted_summary):
 #
 #

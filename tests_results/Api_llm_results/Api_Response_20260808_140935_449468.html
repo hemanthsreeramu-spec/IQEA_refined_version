@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>API QUALITY ANALYSIS REPORT</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #222; line-height:1.4; padding:20px; }
+    h2 { color: #004b8d; }
+    table { border-collapse: collapse; width: 100%; margin-bottom:16px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align:left; }
+    th { background:#f4f6f8; }
+    .pass { color: #0a7a0a; font-weight:600; }
+    .fail { color: #b30000; font-weight:600; }
+    .note { font-size:90%; color:#555; }
+    ul { margin:6px 0 12px 18px; }
+  </style>
+</head>
+<body>
+
+<h1>API QUALITY ANALYSIS REPORT</h1>
+
+<h2>API Summary</h2>
+<p class="note">Report covers 4 executed tests supplied in input. Each row maps to one test execution.</p>
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Method</th>
+      <th>Endpoint</th>
+      <th>Actual Status</th>
+      <th>Expected Status</th>
+      <th>Expected Message (if provided)</th>
+      <th>Actual Message (if provided)</th>
+      <th>Result</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1</td>
+      <td>POST</td>
+      <td>https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/save_draft</td>
+      <td>200</td>
+      <td>200 or 201</td>
+      <td>"Agent Created & Secured"</td>
+      <td>(empty / not provided)</td>
+      <td class="pass">PASS</td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td>POST</td>
+      <td>https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/create_draft</td>
+      <td>201</td>
+      <td>200 or 201</td>
+      <td>(not provided)</td>
+      <td>(not provided)</td>
+      <td class="pass">PASS</td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td>PUT</td>
+      <td>https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/update</td>
+      <td>200</td>
+      <td>200 or 201</td>
+      <td>(not provided)</td>
+      <td>(not provided)</td>
+      <td class="pass">PASS</td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td>POST</td>
+      <td>https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/save_draft</td>
+      <td>200</td>
+      <td>200 or 201</td>
+      <td>"Agent Updated Successfully"</td>
+      <td>"Agent Created & Secured" (observed)</td>
+      <td class="fail">FAIL</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>Validation Results</h2>
+
+<h3>Status code validation</h3>
+<ul>
+  <li>All tests returned actual status codes within the stated expected range ("200 or 201"). No status-code level failures were observed.</li>
+  <li>Test 2 returned 201 which is appropriate for a create action. Tests 1 and 4 (same endpoint save_draft) returned 200; these are acceptable per the given "200 or 201" expectation, but semantic correctness should be verified (see Recommendations).</li>
+</ul>
+
+<h3>Field / value validation details</h3>
+<ul>
+  <li>Test 1: Expected a response message field "Agent Created &amp; Secured" but the actual message value was not provided in the execution data (empty). This is a missing-field / missing-value issue in the recorded result. Despite the test marked PASS, response-body verification cannot be confirmed because actual message is absent in the record.</li>
+  <li>Test 2: No expected message was provided; no response-body validation possible with given data (actual message also not provided).</li>
+  <li>Test 3: No expected message provided; actual message not provided — no response-body validation possible from the supplied data.</li>
+  <li>Test 4: Expected "Agent Updated Successfully" but observed "Agent Created &amp; Secured". This is a clear value mismatch and is the explicit reason for the test FAIL (as recorded in the "Reason").</li>
+  <li>Two separate executions of the same endpoint (save_draft) produced inconsistent message expectations/observations across tests:
+    <ul>
+      <li>One save_draft execution expected Created message (test 1) but actual message not recorded.</li>
+      <li>The other save_draft execution expected Updated message (test 4) but observed Created message.</li>
+    </ul>
+    This indicates either: the endpoint behavior is ambiguous (sometimes returns Created), or the test expectations are inconsistent, or response payloads were not captured consistently.</li>
+  </ul>
+
+<h2>Issues Identified</h2>
+<ul>
+  <li>Missing response message values in test records (Test 1, 2, 3): the actual message field is empty/not provided. This prevents full contract validation.</li>
+  <li>Value mismatch for save_draft (Test 4): expected "Agent Updated Successfully" but observed "Agent Created &amp; Secured". This is a functional/contract defect.</li>
+  <li>Inconsistent expectations for the same endpoint (save_draft) across test cases: one test expects Created, another expects Updated. This inconsistency needs clarification in API contract or test design.</li>
+  <li>Test result labeling mismatch: Test 1 is PASS despite missing the expected message value — suggests tests may be relying only on status code for pass criteria. This hides payload-level defects.</li>
+  <li>Insufficient response capture in test reports (no response body details supplied for most tests) reduces ability to validate payload contracts and troubleshoot errors.</li>
+</ul>
+
+<h2>Risk Assessment</h2>
+<p><strong>Overall level:</strong> Medium-High</p>
+<p>Justification:
+<ul>
+  <li>Functional risk is Medium-High because the same endpoint returns or appears to return an unexpected semantic message ("Created" vs "Updated") which can cause client-side logic errors (clients branching on message text) and data-state confusion.</li>
+  <li>Operational risk is increased by missing response payload captures — this reduces observability and slows debugging.</li>
+  <li>While status codes were within expected ranges (low risk), the payload inconsistencies raise medium-high impact on correctness and client integrations.</li>
+</ul>
+</p>
+
+<h2>Recommendations</h2>
+<ul>
+  <li>Require and enforce response-body assertions in tests:
+    <ul>
+      <li>Always capture and store the full response body (at least the contract fields) in test results/logs.</li>
+      <li>Assert on both status code and key response fields (e.g., "message", "id", timestamps), not status code alone.</li>
+    </ul>
+  </li>
+  <li>Clarify and standardize API contract for save_draft:
+    <ul>
+      <li>Define expected behavior for save_draft (is it Create or Update? Under what conditions each applies?).</li>
+      <li>Standardize the "message" values (e.g., "Agent Created", "Agent Updated") and preferably include a machine-friendly status field (e.g., "operation":"created"|"updated") rather than relying on human-readable message text.</li>
+    </ul>
+  </li>
+  <li>Fix observed contract mismatch:
+    <ul>
+      <li>Investigate why save_draft returned "Agent Created &amp; Secured" when "Agent Updated Successfully" was expected (or vice versa). This could be logic bug or incorrect test data/state.</li>
+      <li>Ensure create flows return 201 with created payload and update flows return 200 with updated payload (or document deviations explicitly).</li>
+    </ul>
+  </li>
+  <li>Improve test harness and CI checks:
+    <ul>
+      <li>Add schema validation (JSON Schema) to enforce presence and types of required fields (e.g., message: string, code: int, data: object).</li>
+      <li>Fail tests when response body is missing required fields or when message/value mismatches contract.</li>
+    </ul>
+  </li>
+  <li>Enhance observability and logging:
+    <ul>
+      <li>Log request payloads (sanitized) and full response bodies for failed and suspicious runs to ease root-cause analysis.</li>
+      <li>Include a correlation/request-id in responses to trace requests across systems.</li>
+    </ul>
+  </li>
+  <li>Update API documentation:
+    <ul>
+      <li>Explicitly document expected messages, status codes for each operation, and examples for create vs update behaviors for save_draft and create_draft endpoints.</li>
+    </ul>
+  </li>
+</ul>
+
+<h2>Overall Verdict</h2>
+<p><strong>Result:</strong> <span class="fail">FAIL</span></p>
+<p>Reasoning:
+<ul>
+  <li>Although status codes were within expected ranges for all tests, one test (Test 4) failed due to a direct message mismatch ("Agent Updated Successfully" expected vs "Agent Created &amp; Secured" observed).</li>
+  <li>Multiple tests lack captured response messages in the execution data, preventing authoritative verification of contract compliance. This reduces confidence in the PASS results.</li>
+  <li>Because at least one concrete contract violation exists and response capture is incomplete, the overall verdict is FAIL pending corrective actions and re-execution of tests with complete response data.</li>
+</ul>
+</p>
+
+</body>
+</html>

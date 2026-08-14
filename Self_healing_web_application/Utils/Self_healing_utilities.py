@@ -48,9 +48,19 @@ os.environ["AZURE_OPENAI_ENDPOINT"] = endpoint
 # OUTPUT_DIR = "output/sauce_demo"
 # SCRIPT_PATH = os.path.join(OUTPUT_DIR, "sauce_demo_dom_collector.js")
 
+def resolve_prompt_path(prompt_file):
+    """Resolve a prompt path relative to the Self_healing_web_application folder.
+
+    IQEA.py runs this page from the repo root, so cwd-relative prompt paths break.
+    """
+    if os.path.isabs(prompt_file):
+        return prompt_file
+    resolved = os.path.join(current_path, prompt_file)
+    return resolved if os.path.exists(resolved) else prompt_file
+
 async def run_mcp_prompt(prompt_file, replace_dict=None):
     """Helper to read prompt, replace variables, and execute MCP."""
-    with open(prompt_file, 'r', encoding='utf-8') as f:
+    with open(resolve_prompt_path(prompt_file), 'r', encoding='utf-8') as f:
         prompt_template = f.read()
 
     if replace_dict:
@@ -60,7 +70,7 @@ async def run_mcp_prompt(prompt_file, replace_dict=None):
     return await execute_mcp_use(prompt_template)
 def run_mcp_prompt_compare(prompt_file, replace_dict=None):
     """Helper to read prompt, replace variables, and execute MCP."""
-    with open(prompt_file, 'r', encoding='utf-8') as f:
+    with open(resolve_prompt_path(prompt_file), 'r', encoding='utf-8') as f:
         prompt_template = f.read()
 
     if replace_dict:
@@ -71,7 +81,7 @@ def run_mcp_prompt_compare(prompt_file, replace_dict=None):
     return prompt_template
 async def run_mcp_prompt_compare_mcp(prompt_file, replace_dict=None):
     """Helper to read prompt, replace variables, and execute MCP."""
-    with open(prompt_file, 'r', encoding='utf-8') as f:
+    with open(resolve_prompt_path(prompt_file), 'r', encoding='utf-8') as f:
         prompt_template = f.read()
 
     if replace_dict:

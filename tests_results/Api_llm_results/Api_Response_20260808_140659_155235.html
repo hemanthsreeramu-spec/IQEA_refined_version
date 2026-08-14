@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>API Quality Analysis Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; line-height:1.4; color:#222; padding:20px; }
+    h2 { color:#1155cc; }
+    .pass { color: #0a7a0a; font-weight:bold; }
+    .fail { color: #c62828; font-weight:bold; }
+    .note { color: #555; font-size:90%; }
+    ul { margin-top:0.25em; }
+    li { margin-bottom:0.25em; }
+    .mono { font-family: monospace; background:#f7f7f7; padding:2px 6px; border-radius:3px; }
+  </style>
+</head>
+<body>
+
+<h1>QUALITY ANALYSIS REPORT</h1>
+
+<h2>API Summary</h2>
+<ul>
+  <li><strong>Method:</strong> POST</li>
+  <li><strong>Endpoint:</strong> https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/save_draft</li>
+  <li><strong>Status Code (observed):</strong> 200 (observed in executed runs)</li>
+  <li><strong>Result:</strong> <span class="fail">FAIL</span></li>
+</ul>
+
+<h2>Validation Results</h2>
+<ul>
+  <li><strong>Status code validation:</strong>
+    <ul>
+      <li>Expected: 200 or 201</li>
+      <li>Actual: 200 in the executed attempts</li>
+      <li>Conclusion: Status code is acceptable (200 is within expected range).</li>
+    </ul>
+  </li>
+
+  <li><strong>Field/value validation details:</strong>
+    <ul>
+      <li>Test case 1 (save_draft):
+        <ul>
+          <li>Expected response message: <span class="mono">"Agent Created &amp; Secured"</span></li>
+          <li>Actual response message (log reason): <span class="mono">"Agent Updated Successfully"</span></li>
+          <li>Result: MISMATCH — the response message indicates an update, not creation.</li>
+        </ul>
+      </li>
+
+      <li>Test case 4 (save_draft, separate run):
+        <ul>
+          <li>Expected response message: <span class="mono">"Agent Updated Successfully"</span></li>
+          <li>Actual: recorded as PASS (no detailed actual-message field value present in the log)</li>
+          <li>Result: PASS for this expectation, but inconsistent with Test case 1 expectation.</li>
+        </ul>
+      </li>
+
+      <li>Skipped test cases:
+        <ul>
+          <li>/aiapi/agents/create_draft and PUT /aiapi/agents/update were SKIPPED due to upstream failure in TC_01_save_draft.</li>
+          <li>Because of skips, no field/value validation was performed for those endpoints in this run.</li>
+        </ul>
+      </li>
+
+      <li><strong>Observability note:</strong> The test logs show blank or missing <span class="mono">Actual Message</span> fields for multiple entries (despite reasons mentioning expected vs actual). This reduces traceability of the exact response payload.</li>
+    </ul>
+  </li>
+</ul>
+
+<h2>Issues Identified</h2>
+<ul>
+  <li>Response message mismatch: One run expected creation text (<span class="mono">"Agent Created &amp; Secured"</span>) but the service returned update text (<span class="mono">"Agent Updated Successfully"</span>).</li>
+  <li>Inconsistent expected behavior across tests for the same endpoint:
+    <ul>
+      <li>The same endpoint (<span class="mono">/aiapi/agents/save_draft</span>) is used in tests expecting different messages (create vs update).</li>
+    </ul>
+  </li>
+  <li>Test dependency caused cascading SKIPs: downstream tests (create_draft, update) were skipped due to earlier test failure — suggests tests are not isolated.</li>
+  <li>Test execution logs are incomplete:
+    <ul>
+      <li>Many entries show empty <span class="mono">Actual Message</span> fields though the reason text references a specific message; raw response bodies are not present in the report.</li>
+    </ul>
+  </li>
+  <li>Potential contract ambiguity:
+    <ul>
+      <li>No single authoritative expected response message documented for create vs update scenario; allows divergent implementations.</li>
+    </ul>
+  </li>
+</ul>
+
+<h2>Risk Assessment</h2>
+<ul>
+  <li><strong>Risk level:</strong> Medium</li>
+  <li><strong>Justification:</strong>
+    <ul>
+      <li>Functional impact: The endpoint returning an "Updated" message when a test expects "Created" indicates either incorrect server-side logic (creating vs updating) or incorrect test expectations. This can break client workflows that branch on operation type.</li>
+      <li>Operational impact: Skipped downstream tests reduce confidence in the broader agent lifecycle flows.</li>
+      <li>Likelihood: Moderate — inconsistent expectations and missing contract clarity make recurrence likely until fixed.</li>
+    </ul>
+  </li>
+</ul>
+
+<h2>Recommendations</h2>
+<ul>
+  <li>Clarify and document the API contract for <span class="mono">/aiapi/agents/save_draft</span>:
+    <ul>
+      <li>Define expected HTTP status and exact response message(s) for create vs update scenarios (e.g., on create return 201 + "Agent Created &amp; Secured"; on update return 200 + "Agent Updated Successfully").</li>
+    </ul>
+  </li>
+
+  <li>Standardize behavior:
+    <ul>
+      <li>If the same endpoint handles both create and update, include an explicit response field indicating the performed action (e.g., <span class="mono">"action":"created"</span> or <span class="mono">"action":"updated"</span>) rather than relying solely on free-form message text.</li>
+    </ul>
+  </li>
+
+  <li>Improve tests:
+    <ul>
+      <li>Make tests independent — do not skip downstream tests solely because a previous test failed; instead, create isolated test data or use mocks where appropriate.</li>
+      <li>Ensure test expectations align with documented contract. Update the failing test to the correct expected message after contract clarification.</li>
+      <li>Capture and store the full response body in test logs to avoid empty <span class="mono">Actual Message</span> fields and to aid diagnosis.</li>
+    </ul>
+  </li>
+
+  <li>Server-side changes:
+    <ul>
+      <li>Return consistent and machine-parseable fields (e.g., <span class="mono">code/action/message</span>) so clients/tests can assert deterministically.</li>
+      <li>Consider using 201 for creates and 200 for updates to align with RESTful semantics.</li>
+    </ul>
+  </li>
+
+  <li>Observability & CI improvements:
+    <ul>
+      <li>Log request IDs and include them in test outputs for easier tracing.</li>
+      <li>Fail-fast with clear reasons but allow pipeline stages to run independent verification where possible to avoid mass SKIPs.</li>
+    </ul>
+  </li>
+</ul>
+
+<h2>Overall Verdict</h2>
+<ul>
+  <li><strong>Final status:</strong> <span class="fail">FAIL</span></li>
+  <li><strong>Reasoning:</strong>
+    <ul>
+      <li>Although the HTTP status code (200) is acceptable, a critical functional assertion failed: the response message did not match the expected "Agent Created &amp; Secured" in the first run and instead indicated an update.</li>
+      <li>Inconsistent expectations across runs for the same endpoint and skipped dependent tests reduce confidence in correctness and stability.</li>
+    </ul>
+  </li>
+  <li class="note">Next steps: Align contract and tests, reproduce the failing create scenario with full response logging, and re-run the pipeline with isolated test data.</li>
+</ul>
+
+</body>
+</html>

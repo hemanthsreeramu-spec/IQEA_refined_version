@@ -1,3 +1,12 @@
 https://api.swaggerhub.com/apis/tigernew/equifxi_test/1.0.0?format=json
 
  https://app.powerbi.com/view?r=eyJrIjoiMjFiZjAzMTctOTAxZC00ZjM2LWEwMTMtZjM0Nzg5MWNmZmZiIiwidCI6ImU3MTRlZjMxLWZhYWItNDFkMi05ZjFlLWU2ZGY0YWYxNmFiOCIsImMiOjEwfQ%3D%3D
+
+
+
+
+tabluea:
+https://public.tableau.com/app/profile/jeevitha.venkatesan6537/viz/GlobalSalesOperationsDashboard_1/SalesOperation
+
+looker:
+https://datastudio.google.com/reporting/a63268b3-e312-4a8b-97fd-f63ab2d624df/page/4D4yF

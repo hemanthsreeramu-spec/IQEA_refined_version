@@ -1,5 +1,6 @@
 import requests
 import json
+import re
 import openai
 import csv
 import allure
@@ -162,6 +163,55 @@ def extract_api_details(openapi_json: dict) -> dict:
     return extracted
 
 
+def split_parameters(parameters, endpoint):
+    """
+    Split an operation's parameters into path and query entries for the UI.
+
+    Returns two lists of {name, required, value, description}. `value` is
+    pre-filled from the schema default when there is one, and is otherwise left
+    blank for the user to fill with a literal or a ${var} reference.
+
+    Path placeholders present in the endpoint but missing from `parameters`
+    are still listed — otherwise the request goes out with literal braces.
+    """
+    path_params, query_params = [], []
+    seen_path = set()
+
+    for param in parameters or []:
+        if not isinstance(param, dict):
+            continue
+
+        name = param.get("name")
+        if not name:
+            continue
+
+        schema = param.get("schema") or {}
+        default = schema.get("default")
+
+        entry = {
+            "name": name,
+            "required": bool(param.get("required", False)),
+            "value": "" if default is None else default,
+            "description": (schema.get("description") or param.get("description") or ""),
+        }
+
+        location = (param.get("in") or "").lower()
+        if location == "path":
+            entry["required"] = True  # a path param is always required
+            path_params.append(entry)
+            seen_path.add(name)
+        elif location == "query":
+            query_params.append(entry)
+
+    # Any {placeholder} in the path that the spec did not declare
+    for name in re.findall(r"\{([^{}]+)\}", endpoint or ""):
+        if name not in seen_path:
+            path_params.append({"name": name, "required": True, "value": "", "description": ""})
+            seen_path.add(name)
+
+    return path_params, query_params
+
+
 def build_data_dictionary(swagger_api_details, base_url,spec):
     """
     Convert Swagger/OpenAPI extracted info into the format required by makeapicall().
@@ -253,6 +303,11 @@ def build_data_dictionary(swagger_api_details, base_url,spec):
                     break
 
             # ----------------------------
+            # Path / Query parameters
+            # ----------------------------
+            path_params, query_params = split_parameters(details.get("parameters", []), endpoint)
+
+            # ----------------------------
             # Create FINAL Data Dict
             # ----------------------------
             final_dict = {
@@ -263,6 +318,12 @@ def build_data_dictionary(swagger_api_details, base_url,spec):
                 "headers": headers,
                 "expectedOutput": expected_output,
                 "Expected-StatusCode": expected_status,
+                "pathParams": path_params,
+                "queryParams": query_params,
+                # Chaining fields — filled in by the UI
+                "extract": "",
+                "dependsOn": "",
+                "order": None,
             }
 
             data_dict_list.append(final_dict)
@@ -319,8 +380,43 @@ def generate_sample_payload(schema: dict, swagger_spec: dict):
     # Use example if present
     if "example" in schema:
         return schema["example"]
+    if schema.get("examples"):
+        examples = schema["examples"]
+        return examples[0] if isinstance(examples, list) else examples
+
+    # Use default / first enum value when the type is loosely defined
+    if "default" in schema and "properties" not in schema:
+        return schema["default"]
+    if schema.get("enum"):
+        return schema["enum"][0]
+
+    # OpenAPI 3.1 / FastAPI optional fields: anyOf / oneOf / allOf
+    for combiner in ("anyOf", "oneOf"):
+        if schema.get(combiner):
+            options = [o for o in schema[combiner] if isinstance(o, dict)]
+            # Prefer a concrete (non-null) variant
+            concrete = [o for o in options if o.get("type") != "null"] or options
+            if concrete:
+                return generate_sample_payload(concrete[0], swagger_spec)
+
+    if schema.get("allOf"):
+        merged = {}
+        for part in schema["allOf"]:
+            if isinstance(part, dict):
+                value = generate_sample_payload(part, swagger_spec)
+                if isinstance(value, dict):
+                    merged.update(value)
+        return merged
 
     schema_type = schema.get("type", "object")
+
+    # OpenAPI 3.1 allows a list of types, e.g. ["string", "null"]
+    if isinstance(schema_type, list):
+        non_null = [t for t in schema_type if t != "null"]
+        schema_type = non_null[0] if non_null else "null"
+
+    if schema_type == "null":
+        return None
 
     if schema_type == "object":
         payload = {}
@@ -348,22 +444,56 @@ def generate_sample_payload(schema: dict, swagger_spec: dict):
     return None
 
 def get_base_url(swagger_url, spec):
-    # 1. If API has servers[] block
-    servers = spec.get("servers", [])
-    if servers:
-        if "url" in servers[0]:
-            return servers[0]["url"]
+    """
+    Resolve the base URL for API calls.
 
-    print("⚠ No Base URL found inside Swagger. Using SwaggerHub mock server.")
+    swagger_url : the URL the spec was downloaded from (string)
+    spec        : the parsed OpenAPI/Swagger document (dict)
+    """
+    from urllib.parse import urljoin, urlparse
 
-    # 2. Build SwaggerHub Mock URL
-    # swagger_url: https://api.swaggerhub.com/apis/tiger-b7b/equifax_new/1.0.0?format=json
-    parts = swagger_url.split("/apis/")[1]
-    org, api, version_with_query = parts.split("/")
-    version = version_with_query.split("?")[0]
+    if not isinstance(swagger_url, str):
+        raise TypeError(
+            f"get_base_url() expects the Swagger URL as a string, got {type(swagger_url).__name__}"
+        )
 
-    mock_url = f"https://virtserver.swaggerhub.com/{org}/{api}/{version}"
-    return mock_url
+    # 1. servers[] block (OpenAPI 3)
+    servers = spec.get("servers") or []
+    if isinstance(servers, list) and servers and isinstance(servers[0], dict):
+        server_url = (servers[0].get("url") or "").strip()
+        if server_url:
+            # Relative server url (e.g. "/aiapi") -> resolve against the spec URL
+            if not urlparse(server_url).netloc:
+                server_url = urljoin(swagger_url, server_url)
+            return server_url.rstrip("/")
+
+    # 2. Swagger 2.0 style: host + basePath + schemes
+    host = (spec.get("host") or "").strip()
+    if host:
+        schemes = spec.get("schemes") or ["https"]
+        base_path = (spec.get("basePath") or "").strip()
+        return f"{schemes[0]}://{host}{base_path}".rstrip("/")
+
+    # 3. SwaggerHub URL -> mock server
+    # e.g. https://api.swaggerhub.com/apis/tiger-b7b/equifax_new/1.0.0?format=json
+    if "/apis/" in swagger_url:
+        try:
+            parts = swagger_url.split("/apis/")[1]
+            org, api, version_with_query = parts.split("/")[:3]
+            version = version_with_query.split("?")[0]
+            print("⚠ No Base URL found inside Swagger. Using SwaggerHub mock server.")
+            return f"https://virtserver.swaggerhub.com/{org}/{api}/{version}"
+        except (IndexError, ValueError):
+            pass
+
+    # 4. Fallback: per OpenAPI spec, an omitted servers block defaults to the
+    #    host serving the document. Paths in such specs already carry any prefix.
+    parsed = urlparse(swagger_url)
+    if parsed.scheme and parsed.netloc:
+        print(f"⚠ No servers[] in spec. Using spec host as base URL: {parsed.scheme}://{parsed.netloc}")
+        return f"{parsed.scheme}://{parsed.netloc}"
+
+    raise ValueError(f"Could not determine base URL from spec or URL: {swagger_url}")
 
 
 def run_allure_test(api_dict, utils):
@@ -376,56 +506,519 @@ import pandas as pd
 import json
 
 
-def read_excel_input(file_path: str):
-    """
-    Reads the API Excel file and returns a clean list of API dictionaries
-    compatible with makeapicall() and makeperformancecall().
-    """
+# ======================================================================
+# Swagger -> Excel template export
+# ======================================================================
+# Column order of Input/Api_template.xlsx. Extra 'headers-*' columns found on
+# the exported endpoints are inserted after headers-Authorization.
+TEMPLATE_COLUMNS = [
+    "Test_Case_Name", "httpMethod", "baseUrl", "endPoint",
+    "headers", "BodyFormat", "headers-Authorization", "auth_type",
+    "Request-username", "Request-password",
+    "Expected-StatusCode", "Expected-Message",
+    "Validate?", "Performance?",
+    "Extract-Values", "Depends-On", "Execution-Order",
+]
 
-    df = pd.read_excel(file_path)
-    df.columns = [c.strip() for c in df.columns]
+# Header names whose literal value is withheld from the exported file — a pasted
+# bearer token belongs in the Global headers field at run time, not in a
+# spreadsheet that gets shared around.
+EXPORT_SENSITIVE_HEADERS = ("authorization", "cookie", "x-api-key", "api-key", "token", "secret")
 
-    # Normalize Yes/No fields
-    def normalize_flag(val):
-        if str(val).strip().upper() in ["Y", "YES", "TRUE", "1"]:
-            return True
+
+def _is_secret_header(name, value):
+    """
+    True only for a sensitive header holding a literal value.
+
+    'Bearer ${token}' carries no secret and is what makes a chain work, so it is
+    exported as-is; 'Bearer eyJhbGciOi...' is withheld.
+    """
+    if not any(marker in str(name).lower() for marker in EXPORT_SENSITIVE_HEADERS):
         return False
+    return "${" not in str(value)
 
-    api_list = []
 
-    for _, row in df.iterrows():
+def _unfilled_path_params(endpoint):
+    """
+    Path placeholders still needing a value.
+
+    ${vars} are removed first — '/users/${uid}' contains the substring '{uid}'
+    but is already bound to a chained value, not an unfilled parameter.
+    """
+    without_vars = re.sub(r"\$\{[^{}]*\}", "", str(endpoint or ""))
+    return re.findall(r"\{([^{}]+)\}", without_vars)
+
+
+def make_test_case_name(api, index, taken=None):
+    """
+    Build a readable, unique test-case name for a Swagger endpoint.
+
+    Used both when endpoints are fetched (so results are labelled by name rather
+    than URL) and when exporting, so the grid, the export and the result report
+    all agree on what a test case is called.
+    """
+    taken = taken if taken is not None else set()
+
+    existing = str(api.get("test_case_name") or "").strip()
+    if existing and existing not in taken:
+        taken.add(existing)
+        return existing
+
+    return _test_case_name(api, index, taken)
+
+
+def _test_case_name(api, index, taken):
+    """A unique, readable Test_Case_Name — Depends-On refers to rows by this."""
+    slug = re.sub(r"[^A-Za-z0-9]+", "_", str(api.get("endpoint") or "")).strip("_")
+    slug = re.sub(r"_+", "_", slug)[:48] or "endpoint"
+    base = f"TC_{index:02d}_{str(api.get('httpMethod') or 'GET').upper()}_{slug}"
+
+    name, suffix = base, 2
+    while name in taken:
+        name = f"{base}_{suffix}"
+        suffix += 1
+    taken.add(name)
+    return name
+
+
+def _endpoint_with_query(api):
+    """
+    Fold query parameters into endPoint as a query string.
+
+    The template has no query column, and 'baseUrl + endPoint' is sent verbatim,
+    so '?a=1&b=2' on the end works and keeps ${vars} resolvable.
+    """
+    endpoint = str(api.get("endpoint") or "")
+
+    # Substitute any path parameter values the user supplied in the grid
+    for param in api.get("pathParams") or []:
+        if not isinstance(param, dict):
+            continue
+        value = param.get("value")
+        if value is not None and str(value).strip():
+            endpoint = endpoint.replace("{" + str(param.get("name")) + "}", str(value).strip())
+
+    pairs = []
+    for param in api.get("queryParams") or []:
+        if not isinstance(param, dict):
+            continue
+        value = param.get("value")
+        if value is None or not str(value).strip():
+            continue
+        pairs.append(f"{param.get('name')}={str(value).strip()}")
+
+    if pairs:
+        joiner = "&" if "?" in endpoint else "?"
+        endpoint = f"{endpoint}{joiner}{'&'.join(pairs)}"
+
+    return endpoint
+
+
+def swagger_rows_to_template(api_list):
+    """
+    Map fetched Swagger endpoints onto the Excel template.
+
+    Returns (DataFrame, warnings). Warnings flag rows that need attention before
+    the exported sheet will run — unfilled path parameters, missing required
+    query parameters, and any auth header deliberately left out.
+    """
+    rows, warnings, taken = [], [], set()
+    extra_header_columns = []
+    skipped_auth = set()
+
+    for index, api in enumerate(api_list, start=1):
+        method = str(api.get("httpMethod") or "GET").upper()
+        endpoint = _endpoint_with_query(api)
+        name = make_test_case_name(api, index, taken)
+
+        # Headers: content type into 'headers', the rest into headers-<Name>
+        headers = api.get("headers") or {}
+        content_type = "application/json"
+        row_headers = {}
+        for header_name, header_value in headers.items():
+            if str(header_name).lower() == "content-type":
+                content_type = header_value
+                continue
+            if _is_secret_header(header_name, header_value):
+                skipped_auth.add(header_name)
+                continue
+            column = f"headers-{header_name}"
+            row_headers[column] = header_value
+            if column not in extra_header_columns and column != "headers-Authorization":
+                extra_header_columns.append(column)
+
+        payload = api.get("payload")
+        if method in ("POST", "PUT", "PATCH") and payload:
+            body = json.dumps(payload, indent=2)
+        else:
+            body = "NODATA"
+
+        unfilled = _unfilled_path_params(endpoint)
+        if unfilled:
+            warnings.append(f"{name}: path parameter(s) {', '.join(unfilled)} still need a value in endPoint")
+
+        missing_query = [
+            param.get("name") for param in (api.get("queryParams") or [])
+            if isinstance(param, dict) and param.get("required")
+            and (param.get("value") is None or not str(param.get("value")).strip())
+        ]
+        if missing_query:
+            warnings.append(f"{name}: required query parameter(s) {', '.join(missing_query)} are empty")
+
+        row = {
+            "Test_Case_Name": name,
+            "httpMethod": method,
+            "baseUrl": api.get("baseUrl") or "",
+            "endPoint": endpoint,
+            "headers": content_type,
+            "BodyFormat": body,
+            "headers-Authorization": "",
+            "auth_type": "NA",
+            "Request-username": "",
+            "Request-password": "",
+            "Expected-StatusCode": api.get("Expected-StatusCode") or 200,
+            "Expected-Message": "",
+            "Validate?": "Y" if api.get("Validate?") else "N",
+            "Performance?": "Y" if api.get("Performance?") else "N",
+            "Extract-Values": api.get("extract") or "",
+            "Depends-On": api.get("dependsOn") or "",
+            "Execution-Order": api.get("order") or "",
+        }
+        row.update(row_headers)
+        rows.append(row)
+
+    if skipped_auth:
+        warnings.append(
+            "Auth header(s) " + ", ".join(sorted(skipped_auth))
+            + " were not written to the file — paste the token under 'Chaining & auth → Global headers' "
+              "when you run the document instead."
+        )
+
+    columns = list(TEMPLATE_COLUMNS)
+    insert_at = columns.index("headers-Authorization") + 1
+    for column in extra_header_columns:
+        columns.insert(insert_at, column)
+        insert_at += 1
+
+    frame = pd.DataFrame(rows).reindex(columns=columns)
+    return frame.where(pd.notna(frame), ""), warnings
+
+
+TEMPLATE_REQUIRED_COLUMNS = ("Test_Case_Name", "httpMethod", "endPoint")
+
+
+def read_template_frame(source):
+    """
+    Load a previously exported sheet as a raw DataFrame.
+
+    Deliberately not read_excel_input — that normalises rows for execution and
+    would drop the exact column layout (including any custom headers-* columns)
+    that the merged file has to preserve.
+
+    Returns (frame, error).
+    """
+    try:
+        frame = pd.read_excel(source)
+    except Exception as exc:
+        return None, f"Could not read that file: {exc}"
+
+    frame.columns = [str(column).strip() for column in frame.columns]
+
+    missing = [c for c in TEMPLATE_REQUIRED_COLUMNS if c not in frame.columns]
+    if missing:
+        return None, (
+            "That does not look like an exported API sheet — missing column(s): "
+            + ", ".join(missing)
+        )
+
+    frame = frame.where(pd.notna(frame), "")
+    # Drop fully blank rows so appending doesn't inherit spacer lines
+    frame = frame[frame["httpMethod"].astype(str).str.strip().ne("")
+                  | frame["endPoint"].astype(str).str.strip().ne("")]
+    return frame.reset_index(drop=True), None
+
+
+def merge_template_frames(base, new):
+    """
+    Append newly exported rows to a previously exported sheet.
+
+    Columns are unioned (base order first) and duplicate Test_Case_Names in the
+    incoming rows are suffixed, so adding the same endpoint again with a
+    different payload gives a second, distinctly named test case rather than a
+    silent collision that Depends-On could not tell apart.
+
+    Returns (merged_frame, notes).
+    """
+    notes = []
+    if base is None or base.empty:
+        return new.reset_index(drop=True), notes
+    if new is None or new.empty:
+        return base.reset_index(drop=True), notes
+
+    columns = list(base.columns) + [c for c in new.columns if c not in base.columns]
+    added = [c for c in new.columns if c not in base.columns]
+    if added:
+        notes.append("New column(s) added to the sheet: " + ", ".join(added))
+
+    taken = {str(name).strip() for name in base["Test_Case_Name"] if str(name).strip()}
+    renamed = []
+
+    new = new.copy()
+    fresh_names = []
+    for name in new["Test_Case_Name"]:
+        candidate = str(name).strip() or "TC"
+        if candidate in taken:
+            stem, suffix = candidate, 2
+            while f"{stem}_v{suffix}" in taken:
+                suffix += 1
+            renamed.append((candidate, f"{stem}_v{suffix}"))
+            candidate = f"{stem}_v{suffix}"
+        taken.add(candidate)
+        fresh_names.append(candidate)
+    new["Test_Case_Name"] = fresh_names
+
+    if renamed:
+        notes.append(
+            f"{len(renamed)} row(s) renamed to stay unique: "
+            + ", ".join(f"{old} → {fresh}" for old, fresh in renamed[:5])
+            + (" …" if len(renamed) > 5 else "")
+        )
+
+    merged = pd.concat(
+        [base.reindex(columns=columns), new.reindex(columns=columns)],
+        ignore_index=True,
+    )
+    return merged.where(pd.notna(merged), ""), notes
+
+
+def validate_template_frame(frame):
+    """
+    Problems that would break the sheet once uploaded, reported while the user
+    is still editing it. Returns a list of messages.
+    """
+    problems = []
+    if frame is None or len(frame) == 0:
+        return problems
+
+    names = [str(name).strip() for name in frame.get("Test_Case_Name", []) if str(name).strip()]
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        problems.append(
+            "Duplicate Test_Case_Name: " + ", ".join(duplicates)
+            + " — Depends-On cannot tell them apart."
+        )
+
+    for position, record in enumerate(frame.to_dict("records"), start=2):
+        label = str(record.get("Test_Case_Name") or "").strip() or f"row {position}"
+
+        body = str(record.get("BodyFormat") or "").strip()
+        if body and body.upper() not in ("NODATA", "NO_DATA", "NONE"):
+            try:
+                json.loads(body)
+            except Exception as exc:
+                problems.append(f"{label}: BodyFormat is not valid JSON — {exc}")
+
+        if not str(record.get("httpMethod") or "").strip():
+            problems.append(f"{label}: httpMethod is empty")
+        if not str(record.get("endPoint") or "").strip():
+            problems.append(f"{label}: endPoint is empty")
+
+    return problems
+
+
+def template_dataframe_to_bytes(frame, sheet_name="API_Details"):
+    """Serialise the export to .xlsx bytes for a Streamlit download button."""
+    import io
+
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        frame.to_excel(writer, sheet_name=sheet_name, index=False)
+        worksheet = writer.sheets[sheet_name]
+        for index, column in enumerate(frame.columns, start=1):
+            longest = max(
+                [len(str(column))]
+                + [len(str(value).split("\n")[0]) for value in frame[column]]
+            )
+            letter = worksheet.cell(row=1, column=index).column_letter
+            worksheet.column_dimensions[letter].width = min(max(longest + 2, 12), 42)
+
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def _cell(row, column, default=""):
+    """Read a cell, treating NaN / blank as the default."""
+    value = row.get(column, default)
+    if value is None:
+        return default
+    if isinstance(value, float) and pd.isna(value):
+        return default
+    if isinstance(value, str) and not value.strip():
+        return default
+    return value
+
+
+def _cell_text(row, column, default=""):
+    value = _cell(row, column, default)
+    return value if isinstance(value, str) else ("" if value == "" else str(value))
+
+
+def _first_cell_text(row, columns, default=""):
+    """First non-empty value among several accepted column spellings."""
+    for column in columns:
+        value = _cell_text(row, column)
+        if value:
+            return value
+    return default
+
+
+# People retype the header by hand often enough that the underscored spelling
+# alone is too brittle — a mismatch silently costs every row its name.
+TEST_CASE_NAME_COLUMNS = (
+    "Test_Case_Name", "Test Case Name", "TestCaseName", "Test_Case",
+    "Test Case", "TestCase", "Test_Name", "Test Name", "TC_Name", "TC Name",
+)
+
+
+def _normalize_flag(value, default=False):
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return default
+    text = str(value).strip().upper()
+    if not text:
+        return default
+    return text in ("Y", "YES", "TRUE", "1", "1.0")
+
+
+def _row_headers(row):
+    """
+    Build the request headers for a sheet row.
+
+    'headers' carries the content type (that is what the template has always
+    held). Any 'headers-<Name>' column becomes a header of that name, so a sheet
+    can add 'headers-x-api-key' or 'headers-X-Tenant' with no code change.
+    """
+    headers = {}
+
+    content_type = _cell_text(row, "headers")
+    if content_type:
+        headers["Content-Type"] = content_type
+
+    for column in row.index:
+        name = str(column).strip()
+        if not name.lower().startswith("headers-"):
+            continue
+        header_name = name.split("-", 1)[1].strip()
+        value = _cell(row, column)
+        if header_name and value != "":
+            headers[header_name] = value if isinstance(value, str) else str(value)
+
+    return headers
+
+
+def _row_payload(row, label):
+    """
+    Parse the BodyFormat cell into a dict.
+
+    Parsed here rather than at request time so that ${vars} substitute into the
+    parsed structure: "agent_id": "${agent_id}" then yields a real integer,
+    whereas resolving the raw text first would produce the string "10877" and be
+    rejected by any API declaring that field as a number.
+
+    Returns (payload, error). A NODATA/blank cell is simply no payload.
+    """
+    raw = _cell(row, "BodyFormat")
+    if raw == "" or str(raw).strip().upper() in ("NODATA", "NO_DATA", "NONE"):
+        return {}, None
+
+    if isinstance(raw, dict):
+        return raw, None
+
+    try:
+        parsed = json.loads(str(raw))
+    except Exception as exc:
+        return {}, f"{label}: BodyFormat is not valid JSON — {exc}"
+
+    if not isinstance(parsed, (dict, list)):
+        return {}, f"{label}: BodyFormat must be a JSON object or array, got {type(parsed).__name__}"
+
+    return parsed, None
+
+
+def read_excel_input(file_path):
+    """
+    Read the API Excel file into rows the shared runner can execute.
+
+    Returns (api_list, errors). Errors are per-row problems worth showing at
+    upload time — a malformed payload found now is far easier to fix than the
+    same failure surfacing mid-run.
+    """
+    df = pd.read_excel(file_path)
+    df.columns = [str(c).strip() for c in df.columns]
+
+    api_list, errors = [], []
+
+    for position, (_, row) in enumerate(df.iterrows(), start=2):  # row 1 is the header
+        name = _first_cell_text(row, TEST_CASE_NAME_COLUMNS) or f"Row {position}"
+        method = _cell_text(row, "httpMethod").upper()
+        endpoint = _cell_text(row, "endPoint")
+
+        if not method and not endpoint:
+            continue  # blank spacer row
+
+        payload, payload_error = _row_payload(row, f"'{name}' (sheet row {position})")
+        if payload_error:
+            errors.append(payload_error)
+
+        try:
+            expected_status = int(float(_cell(row, "Expected-StatusCode", 200) or 200))
+        except (TypeError, ValueError):
+            expected_status = 200
+            errors.append(f"'{name}': Expected-StatusCode is not a number, using 200")
+
+        order_raw = _cell(row, "Execution-Order", "")
+        try:
+            order = int(float(order_raw)) or None
+        except (TypeError, ValueError):
+            order = None
 
         api_data = {
-            "test_case_name": row.get("Test_Case_Name", ""),
-            "method": row.get("httpMethod", "").upper(),
-            "baseUrl": row.get("baseUrl", ""),
-            "endpoint": row.get("endPoint", ""),
+            "test_case_name": name,
+            "method": method,
+            "baseUrl": _cell_text(row, "baseUrl"),
+            "endpoint": endpoint,
 
-            # Headers
-            "content_type": row.get("headers", "application/json"),
-            "authorization": row.get("headers-Authorization", ""),
+            # Real headers dict — previously the sheet's header columns were
+            # collected into keys nothing ever read, so they were never sent.
+            "headers": _row_headers(row),
 
-            # Request Body Inputs
-            "body_format": row.get("BodyFormat", ""),             # JSON / FORM-DATA / NODATA
-            "username": row.get("Request-username", ""),
-            "password": row.get("Request-password", ""),
-            #auth_type
-            "auth_type": row.get("auth_type", ""),
-            # Expected Output Details
-            "expected_status": int(row.get("Expected-StatusCode", 200)),
-            "expected_message": row.get("Expected-Message", ""),
+            # Parsed body; body_format kept so anything still reading it works
+            "payload": payload,
+            "body_format": _cell(row, "BodyFormat"),
+            "_payload_error": payload_error,
 
-            # Flags
-            "validate": normalize_flag(row.get("Validate?", "Y")),
-            "performance": normalize_flag(row.get("Performance?", "N")),
+            "username": _cell_text(row, "Request-username"),
+            "password": _cell_text(row, "Request-password"),
+            "auth_type": _cell_text(row, "auth_type"),
 
-            # Extraction
-            "extract_token": row.get("Extract-token", "")
+            "expected_status": expected_status,
+            "Expected-StatusCode": expected_status,
+            "expected_message": _cell_text(row, "Expected-Message"),
+
+            "validate": _normalize_flag(_cell(row, "Validate?", "Y"), default=True),
+            "performance": _normalize_flag(_cell(row, "Performance?", "N"), default=False),
+
+            # Chaining. 'Extract-token' is the legacy single-value column.
+            "extract": _cell_text(row, "Extract-Values") or _cell_text(row, "Extract-token"),
+            "dependsOn": _cell_text(row, "Depends-On"),
+            "order": order,
         }
+
+        if not api_data["_payload_error"]:
+            api_data.pop("_payload_error")
 
         api_list.append(api_data)
 
-    return api_list
+    return api_list, errors
 def generate_example_payload(schema: dict):
     """
     Generate sample payload from Swagger schema
@@ -459,6 +1052,67 @@ def generate_example_payload(schema: dict):
 
 
 def api_response_prompt(api_response):
+    """Ask for a table-first HTML report — prose walls are hard to scan."""
+    return f"""You are a Senior API Quality Architect and Automation Expert.
+
+You will be given the results of an API test run as structured rows.
+
+Your job is to produce a **TABULAR** HTML quality report. Tables are the primary
+output; prose is only allowed in the short verdict at the end.
+
+### INPUT DATA
+{api_response}
+
+---
+
+### OUTPUT RULES (STRICT)
+- Return ONLY valid HTML. No markdown, no ``` fences, no <html>/<head>/<body> wrapper.
+- Every section below MUST be an HTML <table>. Do not replace a table with a list.
+- One row per API in the per-API tables. Never merge or omit APIs.
+- Use only the data provided. If something is unknown, write "Not Available".
+- Do not dump raw JSON.
+- Add style="background:#fde8e8" to any <tr> whose result is FAIL,
+  and style="background:#fef7e0" to any <tr> whose result is SKIP.
+
+### REQUIRED OUTPUT
+
+<h2>Run Summary</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Total</th><th>Passed</th><th>Failed</th><th>Skipped</th><th>Pass Rate</th><th>Overall Verdict</th></tr>
+<tr>...one row of numbers...</tr>
+</table>
+
+<h2>Test Results</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Test Case</th><th>Method</th><th>Endpoint</th><th>Expected Status</th><th>Actual Status</th>
+<th>Expected Message</th><th>Actual Message</th><th>Result</th><th>Root Cause</th></tr>
+...one row per API...
+</table>
+
+<h2>Issues Identified</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>#</th><th>Affected API</th><th>Issue</th><th>Severity</th><th>Evidence</th></tr>
+...one row per distinct issue; if none, a single row saying "No issues identified"...
+</table>
+
+<h2>Risk Assessment</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Area</th><th>Risk Level</th><th>Justification</th></tr>
+...one row per risk area (Functional, Security, Data Integrity, Reliability)...
+</table>
+
+<h2>Recommendations</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Priority</th><th>Recommendation</th><th>Applies To</th><th>Expected Benefit</th></tr>
+...one row per action, ordered High -> Low...
+</table>
+
+<h2>Verdict</h2>
+<p>Two or three sentences maximum.</p>
+"""
+
+
+def _legacy_api_response_prompt(api_response):
     formatted_summary = f"""You are a Senior API Quality Architect and Automation Expert.
 
     Your task is to analyze API execution results and provide a clear, structured
@@ -875,9 +1529,9 @@ if __name__ == "__main__":
     api_details = extract_api_details(openapi_spec)
 
     # Extract Base URL from Swagger if exists, else ask user/UI
-    base_url = get_base_url(openapi_spec)
+    base_url = get_base_url(swagger_url, openapi_spec)
 
-    final_list = build_data_dictionary(api_details, base_url)
+    final_list = build_data_dictionary(api_details, base_url, openapi_spec)
 
     print(json.dumps(final_list, indent=4))
 

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>API Performance Test Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    h1, h2, h3 { color: #2c3e50; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f4f6f8; }
+    .good { color: green; font-weight: bold; }
+    .moderate { color: orange; font-weight: bold; }
+    .poor { color: red; font-weight: bold; }
+    .na { color: gray; }
+  </style>
+</head>
+
+<body>
+
+<h1>Test Execution Configuration</h1>
+<table>
+  <tr><th>Parameter</th><th>Value</th></tr>
+  <tr><td>Ramp Users</td><td>20</td></tr>
+  <tr><td>Spawn Rate (users/sec)</td><td>0.5</td></tr>
+  <tr><td>Run Time</td><td>10s</td></tr>
+  <tr><td>Stop Time</td><td>100</td></tr>
+</table>
+
+<p>
+  Load intensity context: The test executed with a gradual user ramp-up to 20 virtual users at a spawn rate of 0.5 users/sec, a steady-state period of 10 seconds, and a graceful shutdown window of 100 seconds. This configuration is provided for context only and is not used to derive any performance metrics in this report.
+</p>
+
+<hr/>
+
+<h1>Overall Performance Summary</h1>
+<ul>
+  <li><strong>Total APIs Tested:</strong> 1</li>
+  <li><strong>Overall Health:</strong> <span class="na">Not Available</span></li>
+</ul>
+
+<h2>Key Risks</h2>
+<ul>
+  <li><strong>Data Unavailability:</strong> CSV-derived statistics, history, failure, and exception records are empty. No numerical performance metrics could be computed or validated.</li>
+  <li><strong>Undetected Regressions:</strong> Without recorded metrics, regressions in latency, throughput, or error rate cannot be identified; pushing to production carries risk.</li>
+  <li><strong>False Confidence:</strong> Test infrastructure or reporting misconfiguration may produce empty outputs; assuming acceptable performance without valid data would be unsafe.</li>
+</ul>
+
+<hr/>
+
+<h1>API-wise Performance Analysis</h1>
+
+<section>
+  <h2>API: C:\Users\sathanantham.aru\PycharmProjects\ai-accelerator\tests_results\locust_reports\locust_report_POST__aiapi_agents_save_draft_20260808_140834_541312.html</h2>
+
+  <p><em>Note:</em> The CSV-derived inputs for this API (stats, stats_history, failures, exceptions) are empty. All numerical fields below are therefore indicated as Not Available.</p>
+
+  <h3>Throughput</h3>
+  <table>
+    <tr><th>Metric</th><th>Value</th></tr>
+    <tr><td>Requests / Second</td><td class="na">Not Available</td></tr>
+    <tr><td>Total Requests</td><td class="na">Not Available</td></tr>
+  </table>
+
+  <h3>Latency</h3>
+  <table>
+    <tr><th>Metric</th><th>Value</th></tr>
+    <tr><td>Average Response Time</td><td class="na">Not Available</td></tr>
+    <tr><td>P95 Response Time</td><td class="na">Not Available</td></tr>
+  </table>
+
+  <h3>Reliability</h3>
+  <table>
+    <tr><th>Metric</th><th>Value</th></tr>
+    <tr><td>Failure Count</td><td class="na">Not Available</td></tr>
+    <tr><td>Failure Rate</td><td class="na">Not Available</td></tr>
+    <tr><td>Observations</td><td>CSV files for failures and exceptions are empty. No failure or exception details were recorded in the provided artifacts.</td></tr>
+  </table>
+
+  <h3>Stability Assessment</h3>
+  <p class="na">Not Available</p>
+
+  <h3>Recommendations</h3>
+  <ul>
+    <li>Confirm Locust run configuration and ensure CSV reporting is enabled and writing to the expected paths. Verify file permissions and run-time completion of CSV writes.</li>
+    <li>Re-run the test with validated CSV outputs. Ensure the test duration captures a meaningful steady-state period longer than transient startup and shutdown phases.</li>
+    <li>Instrument the system under test with server-side metrics (CPU, memory, GC, thread pools, DB connections) and gather those alongside Locust metrics to correlate client and server behavior.</li>
+    <li>Introduce checks/assertions in the test that fail the run or flag results when expected thresholds (latency, error rate) are exceeded; this prevents silent passes with empty or invalid outputs.</li>
+    <li>Validate test scripts to ensure requests are executed (no early exits or skipped tasks) and that any setup/teardown logic does not suppress metric collection.</li>
+  </ul>
+</section>
+
+<hr/>
+
+<h1>Final Recommendation</h1>
+<p>
+  The current test artifacts do not contain any numerical performance data. Therefore, it is not possible to assess production readiness for the API based on the provided CSVs. Before making release decisions, correct the reporting/data collection issues and re-execute the test to capture valid throughput, latency, and error metrics. Once valid data is available, perform trend analysis, SLA compliance checks, and resource correlation to provide an actionable production-readiness assessment.
+</p>
+
+</body>
+</html>

@@ -726,31 +726,52 @@ class Apicore:
         return res.json().get("access_token")
 
     def get_auth_headers(self, data_dictionary):
-        headers = data_dictionary.get("headers", {})
-        auth_type = data_dictionary.get("auth_type", "NA").upper()
+        """
+        Headers for an Excel-driven request.
 
-        # NA = No Auth
-        if auth_type == "NA":
+        Starts from the row's own headers (built from the sheet's 'headers' and
+        'headers-*' columns) and layers auth_type on top. Anything the row sets
+        explicitly wins — a pasted Authorization header is never overwritten.
+        """
+        headers = dict(data_dictionary.get("headers") or {})
+        auth_type = str(data_dictionary.get("auth_type") or "NA").strip().upper()
+
+        if auth_type in ("", "NA", "NONE", "NO", "NO_AUTH"):
             return headers
 
-        # Username (Basic Auth)
+        # Username / password -> Basic
         if auth_type == "USERNAME":
+            if "Authorization" in headers:
+                return headers
             username = data_dictionary.get("username")
             password = data_dictionary.get("password")
-            return self.add_basic_auth_header(username, password, headers)
-
-        # API KEY coming from config file
-        if auth_type == "API":
-            # config = configparser.ConfigParser()
-            # config.read("auth_config.ini")
-            # api_key = config.get("auth", "api_key")
-            headers["x-api-key"] = "reqres_77f2dcfc6bea46349bbc43b68dfc0436"
+            if username or password:
+                return self.add_basic_auth_header(username, password, headers)
             return headers
 
-        # Bearer token
+        # API key. Supplied via a 'headers-x-api-key' column rather than being
+        # injected from code, so no key is ever sent to a host without the sheet
+        # asking for it.
+        if auth_type == "API":
+            if not any(key.lower() == "x-api-key" for key in headers):
+                print("⚠ auth_type=API but no 'headers-x-api-key' column value — sending no API key.")
+            return headers
+
+        # Bearer. Prefer a token already captured in this run (extracted by an
+        # earlier row, or a global header), and only then fall back to the
+        # standalone auth_config.ini client-credentials call.
         if auth_type == "BEARER":
-            token = self.generate_bearer_token()
-            headers["Authorization"] = f"Bearer {token}"
+            if "Authorization" in headers:
+                return headers
+            token = data_dictionary.get("_bearer_token")
+            if not token:
+                try:
+                    token = self.generate_bearer_token()
+                except Exception as exc:
+                    print(f"⚠ Could not obtain a bearer token: {exc}")
+                    token = None
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
             return headers
 
         return headers
@@ -1009,8 +1030,12 @@ class Apicore:
             endpoint = data_dictionary.get("endpoint", "")
             headers = self.get_auth_headers(data_dictionary)
 
-            # Excel payload (string JSON)
-            raw_payload = data_dictionary.get("body_format")
+            # Excel payload. read_excel_input parses BodyFormat into a dict so
+            # that ${vars} resolve with their real types; fall back to the raw
+            # cell for callers that still pass the unparsed string.
+            raw_payload = data_dictionary.get("payload")
+            if not raw_payload:
+                raw_payload = data_dictionary.get("body_format")
             print("**********raw_payload_file***********", raw_payload)
 
         else:  # swagger
@@ -1026,10 +1051,18 @@ class Apicore:
 
         combinedurl = f"{base_url}{endpoint}"
 
+        # Query params supplied by the caller (already resolved by api_runner).
+        # Ignored unless it is a flat {name: value} dict.
+        query_params = data_dictionary.get("queryParams")
+        if not isinstance(query_params, dict) or not query_params:
+            query_params = None
+
         with allure.step("Preparing API Request"):
             allure.attach(http_method, "HTTP Method", allure.attachment_type.TEXT)
             allure.attach(combinedurl, "URL", allure.attachment_type.TEXT)
             allure.attach(json.dumps(headers), "Headers", allure.attachment_type.JSON)
+            if query_params:
+                allure.attach(json.dumps(query_params), "Query Params", allure.attachment_type.JSON)
 
         # -------------------------------
         # 2. Prepare request body
@@ -1038,15 +1071,15 @@ class Apicore:
 
         if http_method in ["POST", "PUT", "PATCH"] and raw_payload:
             try:
-                if api_input_type == "file":
-                    # Excel → string → dict
-                    print("make_api_call_rwa_payload", raw_payload)
-                    json_body = json.loads(raw_payload)
-                    print("make_api_call_json_body", json_body)
-                else:
-                    # Swagger → already dict
+                if isinstance(raw_payload, (dict, list)):
+                    # Already structured (Swagger, or Excel parsed at upload)
                     json_body = raw_payload
-                    print("make_api_call_JSON_BODY",json_body)
+                    print("make_api_call_JSON_BODY", json_body)
+                else:
+                    # Raw JSON text
+                    print("make_api_call_rwa_payload", raw_payload)
+                    json_body = json.loads(str(raw_payload))
+                    print("make_api_call_json_body", json_body)
 
                 allure.attach(
                     json.dumps(json_body, indent=2),
@@ -1063,7 +1096,7 @@ class Apicore:
         try:
             with allure.step(f"Sending {http_method} Request"):
                 if http_method == "GET":
-                    response = requests.get(combinedurl, headers=headers, verify=False)
+                    response = requests.get(combinedurl, headers=headers, params=query_params, verify=False)
                     print("Swegger GET Reposne",response)
                 elif http_method == "POST":
                     print("Swegger_make_api_call_JSON_BODY", json_body)
@@ -1071,6 +1104,7 @@ class Apicore:
                         combinedurl,
                         json=json_body,
                         headers=headers,
+                        params=query_params,
                         verify=False
                     )
                     print("Swegger_make_api_call_resposne", response.json)
@@ -1079,6 +1113,7 @@ class Apicore:
                         combinedurl,
                         json=json_body,
                         headers=headers,
+                        params=query_params,
                         verify=False
                     )
 
@@ -1087,6 +1122,7 @@ class Apicore:
                         combinedurl,
                         json=json_body,
                         headers=headers,
+                        params=query_params,
                         verify=False
                     )
 
@@ -1094,6 +1130,7 @@ class Apicore:
                     response = requests.delete(
                         combinedurl,
                         headers=headers,
+                        params=query_params,
                         verify=False
                     )
 
