@@ -1,0 +1,85 @@
+<h2>Run Summary</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Total</th><th>Passed</th><th>Failed</th><th>Skipped</th><th>Pass Rate</th><th>Overall Verdict</th></tr>
+<tr><td>3</td><td>3</td><td>0</td><td>0</td><td>100%</td><td>PASS</td></tr>
+</table>
+
+<h2>Test Results</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Test Case</th><th>Method</th><th>Endpoint</th><th>Expected Status</th><th>Actual Status</th>
+<th>Expected Message</th><th>Actual Message</th><th>Result</th><th>Root Cause</th></tr>
+<tr>
+<td>TC_42_POST_aiapi_agents_save_draft</td>
+<td>POST</td>
+<td>https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/save_draft</td>
+<td>200 or 201</td>
+<td>200</td>
+<td>Not Available</td>
+<td>Agent Created &amp; Secured</td>
+<td>PASS</td>
+<td>Not Applicable</td>
+</tr>
+<tr>
+<td>TC_43_POST_aiapi_agents_create_draft</td>
+<td>POST</td>
+<td>https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/create_draft</td>
+<td>200 or 201</td>
+<td>201</td>
+<td>Not Available</td>
+<td>Agent draft access policies provisioned successfully</td>
+<td>PASS</td>
+<td>Not Applicable</td>
+</tr>
+<tr>
+<td>TC_39_PUT_aiapi_agents_update</td>
+<td>PUT</td>
+<td>https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/update</td>
+<td>200 or 201</td>
+<td>200</td>
+<td>Not Available</td>
+<td>Updated Successfully</td>
+<td>PASS</td>
+<td>Not Applicable</td>
+</tr>
+</table>
+
+<h2>Issues Identified</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>#</th><th>Affected API</th><th>Issue</th><th>Severity</th><th>Evidence</th></tr>
+<tr><td colspan="5">No issues identified</td></tr>
+</table>
+
+<h2>Risk Assessment</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Area</th><th>Risk Level</th><th>Justification</th></tr>
+<tr><td>Functional</td><td>Low</td><td>All executed endpoints returned expected success status codes and expected operational messages.</td></tr>
+<tr><td>Security</td><td>Medium</td><td>Authorization header is present in requests; ensure tokens are handled securely in logs and storage despite successful responses.</td></tr>
+<tr><td>Data Integrity</td><td>Low</td><td>Responses include identifiers (agent_id / draft_id) consistent across calls, indicating stable data flow for these operations.</td></tr>
+<tr><td>Reliability</td><td>Low</td><td>Endpoints responded with success codes during this run; no timeouts or retries observed in the provided data.</td></tr>
+</table>
+
+<h2>Recommendations</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Priority</th><th>Recommendation</th><th>Applies To</th><th>Expected Benefit</th></tr>
+<tr>
+<td>High</td>
+<td>Validate and mask authorization tokens in test logs and ensure secure handling of credentials in CI systems.</td>
+<td>All APIs using Authorization header</td>
+<td>Reduce risk of credential exposure and compliance issues.</td>
+</tr>
+<tr>
+<td>Medium</td>
+<td>Add explicit assertions for expected response messages and schema (e.g., presence and types of agent_id, draft_id, agent_uuid).</td>
+<td>All three test cases</td>
+<td>Increase test robustness and catch regressions in response structure or content.</td>
+</tr>
+<tr>
+<td>Low</td>
+<td>Extend test coverage with negative cases (invalid payloads, unauthorized requests) and automated retries for transient failures.</td>
+<td>All endpoints</td>
+<td>Improve resilience and detect error handling regressions.</td>
+</tr>
+</table>
+
+<h2>Verdict</h2>
+<p>The test run passed all 3 cases with a 100% pass rate and returned expected success responses. Continue with the recommended security and validation improvements to strengthen confidence and coverage.

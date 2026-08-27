@@ -1,0 +1,40 @@
+<h2>Run Summary</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Total</th><th>Passed</th><th>Failed</th><th>Skipped</th><th>Pass Rate</th><th>Overall Verdict</th></tr>
+<tr><td>4</td><td>3</td><td>1</td><td>0</td><td>75.00%</td><td>Partial Pass - Attention Required</td></tr>
+</table>
+
+<h2>Test Results</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Test Case</th><th>Method</th><th>Endpoint</th><th>Expected Status</th><th>Actual Status</th><th>Expected Message</th><th>Actual Message</th><th>Result</th><th>Root Cause</th></tr>
+<tr><td>TC_01_save_draft</td><td>POST</td><td>https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/save_draft</td><td>200 or 201</td><td>200</td><td>"message": "Agent Created & Secured"</td><td>message=Agent Created & Secured</td><td>PASS</td><td>Not Available</td></tr>
+<tr><td>TC_02_create_draft</td><td>POST</td><td>https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/create_draft</td><td>200 or 201</td><td>201</td><td>Not Available</td><td>Agent draft access policies provisioned successfully</td><td>PASS</td><td>Not Available</td></tr>
+<tr><td>TC_03_update_agent</td><td>PUT</td><td>https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/update</td><td>200 or 201</td><td>200</td><td>Not Available</td><td>Updated Successfully</td><td>PASS</td><td>Not Available</td></tr>
+<tr style="background:#fde8e8"><td>TC_04_save_draft_update</td><td>POST</td><td>https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/save_draft</td><td>200 or 201</td><td>200</td><td>"message": "Agent Updated Successfully"</td><td>message=Agent Created & Secured</td><td>FAIL</td><td>message: expected 'Agent Updated Successfully', got 'Agent Created & Secured'</td></tr>
+</table>
+
+<h2>Issues Identified</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>#</th><th>Affected API</th><th>Issue</th><th>Severity</th><th>Evidence</th></tr>
+<tr><td>1</td><td>TC_04_save_draft_update (POST /aiapi/agents/save_draft)</td><td>Response message mismatch: update operation returned creation message</td><td>High</td><td>Expected: "message": "Agent Updated Successfully" | Actual: message=Agent Created & Secured</td></tr>
+</table>
+
+<h2>Risk Assessment</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Area</th><th>Risk Level</th><th>Justification</th></tr>
+<tr><td>Functional</td><td>Medium</td><td>One failing test shows incorrect response semantics for an update operation which may cause client-side logic errors.</td></tr>
+<tr><td>Security</td><td>Low</td><td>No security-related failures observed in these tests; however endpoints create agents so review recommended.</td></tr>
+<tr><td>Data Integrity</td><td>Low</td><td>No direct evidence of corrupted data, but incorrect operation labeling could lead to unintended state if not corrected.</td></tr>
+<tr><td>Reliability</td><td>Low</td><td>Single failure suggests isolated issue rather than systemic instability based on current run.</td></tr>
+</table>
+
+<h2>Recommendations</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Priority</th><th>Recommendation</th><th>Applies To</th><th>Expected Benefit</th></tr>
+<tr><td>High</td><td>Fix the save_draft update flow so that update responses return the correct message and status; add regression test to cover update vs create responses.</td><td>TC_04_save_draft_update, save_draft endpoint</td><td>Prevents client misbehavior and ensures correct operation semantics.</td></tr>
+<tr><td>Medium</td><td>Enhance test assertions to validate response message fields and response schema (contract tests).</td><td>All agent-related endpoints</td><td>Earlier detection of message/content mismatches and API contract regressions.</td></tr>
+<tr><td>Low</td><td>Add monitoring/alerts for unexpected response messages and expand negative tests for edge cases.</td><td>API platform</td><td>Improved observability and reduced time-to-detect for similar regressions.</td></tr>
+</table>
+
+<h2>Verdict</h2>
+<p>The test run is a partial pass: 3 of 4 tests passed but one critical message mismatch was found for the save_draft update flow. Fixing the response semantics and adding contract-level assertions should resolve the primary risk. </p>

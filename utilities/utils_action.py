@@ -3132,6 +3132,30 @@ def take_screenshot(driver, folder):
     file_path = os.path.join(folder, f"{page_name}.png")
     driver.save_screenshot(file_path)
     return file_path
+
+
+def take_screenshot_unique(driver, folder):
+    """
+    Same as take_screenshot() but never overwrites an existing capture.
+
+    take_screenshot() names the file after the URL path alone, so two captures
+    of the same page (e.g. a modal opened without navigating) collapse into one
+    file. This variant keeps every state: home.png, home_02.png, home_03.png…
+    so the recorder's screenshot strip shows the whole journey in order.
+    """
+    url = driver.current_url
+    parsed_url = urlparse(url)
+    page_name = sanitize_filename(parsed_url.path.strip("/")) or "home"
+    page_name = page_name.replace("/", "_").replace("\\", "_") or "home"
+
+    file_path = os.path.join(folder, f"{page_name}.png")
+    seq = 2
+    while os.path.exists(file_path):
+        file_path = os.path.join(folder, f"{page_name}_{seq:02d}.png")
+        seq += 1
+
+    driver.save_screenshot(file_path)
+    return file_path
 # def humanize_action(action_dict):
 #     action_type = action_dict.get("action")
 #     tag = (action_dict.get("tag") or "").lower()

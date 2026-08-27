@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>API Performance Test Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    h1, h2, h3 { color: #2c3e50; }
+    table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f4f6f8; }
+    .good { color: green; font-weight: bold; }
+    .moderate { color: orange; font-weight: bold; }
+    .poor { color: red; font-weight: bold; }
+    .na { color: gray; }
+  </style>
+</head>
+
+<body>
+
+<h1>Test Execution Configuration</h1>
+<table>
+  <tr><th>Parameter</th><th>Value</th></tr>
+  <tr><td>Ramp Users</td><td>20</td></tr>
+  <tr><td>Spawn Rate (users/sec)</td><td>0.5</td></tr>
+  <tr><td>Run Time</td><td>10s</td></tr>
+  <tr><td>Stop Time</td><td>100</td></tr>
+</table>
+
+<hr/>
+
+<h1>Overall Performance Summary</h1>
+<ul>
+  <li><strong>Total APIs Tested:</strong> 1</li>
+  <li><strong>Overall Health:</strong> <span class="na">Not Available</span></li>
+</ul>
+
+<h2>Key Risks</h2>
+<ul>
+  <li>Test artifacts (stats, history, failures, exceptions) are empty — inability to validate service behavior under load.</li>
+  <li>Decisions made without result data risk undetected performance regressions or production incidents.</li>
+</ul>
+
+<hr/>
+
+<h1>API-wise Performance Analysis</h1>
+
+<section>
+  <h2>API: C:\Users\sathanantham.aru\PycharmProjects\ai-accelerator\tests_results\locust_reports\locust_report_POST__aiapi_agents_save_draft_20260814_131307_667542.html</h2>
+
+  <h3>Throughput</h3>
+  <table>
+    <tr><th>Metric</th><th>Value</th></tr>
+    <tr><td>Requests / Second</td><td class="na">Not Available</td></tr>
+    <tr><td>Total Requests</td><td class="na">Not Available</td></tr>
+  </table>
+
+  <h3>Latency</h3>
+  <table>
+    <tr><th>Metric</th><th>Value</th></tr>
+    <tr><td>Average Response Time</td><td class="na">Not Available</td></tr>
+    <tr><td>P95 Response Time</td><td class="na">Not Available</td></tr>
+  </table>
+
+  <h3>Reliability</h3>
+  <table>
+    <tr><th>Metric</th><th>Value</th></tr>
+    <tr><td>Failure Count</td><td class="na">Not Available</td></tr>
+    <tr><td>Failure Rate</td><td class="na">Not Available</td></tr>
+    <tr><td>Observations</td><td>CSV outputs (stats, stats_history, failures, exceptions) were empty in the provided report bundle. Detailed observations cannot be produced without these records.</td></tr>
+  </table>
+
+  <h3>Stability Assessment</h3>
+  <p class="na">Not Available</p>
+
+  <h3>Recommendations</h3>
+  <ul>
+    <li>Verify Locust configuration to ensure CSV reporting is enabled and files are written to the expected directory. Confirm permissions and available disk space on the runner host.</li>
+    <li>Re-run the test with the same load configuration and capture the CSV outputs (stats.csv, stats_history.csv, failures.csv, exceptions.csv). Validate that the files contain rows before concluding results.</li>
+    <li>Extend steady-state run_time to a representative duration for your workload (if 10s was intended as a quick smoke, run a longer test for meaningful metrics). Ensure spawn rate and ramp meet test objectives.</li>
+    <li>If intermittent failures are suspected, enable detailed logging on the system under test and collect server-side metrics (CPU, memory, connection counts) alongside Locust metrics for correlation.</li>
+    <li>Automate post-test artifact collection (archive CSVs and logs) to avoid missing data in future runs and to enable reproducible analysis.</li>
+  </ul>
+</section>
+
+<hr/>
+
+<h1>Final Recommendation</h1>
+<p>
+Insufficient data is available to assess performance or production readiness for the API above. Do not make release or capacity decisions based on this test run. Re-run the test with validated CSV output, capture server-side telemetry, and use a longer steady-state period to obtain statistically meaningful latency and throughput metrics. Once complete, perform a targeted analysis of throughput, percentile latencies, error rates, and system resource utilization to produce an actionable readiness verdict.
+</p>
+
+</body>
+</html>

@@ -20,6 +20,8 @@ from datetime import datetime
 
 from jsonpath_ng import parse
 
+from . import api_files
+
 # ${name} or ${name(args)} — also tolerates ${ name } and dotted names
 VAR_PATTERN = re.compile(r"\$\{\s*([A-Za-z_][A-Za-z0-9_.\-]*)\s*(?:\(([^()]*)\))?\s*\}")
 
@@ -67,11 +69,24 @@ def _random_string(args):
     return "".join(random.choice(alphabet) for _ in range(length))
 
 
+def _file_argument(args):
+    """The file name inside ${__fileBase64(name)}, quotes optional."""
+    return str(args or "").strip().strip('"').strip("'")
+
+
 # Generators usable as ${__name} / ${__name(args)}. These produce a fresh value
 # at request time rather than reading one out of the store, so payloads that
 # need to be unique per run (new agent names, ids) work without chaining.
+#
+# The __file* generators read from Input/attachments and put the file INSIDE the
+# JSON body. That is a different thing from the Attachments column, which sends
+# the file as its own multipart part — use these only for an API that asks for
+# base64 in the payload.
 BUILTINS = {
     "__uuid": lambda a: str(uuid.uuid4()),
+    "__fileBase64": lambda a: api_files.read_file_base64(_file_argument(a)),
+    "__fileText": lambda a: api_files.read_file_text(_file_argument(a)),
+    "__fileName": lambda a: api_files.attachment_basename(_file_argument(a)),
     "__timestamp": lambda a: int(datetime.now().timestamp()),
     "__time": _now_formatted,
     "__datetime": _now_formatted,

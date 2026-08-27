@@ -1461,61 +1461,170 @@ def thread_focus_screenshot_jan29_backup(driver,stop_flag,screenshot_folder,sour
         except Exception as e:
             print("Error during URL monitoring:", e)
         time.sleep(1)  # check every second
-def thread_focus_screenshot(driver, stop_flag, screenshot_folder, source="file"):
+# ── Probe used by the screenshot thread ───────────────────────────────────────
+# Installed once per document; the guard flag lives on `window`, so it dies with
+# the page and re-installs itself automatically after every navigation, reload
+# or new tab. One execute_script() returns everything the thread needs — the
+# interaction counter, how long ago the last interaction was, and the DOM element
+# count. Counting in JS keeps polling cheap: find_elements(By.XPATH, "//*")
+# serialises one WebElement handle per node over the wire on every poll, while
+# this returns a single integer.
+UI_CHANGE_PROBE_JS = """
+return (function () {
+    var w = window;
+    if (!w.__iqeaShotProbe) {
+        var s = { interactions: 0, lastTs: 0 };
+        w.__iqeaShotProbe = s;
+        var bump = function () { s.interactions++; s.lastTs = Date.now(); };
+        document.addEventListener('click',  bump, true);
+        document.addEventListener('change', bump, true);
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === 'Escape') bump();
+        }, true);
+    }
+    var st = w.__iqeaShotProbe;
+    return {
+        interactions: st.interactions,
+        idle_ms: st.lastTs ? (Date.now() - st.lastTs) : -1,
+        count: document.getElementsByTagName('*').length,
+        url: location.href,
+        ready: document.readyState
+    };
+})();
+"""
+
+
+def thread_focus_screenshot(driver, stop_flag, screenshot_folder, source="file",
+                            settle_ms=800, poll_seconds=0.5, min_delta=1,
+                            max_tracked_pages=200):
+    """
+    Screenshot thread for the user-workflow recorder.
+
+    Captures on three triggers:
+
+      1. URL changed            → the user landed on a new page (original behaviour).
+      2. Page reloaded          → same URL, but the probe counter restarted.
+      3. In-page UI change      → the URL did NOT change, but a user interaction
+                                  (click / change / Enter / Escape) left the page
+                                  with a different DOM element count than the one
+                                  recorded when we last captured that page —
+                                  a modal, tab switch, accordion, expanded grid,
+                                  filtered table, SPA view that reuses the URL…
+
+    Trigger 3 is deliberately gated on an interaction and on that interaction
+    having settled (`settle_ms`): comparing the raw element count every poll —
+    as the previous version did — also fires on background churn (spinners,
+    carousels, ads, polling widgets, React re-renders) and floods the folder.
+    Gating on the click means one capture per user action, and only when the
+    action actually changed the DOM size.
+
+    settle_ms  : how long the page must be interaction-free before the count is
+                 judged (gives the click time to render).
+    min_delta  : how many elements the count must differ by. 1 = any change
+                 (default); raise it on apps that keep a few nodes churning
+                 (toasts, spinners) so their noise doesn't ride along on a click.
+
+    Known blind spot: a click that swaps content without changing the node count
+    (e.g. two tabs with identically shaped markup) is not captured. If that shows
+    up on a real app, extend the probe to also return a cheap DOM signature
+    (per-tag counts, or the visible text length) and compare that alongside.
+    """
     print("📸 screenshot thread started")
 
+    # url -> {"count": <element count when last captured>, "interactions": <probe counter>}
+    pages = {}
     last_url = None
-    prev_element_count = None
-    first_run = True
+
+    def _probe():
+        """Run the probe; None when the page is mid-navigation / not scriptable."""
+        try:
+            return driver.execute_script(UI_CHANGE_PROBE_JS)
+        except Exception:
+            return None
+
+    def _wait_ready():
+        for _ in range(50):  # up to ~5s
+            if stop_flag["stop"]:
+                return
+            try:
+                if driver.execute_script("return document.readyState") == "complete":
+                    return
+            except Exception:
+                return
+            time.sleep(0.1)
+
+    def _capture(reason, url):
+        if stop_flag["stop"]:
+            return None
+        if source == "file":
+            filepath = action_utils.take_screenshot_unique(driver, screenshot_folder)
+        elif source == "database":
+            filepath = db_handler.take_screenshot_db(driver, "sathanantham")
+        else:
+            filepath = None
+        print(f"📸 Screenshot [{reason}] {url} => {filepath}")
+        return filepath
+
+    def _baseline(url, fallback_count, fallback_interactions):
+        """Re-read the DOM count after a capture so the page's baseline is current."""
+        state = _probe()
+        pages.pop(url, None)                    # re-insert so this page is the newest
+        pages[url] = {
+            "count": int(state["count"]) if state else fallback_count,
+            "interactions": int(state["interactions"]) if state else fallback_interactions,
+        }
+        while len(pages) > max_tracked_pages:    # drop the oldest page we tracked
+            pages.pop(next(iter(pages)), None)
 
     while not stop_flag["stop"]:
         try:
-            # Access driver directly — no session-state lock needed; ChromeDriver handles concurrency
-            current_url = driver.current_url
-            all_elements = driver.find_elements(By.XPATH, "//*")
-            current_count = len(all_elements)
+            state = _probe()
+            if state:
+                url = state["url"]
+                count = int(state["count"])
+                interactions = int(state["interactions"])
+                idle_ms = state["idle_ms"]
+                prev = pages.get(url)
 
-            if first_run:
-                page_changed = True
-                first_run = False
-            else:
-                page_changed = (
-                    current_url != last_url
-                    or current_count != prev_element_count
-                )
+                # ── 1. new page (or first ever poll) ──────────────────────────
+                if url != last_url or prev is None:
+                    last_url = url
+                    _wait_ready()
+                    _capture("new-page", url)
+                    _baseline(url, count, interactions)
 
-            if page_changed:
-                last_url = current_url
-                prev_element_count = current_count
+                # ── 2. same URL, but the page reloaded (probe counter reset) ──
+                elif interactions < prev["interactions"]:
+                    _wait_ready()
+                    _capture("reload", url)
+                    _baseline(url, count, interactions)
 
-                # wait for page ready
-                for _ in range(50):
-                    if stop_flag["stop"]:
-                        break
-                    state = driver.execute_script("return document.readyState")
-                    if state == "complete":
-                        break
-                    time.sleep(0.1)
-
-                if not stop_flag["stop"]:
-                    if source == "file":
-                        filepath = action_utils.take_screenshot(driver, screenshot_folder)
-                    elif source == "database":
-                        filepath = db_handler.take_screenshot_db(driver, "sathanantham")
-                    else:
-                        filepath = None
-                    print(f"📸 Screenshot taken => {filepath}")
+                # ── 3. same URL, user interacted → compare element counts ────
+                elif interactions > prev["interactions"]:
+                    # let the click finish rendering before we judge the count
+                    if idle_ms >= settle_ms:
+                        if abs(count - prev["count"]) >= min_delta:
+                            print(f"🔍 UI changed on {url}: "
+                                  f"{prev['count']} → {count} element(s)")
+                            _wait_ready()
+                            _capture("ui-change", url)
+                            _baseline(url, count, interactions)
+                        else:
+                            # interaction changed nothing measurable — just
+                            # re-baseline so we don't re-check it every poll
+                            prev["interactions"] = interactions
+                            prev["count"] = count
 
         except Exception as e:
             print("❌ Screenshot thread error:", e)
             if stop_flag["stop"]:
                 break
 
-        # Interruptible 1-second sleep (2 x 0.5s)
-        for _ in range(2):
-            if stop_flag["stop"]:
-                break
-            time.sleep(0.5)
+        # Interruptible sleep so Stop Recording is noticed quickly
+        slept = 0.0
+        while slept < poll_seconds and not stop_flag["stop"]:
+            time.sleep(0.1)
+            slept += 0.1
 
 # def thread_focus_screenshot(driver, stop_flag, screenshot_folder, source="file"):
 #     print("📸 screenshot thread started")

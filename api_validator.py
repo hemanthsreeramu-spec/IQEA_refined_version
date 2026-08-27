@@ -16,6 +16,7 @@ from utilities.API_Utils import api_core_model as api_utils
 from utilities.API_Utils import swaggerhub as swagger_utils
 from utilities.API_Utils import api_runner
 from utilities.API_Utils import api_report
+from utilities.API_Utils import api_files
 from utilities.API_Utils.api_context import ApiContext, find_variables, parse_extract_spec
 import allure
 
@@ -44,11 +45,17 @@ os.makedirs(output_folder, exist_ok=True)
 ini_file_path = os.path.join(input_folder, "locust_config.ini")
 locust_config = configparser.ConfigParser()
 locust_config.read(ini_file_path)
+# Fall back to sane defaults if Input/locust_config.ini is missing or partial,
+# so the page still loads instead of dying on NoSectionError/NoOptionError.
+_PERF_DEFAULTS = {
+    "ramp_users": "20",
+    "spawn_rate": "0.5",
+    "run_time": "10s",
+    "stop_time": "100",
+}
 performance_config = {
-    "ramp_users": locust_config.get("api-performance", "ramp_users"),
-    "spawn_rate": locust_config.get("api-performance", "spawn_rate"),
-    "run_time": locust_config.get("api-performance", "run_time"),
-    "stop_time": locust_config.get("api-performance", "stop_time")
+    key: locust_config.get("api-performance", key, fallback=default)
+    for key, default in _PERF_DEFAULTS.items()
 }
 # -------------------------------------------
 # STREAMLIT CONFIG
@@ -130,12 +137,12 @@ def _run_document(performance_flag, recommendation_flag):
         resp_html = swagger_utils.save_html_report(st.session_state.api_response_analysis, REPORT_DIR, "Api_Response")
 
     perf_html = None
-    if performance_result:
-        performance_extracted_data = swagger_utils.collect_locust_csv_from_paths(performance_result)
-        locust_covert_prompt = swagger_utils.locust_convert_prompt(performance_extracted_data, performance_config)
-        st.session_state.locust_convert_response = swagger_utils.get_queries_from_ai_updated(locust_covert_prompt)
-        perf_html = swagger_utils.save_html_report(st.session_state.locust_convert_response, REPORT_DIR,
-                                                   "Api_Performance_Response")
+    # if performance_result:
+    #     performance_extracted_data = swagger_utils.collect_locust_csv_from_paths(performance_result)
+    #     # locust_covert_prompt = swagger_utils.locust_convert_prompt(performance_extracted_data, performance_config)
+    #     # st.session_state.locust_convert_response = swagger_utils.get_queries_from_ai_updated(locust_covert_prompt)
+    #     perf_html = swagger_utils.save_html_report(st.session_state.locust_convert_response, REPORT_DIR,
+    #                                                "Api_Performance_Response")
 
     st.session_state.api_val_results = results
     st.session_state.api_val_perf_paths = performance_result
@@ -262,6 +269,64 @@ def _render_global_header_inputs():
         st.caption("Will be sent with every API in this run: " + ", ".join(f"`{k}`" for k in active))
     else:
         st.caption("No global header set — authenticated endpoints will return 401.")
+
+
+def _render_attachment_manager():
+    """
+    The files an Attachments cell can name.
+
+    Uploads are written to Input/attachments rather than kept in session state:
+    a sheet references files by name, Streamlit's in-memory buffer dies on the
+    next rerun, and the Locust performance run is a separate process that can
+    only reach a file on disk.
+    """
+    folder = api_files.ensure_attachments_folder()
+
+    st.markdown(
+        "An **Attachments** cell names a file in this folder — `files=contract.pdf`. "
+        "Write `field=` to match what the API calls its upload field, separate with `;` "
+        "to send more than one, and keep **BodyFormat** filled with the parameters that "
+        "go with the file — they are sent alongside it, not replaced by it.\n\n"
+        "```\n"
+        "BodyFormat:   {\"sessionId\": \"${session_id}\", \"manageId\": 4471}\n"
+        "Attachments:  files=contract.pdf\n"
+        "```\n"
+        "Form fields carry no types, so `4471` arrives as text — set **Body-As** to "
+        "`json` if the API needs it to stay a number. For an API that wants the file "
+        "*inside* the JSON body instead, use `${__fileBase64(contract.pdf)}` in "
+        "BodyFormat and leave Attachments empty."
+    )
+    st.code(folder, language=None)
+
+    uploads = st.file_uploader(
+        "Add files to Input/attachments",
+        accept_multiple_files=True,
+        key="attachment_uploads",
+    )
+
+    # Streamlit reruns the script on every interaction and the uploader keeps
+    # handing back the same files, so remember what has been written already.
+    already_saved = st.session_state.setdefault("_attachments_saved", set())
+    fresh = []
+    for upload in uploads or []:
+        marker = (upload.name, upload.size)
+        if marker in already_saved:
+            continue
+        with open(os.path.join(folder, upload.name), "wb") as handle:
+            handle.write(upload.getbuffer())
+        already_saved.add(marker)
+        fresh.append(upload.name)
+
+    if fresh:
+        st.success(
+            f"Saved {', '.join(fresh)} — name them in the Attachments column to upload them."
+        )
+
+    present = api_files.available_attachments()
+    if present:
+        st.caption("Available now: " + ", ".join(f"`{name}`" for name in present))
+    else:
+        st.caption("No files here yet — add one above, or copy it into the folder.")
 
 
 def _set_selection(apis, value):
@@ -465,6 +530,49 @@ def _render_api_detail(api):
             except Exception as exc:
                 api["_payload_error"] = f"Payload JSON is invalid: {exc}"
                 st.warning(f"⚠ Invalid JSON payload — this API will not be sent: {exc}")
+
+            # ---- attachments (multipart/form-data) ----
+            # The payload above is still sent: its keys travel next to the file.
+            attachments_text = st.text_input(
+                "Attachments (blank = ordinary JSON body)",
+                value=api_files.format_attachment_spec(api.get("attachments")),
+                placeholder="files=contract.pdf",
+                key=f"swagger_attachments_{api_id}",
+                help="field=filename, ';' separated, read from Input/attachments. "
+                     "Manage the folder under '📎 Attachments' in the Document flow.",
+            )
+            parts, attachment_problems = api_files.parse_attachment_spec(attachments_text)
+            api["attachments"] = parts
+
+            if attachment_problems:
+                # Flagged on the row for the same reason as the payload above:
+                # otherwise the last value that DID parse is sent silently.
+                api["_attachment_error"] = "; ".join(attachment_problems)
+                for problem in attachment_problems:
+                    st.warning(f"⚠ {problem} — this API will not be sent")
+            else:
+                api.pop("_attachment_error", None)
+
+            if not attachments_text.strip() and swagger_utils.is_multipart_content_type(
+                api.get("requestContentType")
+            ):
+                st.info(
+                    "This endpoint declares multipart/form-data — it expects a file. "
+                    "Name one above to send it."
+                )
+
+            if parts:
+                mode_label = st.radio(
+                    "Parameters sent as",
+                    options=("Form fields", "JSON part"),
+                    index=0 if (api.get("body_mode") or "form") == "form" else 1,
+                    horizontal=True,
+                    key=f"swagger_bodyas_{api_id}",
+                    help="Form fields is what a Swagger UI file picker submits — every value "
+                         "arrives as text. JSON part sends the payload as one application/json "
+                         "part instead, keeping numbers and nesting intact.",
+                )
+                api["body_mode"] = "form" if mode_label == "Form fields" else "json"
 
         # ---- chaining ----
         api["extract"] = st.text_input(
@@ -718,8 +826,8 @@ def _render_result_tabs():
         paths = st.session_state.api_val_perf_paths or []
         if paths:
             api_utils.Apicore().show_locust_report(paths)
-            if st.session_state.api_val_perf_html:
-                api_utils.Apicore().show_llm_response(st.session_state.api_val_perf_html, "Performance_response")
+            # if st.session_state.api_val_perf_html:
+            #     api_utils.Apicore().show_llm_response(st.session_state.api_val_perf_html, "Performance_response")
         else:
             st.info("No performance run — enable **Performance** before validating.")
 
@@ -769,9 +877,13 @@ with st.container(border=True):
                 "TC_02_create_draft  BodyFormat: {\"agent_id\": \"${agent_id}\"}         Execution-Order 2\n"
                 "TC_03_update        BodyFormat: {\"agent_id\": \"${agent_id}\"}         Execution-Order 3\n"
                 "```\n"
-                "Order is inferred from `${vars}` — set `Execution-Order` only to sequence rows "
-                "that consume the same value. `Depends-On` takes `Test_Case_Name`s for ordering "
-                "with no data flow.\n\n"
+                "A Swagger path keeps its own braces, and those are filled the same way — leave "
+                "`endPoint` as `/agents/{agent_id}` and the extracted `agent_id` is substituted at "
+                "send time, no `${...}` needed. A camelCase `{agentId}` still finds a snake_case "
+                "`agent_id`.\n\n"
+                "Order is inferred from `${vars}` and from `{path}` placeholders — set "
+                "`Execution-Order` only to sequence rows that consume the same value. `Depends-On` "
+                "takes `Test_Case_Name`s for ordering with no data flow.\n\n"
                 "Extract sources: `$.json.path`, `header:Set-Cookie`, `$status`, `$body`, with an "
                 "optional `|int` / `|float` / `|str` / `|bool` / `|json` cast. Generated values need "
                 "no Extract: `${__uuid}`, `${__time(YMDHMS)}`, `${__randomInt(1,999)}`.\n\n"
@@ -790,6 +902,9 @@ with st.container(border=True):
             st.markdown("---")
             _render_global_header_inputs()
 
+        with st.expander("📎 Attachments — send a file with the payload"):
+            _render_attachment_manager()
+
         if uploaded_file:
             api_list, read_errors = swagger_utils.read_excel_input(uploaded_file)
             st.session_state.api_data = api_list
@@ -807,6 +922,7 @@ with st.container(border=True):
                         "Headers": ", ".join(row["headers"].keys()) or "-",
                         "Payload": (json.dumps(row["payload"])[:60] + "…")
                         if len(json.dumps(row["payload"])) > 60 else json.dumps(row["payload"]),
+                        "Attachments": api_files.describe_parts(row.get("attachments")) or "-",
                         "Extract": row["extract"] or "-",
                         "Depends On": row["dependsOn"] or "-",
                         "Order": row["order"] or "auto",

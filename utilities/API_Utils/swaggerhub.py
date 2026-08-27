@@ -12,6 +12,8 @@ from langchain_openai import AzureChatOpenAI
 from dotenv import load_dotenv
 import os
 from datetime import datetime
+
+from . import api_files
 load_dotenv()
 os.environ["OPENAI_API_KEY"] = os.getenv("AZURE_OPENAI_API_KEY")
 os.environ["OPENAI_API_BASE"] = os.getenv("AZURE_OPENAI_ENDPOINT")
@@ -244,28 +246,31 @@ def build_data_dictionary(swagger_api_details, base_url,spec):
             # Collect Payload (if exists)
             # ----------------------------
             payload = {}
-            request_body = details.get("requestBody", {})
+            attachments = []
+            request_body = details.get("requestBody", {}) or {}
 
-            schema = {}
+            body_content_type, schema = _pick_request_body(request_body)
+            is_multipart = is_multipart_content_type(body_content_type)
 
-            # Case 1: OpenAPI 3 standard (content exists)
-            if "content" in request_body:
-                content = request_body.get("content", {})
-                if content:
-                    first_ct = next(iter(content))
-                    schema = content[first_ct].get("schema", {})
-
-            # Case 2: Your flattened structure (application/json directly)
-            else:
-                for ct, ct_val in request_body.items():
-                    if isinstance(ct_val, dict) and "schema" in ct_val:
-                        schema = ct_val.get("schema", {})
-                        break
+            if is_multipart:
+                # Describe the file fields as attachments and keep them out of
+                # the payload: sampled into it, an upload field would be sent as
+                # the text "string". The filename is the one thing the spec
+                # cannot supply, so it is left for the user to fill in.
+                file_fields, schema = split_multipart_schema(schema, spec)
+                attachments = [
+                    {"field": name, "filename": "", "content_type": None, "required": True}
+                    for name in file_fields
+                ]
 
             if schema:
                 payload = generate_sample_payload(schema, spec)
+                if not isinstance(payload, (dict, list)):
+                    payload = {}
 
             print("*********Api_payload**********", payload)
+            if attachments:
+                print("*********Api_attachments**********", attachments)
             # ----------------------------
             # Collect Authentication Header
             # ----------------------------
@@ -285,8 +290,12 @@ def build_data_dictionary(swagger_api_details, base_url,spec):
                             if scheme["type"] == "http" and scheme["scheme"] == "bearer":
                                 headers["Authorization"] = "Bearer REPLACE_TOKEN"
 
-            # Default header
-            headers["Content-Type"] = "application/json"
+            # Default header. A multipart endpoint deliberately gets none:
+            # requests writes Content-Type at send time together with the
+            # boundary it generates, and any value set here would leave the
+            # server unable to parse the body.
+            if not is_multipart:
+                headers.setdefault("Content-Type", "application/json")
 
             # ----------------------------
             # Expected Response
@@ -320,6 +329,12 @@ def build_data_dictionary(swagger_api_details, base_url,spec):
                 "Expected-StatusCode": expected_status,
                 "pathParams": path_params,
                 "queryParams": query_params,
+                # Upload fields read off the spec, awaiting a file name. Empty
+                # for every ordinary JSON endpoint.
+                "attachments": attachments,
+                "body_mode": "form",
+                "body_part_name": api_files.DEFAULT_JSON_PART_NAME,
+                "requestContentType": body_content_type,
                 # Chaining fields — filled in by the UI
                 "extract": "",
                 "dependsOn": "",
@@ -365,6 +380,115 @@ def resolve_ref(ref: str, swagger_spec: dict):
     for key in ref_path:
         value = value.get(key, {})
     return value
+# Content types that carry an upload rather than a JSON document.
+MULTIPART_CONTENT_TYPES = ("multipart/form-data", "multipart/mixed", "multipart/related")
+
+
+def is_multipart_content_type(content_type):
+    return str(content_type or "").split(";")[0].strip().lower() in MULTIPART_CONTENT_TYPES
+
+
+def _resolved_schema(schema, swagger_spec, depth=0):
+    """Follow $ref and allOf far enough to read a schema's properties."""
+    if not isinstance(schema, dict) or depth > 8:
+        return schema if isinstance(schema, dict) else {}
+
+    if "$ref" in schema:
+        return _resolved_schema(resolve_ref(schema["$ref"], swagger_spec), swagger_spec, depth + 1)
+
+    if schema.get("allOf"):
+        merged = {"type": "object", "properties": {}, "required": []}
+        for part in schema["allOf"]:
+            resolved = _resolved_schema(part, swagger_spec, depth + 1)
+            merged["properties"].update(resolved.get("properties") or {})
+            merged["required"].extend(resolved.get("required") or [])
+        return merged
+
+    return schema
+
+
+def _is_binary_schema(schema, swagger_spec, depth=0):
+    """
+    True for a property Swagger UI renders as a file picker.
+
+    'type: string, format: binary' is the OpenAPI 3 spelling; an array of those
+    is a field accepting several files.
+    """
+    schema = _resolved_schema(schema, swagger_spec, depth)
+    if not isinstance(schema, dict):
+        return False
+    if str(schema.get("format") or "").lower() in ("binary", "byte", "base64"):
+        return True
+    if schema.get("type") == "array" and depth < 4:
+        return _is_binary_schema(schema.get("items") or {}, swagger_spec, depth + 1)
+    return False
+
+
+def _pick_request_body(request_body):
+    """
+    Choose which declared body an endpoint should be exercised with.
+
+    Returns (content_type, schema). A JSON body wins whenever the endpoint
+    offers one; multipart is chosen only when that is what it actually declares.
+    This used to take whichever content type came first, so a multipart endpoint
+    produced a JSON payload built from a multipart schema — with the file field
+    sampled in as the text "string" — and could never work.
+    """
+    content = (request_body or {}).get("content")
+
+    if not isinstance(content, dict) or not content:
+        # extract_api_details stores the content map directly, so the content
+        # types can also sit at the top level. Normalised here rather than
+        # handled separately, so the JSON preference applies to both shapes.
+        content = {
+            content_type: value
+            for content_type, value in (request_body or {}).items()
+            if isinstance(value, dict) and "schema" in value
+        }
+
+    if not content:
+        return "", {}
+
+    for content_type in content:
+        if "json" in str(content_type).lower():
+            return str(content_type), (content[content_type] or {}).get("schema") or {}
+
+    content_type = next(iter(content))
+    return str(content_type), (content[content_type] or {}).get("schema") or {}
+
+
+def split_multipart_schema(schema, swagger_spec):
+    """
+    Split a multipart schema into its file fields and its ordinary parameters.
+
+    Returns (file_fields, param_schema): file_fields are the names Swagger UI
+    would render as file pickers, and param_schema is the schema with those
+    properties removed, so a sample payload of just the parameters can be built
+    from it.
+    """
+    resolved = _resolved_schema(schema, swagger_spec)
+    properties = resolved.get("properties") if isinstance(resolved, dict) else None
+    if not isinstance(properties, dict):
+        return [], schema
+
+    file_fields = [
+        name for name, prop in properties.items()
+        if _is_binary_schema(prop, swagger_spec)
+    ]
+    if not file_fields:
+        return [], schema
+
+    param_schema = dict(resolved)
+    param_schema["properties"] = {
+        name: prop for name, prop in properties.items() if name not in file_fields
+    }
+    if isinstance(param_schema.get("required"), list):
+        param_schema["required"] = [
+            name for name in param_schema["required"] if name not in file_fields
+        ]
+    return file_fields, param_schema
+
+
 def generate_sample_payload(schema: dict, swagger_spec: dict):
     """
     Generate sample JSON payload from Swagger schema
@@ -505,6 +629,8 @@ def run_allure_test(api_dict, utils):
 import pandas as pd
 import json
 
+from .api_context import parse_extract_spec
+
 
 # ======================================================================
 # Swagger -> Excel template export
@@ -513,7 +639,8 @@ import json
 # the exported endpoints are inserted after headers-Authorization.
 TEMPLATE_COLUMNS = [
     "Test_Case_Name", "httpMethod", "baseUrl", "endPoint",
-    "headers", "BodyFormat", "headers-Authorization", "auth_type",
+    "headers", "BodyFormat", "Attachments", "Body-As",
+    "headers-Authorization", "auth_type",
     "Request-username", "Request-password",
     "Expected-StatusCode", "Expected-Message",
     "Validate?", "Performance?",
@@ -547,6 +674,11 @@ def _unfilled_path_params(endpoint):
     """
     without_vars = re.sub(r"\$\{[^{}]*\}", "", str(endpoint or ""))
     return re.findall(r"\{([^{}]+)\}", without_vars)
+
+
+def _loose_key(name):
+    """Matches api_runner: '{agentId}' and an extracted 'agent_id' are the same."""
+    return re.sub(r"[^a-z0-9]", "", str(name).lower())
 
 
 def make_test_case_name(api, index, taken=None):
@@ -626,6 +758,13 @@ def swagger_rows_to_template(api_list):
     extra_header_columns = []
     skipped_auth = set()
 
+    # A '{param}' the suite extracts somewhere is bound at run time, so it is
+    # not something the user has to fill in before the sheet will run.
+    chained = set()
+    for api in api_list:
+        for name, _source in parse_extract_spec(api.get("extract")):
+            chained.add(_loose_key(name))
+
     for index, api in enumerate(api_list, start=1):
         method = str(api.get("httpMethod") or "GET").upper()
         endpoint = _endpoint_with_query(api)
@@ -653,7 +792,26 @@ def swagger_rows_to_template(api_list):
         else:
             body = "NODATA"
 
-        unfilled = _unfilled_path_params(endpoint)
+        # Attachments travel to the sheet in the same 'field=name' text the
+        # Document flow reads back, so a row set up here runs there unchanged.
+        attachments = api.get("attachments") or []
+        attachment_cell = api_files.format_attachment_spec(attachments)
+        if attachments:
+            # Documents intent for whoever reads the sheet; the value itself is
+            # dropped at send time so requests can set the boundary.
+            content_type = "multipart/form-data"
+            missing_names = [
+                part.get("field") for part in attachments
+                if isinstance(part, dict) and not str(part.get("filename") or "").strip()
+            ]
+            if missing_names:
+                warnings.append(
+                    f"{name}: upload field(s) {', '.join(str(f) for f in missing_names)} still "
+                    f"need a file name in Attachments (e.g. {missing_names[0]}=contract.pdf), "
+                    f"and the file itself in {api_files.ATTACHMENT_SUBFOLDER}{os.sep}"
+                )
+
+        unfilled = [p for p in _unfilled_path_params(endpoint) if _loose_key(p) not in chained]
         if unfilled:
             warnings.append(f"{name}: path parameter(s) {', '.join(unfilled)} still need a value in endPoint")
 
@@ -672,6 +830,11 @@ def swagger_rows_to_template(api_list):
             "endPoint": endpoint,
             "headers": content_type,
             "BodyFormat": body,
+            "Attachments": attachment_cell,
+            "Body-As": api_files.format_body_mode(
+                api.get("body_mode") or "form",
+                api.get("body_part_name") or api_files.DEFAULT_JSON_PART_NAME,
+            ),
             "headers-Authorization": "",
             "auth_type": "NA",
             "Request-username": "",
@@ -823,6 +986,17 @@ def validate_template_frame(frame):
         if not str(record.get("endPoint") or "").strip():
             problems.append(f"{label}: endPoint is empty")
 
+        # Attachments: catch a bad file name here rather than as a 400 mid-run.
+        attachments_cell = record.get("Attachments")
+        _parts, attachment_problems = api_files.parse_attachment_spec(attachments_cell, label)
+        problems.extend(attachment_problems)
+
+        if not api_files.is_blank(record.get("Body-As")) and api_files.is_blank(attachments_cell):
+            problems.append(
+                f"{label}: Body-As has no effect without an Attachments file — "
+                f"a row with no upload is always sent as JSON"
+            )
+
     return problems
 
 
@@ -879,6 +1053,16 @@ TEST_CASE_NAME_COLUMNS = (
     "Test Case", "TestCase", "Test_Name", "Test Name", "TC_Name", "TC Name",
 )
 
+# The token an auth_type=BEARER row should send, written on the row itself.
+# Usually chained — '${access_token}' captured by the login row — but a pasted
+# token works too. A value here beats the global header typed in the UI, because
+# something written against one row is more specific than a run-wide default;
+# leave it blank and that global header is what the row falls back to.
+BEARER_TOKEN_COLUMNS = (
+    "_bearer_token", "bearer_token", "Bearer-Token", "Bearer Token",
+    "BearerToken", "Bearer_Token",
+)
+
 
 def _normalize_flag(value, default=False):
     if value is None or (isinstance(value, float) and pd.isna(value)):
@@ -914,34 +1098,100 @@ def _row_headers(row):
 
     return headers
 
+# {{name}} anywhere in a sheet cell means "read this from .env". Credentials
+# belong there rather than in a spreadsheet that gets mailed around, and the same
+# sheet then runs against dev and prod by swapping the .env.
+ENV_PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}")
+
+
+def resolve_env_placeholders(text, missing=None):
+    """
+    Substitute every {{name}} in one string with its .env value.
+
+    Names are matched case-insensitively (api_client_id and API_CLIENT_ID both
+    work) because .env conventions differ per team. A name with no value is
+    collected in 'missing' rather than left as-is: the caller reports it, so an
+    unset secret shows up as a clear message at upload time instead of a 401 from
+    a request that quietly carried an empty client_secret.
+    """
+    collected = missing if missing is not None else []
+
+    def substitute(match):
+        name = match.group(1)
+        for candidate in (name, name.upper(), name.lower()):
+            value = os.getenv(candidate)
+            if value:
+                return value
+        collected.append(name)
+        return ""
+
+    return ENV_PLACEHOLDER_PATTERN.sub(substitute, str(text))
+
+
+def _resolve_in_value(value, missing):
+    """Walk a parsed body and resolve placeholders in its strings."""
+    if isinstance(value, str):
+        return resolve_env_placeholders(value, missing)
+    if isinstance(value, dict):
+        return {key: _resolve_in_value(item, missing) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_resolve_in_value(item, missing) for item in value]
+    return value
+
+
+def _missing_env_message(names):
+    unique = list(dict.fromkeys(names))
+    return (f"{'these are' if len(unique) > 1 else 'this is'} not set in .env: "
+            f"{', '.join(unique)}")
+
+
+def json_conversion_model(raw_payload):
+    """
+    Parse a BodyFormat cell and resolve its {{env_var}} placeholders.
+
+    Parsed first, substituted second — the other order breaks on any secret
+    containing a quote, a backslash or a newline, because the replacement lands
+    inside the JSON text and corrupts it. Doing it on the parsed values means the
+    secret is never JSON syntax and can hold anything.
+
+    Returns (payload, error). An unresolved placeholder still returns the payload
+    alongside the error, so the row is reported and not silently blanked.
+    """
+    if isinstance(raw_payload, (dict, list)):
+        parsed = raw_payload
+    else:
+        try:
+            parsed = json.loads(str(raw_payload))
+        except Exception as exc:
+            return {}, f"BodyFormat is not valid JSON — {exc}"
+
+    missing = []
+    payload = _resolve_in_value(parsed, missing)
+
+    if missing:
+        return payload, f"BodyFormat references {_missing_env_message(missing)}"
+
+    return payload, None
+
 
 def _row_payload(row, label):
     """
-    Parse the BodyFormat cell into a dict.
-
-    Parsed here rather than at request time so that ${vars} substitute into the
-    parsed structure: "agent_id": "${agent_id}" then yields a real integer,
-    whereas resolving the raw text first would produce the string "10877" and be
-    rejected by any API declaring that field as a number.
-
-    Returns (payload, error). A NODATA/blank cell is simply no payload.
+    Parse BodyFormat and return (payload, error)
     """
     raw = _cell(row, "BodyFormat")
+
+    # Blank payload
     if raw == "" or str(raw).strip().upper() in ("NODATA", "NO_DATA", "NONE"):
         return {}, None
 
-    if isinstance(raw, dict):
-        return raw, None
+    payload, error = json_conversion_model(raw)
+    if error:
+        return payload, f"{label}: {error}"
 
-    try:
-        parsed = json.loads(str(raw))
-    except Exception as exc:
-        return {}, f"{label}: BodyFormat is not valid JSON — {exc}"
+    if not isinstance(payload, (dict, list)):
+        return {}, f"{label}: BodyFormat must be a JSON object or array, got {type(payload).__name__}"
 
-    if not isinstance(parsed, (dict, list)):
-        return {}, f"{label}: BodyFormat must be a JSON object or array, got {type(parsed).__name__}"
-
-    return parsed, None
+    return payload, None
 
 
 def read_excel_input(file_path):
@@ -961,13 +1211,47 @@ def read_excel_input(file_path):
         name = _first_cell_text(row, TEST_CASE_NAME_COLUMNS) or f"Row {position}"
         method = _cell_text(row, "httpMethod").upper()
         endpoint = _cell_text(row, "endPoint")
+        base_url = _cell_text(row, "baseUrl")
 
         if not method and not endpoint:
             continue  # blank spacer row
 
-        payload, payload_error = _row_payload(row, f"'{name}' (sheet row {position})")
+        label = f"'{name}' (sheet row {position})"
+
+        # A URL takes {{env_var}} too — a tenant id sits in the path of a token
+        # endpoint, and it differs per environment while the sheet does not.
+        url_missing = []
+        endpoint = resolve_env_placeholders(endpoint, url_missing)
+        base_url = resolve_env_placeholders(base_url, url_missing)
+
+        # Older sheets wrote the bare name with no braces. Still honoured, but
+        # only as a whole path segment: a plain substring replace also rewrites
+        # an endpoint that legitimately contains the words, and dropping in an
+        # empty value builds a URL like '//token' that fails somewhere else
+        # entirely.
+        if "api_tenant_id" in endpoint:
+            tenant_id = os.getenv("api_tenant_id") or os.getenv("API_TENANT_ID") or ""
+            if tenant_id:
+                endpoint = re.sub(r"(?<![A-Za-z0-9_])api_tenant_id(?![A-Za-z0-9_])",
+                                  tenant_id, endpoint)
+            else:
+                url_missing.append("api_tenant_id")
+
+        if url_missing:
+            errors.append(f"{label}: endpoint references {_missing_env_message(url_missing)}")
+
+        payload, payload_error = _row_payload(row, label)
         if payload_error:
             errors.append(payload_error)
+
+        # Attachments turn the row into multipart/form-data. The payload is not
+        # replaced by them — in the usual upload row both are filled and the
+        # parameters travel as form fields alongside the file.
+        attachments, attachment_errors = api_files.parse_attachment_spec(
+            _cell(row, "Attachments"), label
+        )
+        errors.extend(attachment_errors)
+        body_mode, body_part_name = api_files.parse_body_mode(_cell(row, "Body-As"))
 
         try:
             expected_status = int(float(_cell(row, "Expected-StatusCode", 200) or 200))
@@ -984,21 +1268,30 @@ def read_excel_input(file_path):
         api_data = {
             "test_case_name": name,
             "method": method,
-            "baseUrl": _cell_text(row, "baseUrl"),
+            "baseUrl": base_url,
             "endpoint": endpoint,
 
             # Real headers dict — previously the sheet's header columns were
             # collected into keys nothing ever read, so they were never sent.
             "headers": _row_headers(row),
+            
 
             # Parsed body; body_format kept so anything still reading it works
             "payload": payload,
             "body_format": _cell(row, "BodyFormat"),
             "_payload_error": payload_error,
 
+            # Multipart upload. An empty list means "no file", which is the
+            # existing JSON request path.
+            "attachments": attachments,
+            "body_mode": body_mode,
+            "body_part_name": body_part_name,
+            "_attachment_error": "; ".join(attachment_errors),
+
             "username": _cell_text(row, "Request-username"),
             "password": _cell_text(row, "Request-password"),
             "auth_type": _cell_text(row, "auth_type"),
+            "_bearer_token": _first_cell_text(row, BEARER_TOKEN_COLUMNS),
 
             "expected_status": expected_status,
             "Expected-StatusCode": expected_status,
@@ -1015,6 +1308,12 @@ def read_excel_input(file_path):
 
         if not api_data["_payload_error"]:
             api_data.pop("_payload_error")
+        if not api_data["_attachment_error"]:
+            api_data.pop("_attachment_error")
+        # Dropped when blank rather than kept as "": every later check is
+        # "did the sheet supply a token", and an empty string answers yes.
+        if not api_data["_bearer_token"]:
+            api_data.pop("_bearer_token")
 
         api_list.append(api_data)
 

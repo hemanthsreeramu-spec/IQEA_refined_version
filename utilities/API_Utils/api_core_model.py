@@ -1,5 +1,6 @@
 import configparser
 import shutil
+import sys
 
 import streamlit as st
 import json
@@ -12,7 +13,13 @@ import os
 from jsonpath_ng import jsonpath, parse
 import logging
 import configparser
+from dotenv import load_dotenv
 from .DBconnect import getvaluefromdatabse
+from . import api_files
+
+# auth_type=API reads its key from .env; don't depend on another module having
+# loaded it first.
+load_dotenv()
 current_path = os.getcwd()
 input_folder = os.path.join(current_path, "Input")
 DB_config = configparser.ConfigParser()
@@ -725,50 +732,99 @@ class Apicore:
         res = requests.post(token_url, json=payload, verify=False)
         return res.json().get("access_token")
 
+    # auth_type spellings that mean "no authentication". Anything unrecognised
+    # also falls through to no-auth at the end of get_auth_headers.
+    NO_AUTH_VALUES = ("", "NA", "N/A", "NONE", "NO", "NO_AUTH", "NO AUTH", "NOAUTH")
+    API_KEY_VALUES = ("API", "APIKEY", "API_KEY", "API KEY", "API-KEY")
+
+    # Header the API key is sent under, and the .env name holding it. The key is
+    # never hard-coded or read from the sheet — see the API branch below.
+    API_KEY_ENV_VAR = "API_AUTH_KEY"
+    API_KEY_HEADER_ENV_VAR = "API_AUTH_KEY_HEADER"
+    DEFAULT_API_KEY_HEADER = "x-api-key"
+
+    @staticmethod
+    def _bare_token(value):
+        """
+        The token on its own, without the scheme.
+
+        A token pasted into the sheet is usually copied straight out of Postman
+        or a browser tab with 'Bearer ' already in front of it. Writing the
+        scheme again produces 'Bearer Bearer eyJ…', which the server rejects
+        with a 401 that looks nothing like a formatting mistake.
+        """
+        token = str(value or "").strip()
+        if token.lower().startswith("bearer "):
+            token = token.split(" ", 1)[1].strip()
+        return token
+
     def get_auth_headers(self, data_dictionary):
         """
-        Headers for an Excel-driven request.
+        Headers for an Excel-driven (document flow) request. Not used by Swagger.
 
-        Starts from the row's own headers (built from the sheet's 'headers' and
-        'headers-*' columns) and layers auth_type on top. Anything the row sets
-        explicitly wins — a pasted Authorization header is never overwritten.
+        Precedence, highest first:
+          1. A filled 'headers-Authorization' cell — used verbatim, whatever
+             auth_type says. This is what makes the shipped template's chained
+             'Bearer ${token}' rows work, so it must stay on top. The UI's global
+             header arrives here too, but api_runner leaves it off any row that
+             filled its own bearer column, so the sheet still wins there.
+          2. auth_type=BEARER   -> the row's own '_bearer_token' column, else a
+             token extracted earlier in this run, else auth_config.ini.
+          3. auth_type=USERNAME -> Basic, from the Request-username/password cells.
+          4. auth_type=API      -> key read from .env, never from the sheet.
+          5. Anything else (blank, NA, NONE, or unrecognised) -> no authentication.
         """
         headers = dict(data_dictionary.get("headers") or {})
-        auth_type = str(data_dictionary.get("auth_type") or "NA").strip().upper()
+        auth_type = str(data_dictionary.get("auth_type") or "").strip().upper()
 
-        if auth_type in ("", "NA", "NONE", "NO", "NO_AUTH"):
+        # 1. An explicit Authorization cell always wins. _row_headers drops blank
+        #    cells, so this is only true when the sheet actually filled it in.
+        if any(name.lower() == "authorization" for name in headers):
             return headers
 
-        # Username / password -> Basic
+        # 5. Nothing declared -> send the row's headers untouched, no auth added.
+        if auth_type in self.NO_AUTH_VALUES:
+            return headers
+
+        # 3. Username / password -> Basic
         if auth_type == "USERNAME":
-            if "Authorization" in headers:
-                return headers
             username = data_dictionary.get("username")
             password = data_dictionary.get("password")
             if username or password:
                 return self.add_basic_auth_header(username, password, headers)
             return headers
 
-        # API key. Supplied via a 'headers-x-api-key' column rather than being
-        # injected from code, so no key is ever sent to a host without the sheet
-        # asking for it.
-        if auth_type == "API":
-            if not any(key.lower() == "x-api-key" for key in headers):
-                print("⚠ auth_type=API but no 'headers-x-api-key' column value — sending no API key.")
+        # 4. API key. Read from .env so the secret never lives in a spreadsheet
+        #    that gets shared around. Set API_AUTH_KEY (and optionally
+        #    API_AUTH_KEY_HEADER, default 'x-api-key') in .env to use this.
+        if auth_type in self.API_KEY_VALUES:
+            header_name = (os.getenv(self.API_KEY_HEADER_ENV_VAR) or "").strip() \
+                or self.DEFAULT_API_KEY_HEADER
+            # A key already set through a 'headers-<name>' column is left alone,
+            # same principle as the Authorization cell above.
+            if any(name.lower() == header_name.lower() for name in headers):
+                return headers
+            api_key = (os.getenv(self.API_KEY_ENV_VAR) or "").strip()
+            if not api_key:
+                print(
+                    f"WARNING: auth_type=API but {self.API_KEY_ENV_VAR} is not set "
+                    f"in .env - sending no API key."
+                )
+                return headers
+            headers[header_name] = api_key
             return headers
 
-        # Bearer. Prefer a token already captured in this run (extracted by an
-        # earlier row, or a global header), and only then fall back to the
-        # standalone auth_config.ini client-credentials call.
+        # 2. Bearer. '_bearer_token' is whatever api_runner settled on for this
+        # row — the sheet's own bearer column first, then a token extracted
+        # earlier in the run — and only if there is neither do we fall back to
+        # the standalone auth_config.ini client-credentials call.
         if auth_type == "BEARER":
-            if "Authorization" in headers:
-                return headers
-            token = data_dictionary.get("_bearer_token")
+            token = self._bare_token(data_dictionary.get("_bearer_token"))
             if not token:
                 try:
-                    token = self.generate_bearer_token()
+                    token = self._bare_token(self.generate_bearer_token())
                 except Exception as exc:
-                    print(f"⚠ Could not obtain a bearer token: {exc}")
+                    print(f"WARNING: Could not obtain a bearer token: {exc}")
                     token = None
             if token:
                 headers["Authorization"] = f"Bearer {token}"
@@ -1051,6 +1107,14 @@ class Apicore:
 
         combinedurl = f"{base_url}{endpoint}"
 
+        # Attachments turn this into a multipart/form-data request. Read from the
+        # same keys in both flows, so an Excel row and a Swagger row describing
+        # the same upload send an identical request. An empty list means "no
+        # file", which is the ordinary JSON path below.
+        attachments = data_dictionary.get("attachments") or []
+        body_mode = data_dictionary.get("body_mode") or "form"
+        body_part_name = data_dictionary.get("body_part_name") or api_files.DEFAULT_JSON_PART_NAME
+
         # Query params supplied by the caller (already resolved by api_runner).
         # Ignored unless it is a flat {name: value} dict.
         query_params = data_dictionary.get("queryParams")
@@ -1068,74 +1132,104 @@ class Apicore:
         # 2. Prepare request body
         # -------------------------------
         json_body = None
+        form_body = None
+        files = None
+        form_data = None
+        handles = []
 
-        if http_method in ["POST", "PUT", "PATCH"] and raw_payload:
+        if http_method in ["POST", "PUT", "PATCH"] and (raw_payload or attachments):
             try:
-                if isinstance(raw_payload, (dict, list)):
+                if not raw_payload:
+                    payload = {}
+                elif isinstance(raw_payload, (dict, list)):
                     # Already structured (Swagger, or Excel parsed at upload)
-                    json_body = raw_payload
-                    print("make_api_call_JSON_BODY", json_body)
+                    payload = raw_payload
                 else:
                     # Raw JSON text
-                    print("make_api_call_rwa_payload", raw_payload)
-                    json_body = json.loads(str(raw_payload))
-                    print("make_api_call_json_body", json_body)
+                    payload = json.loads(str(raw_payload))
+            except Exception as e:
+                raise ValueError(f"Invalid request payload: {e}")
 
+            if attachments:
+                # The payload is not replaced by the file — its keys travel
+                # alongside as form fields, or as one JSON part in 'json' mode.
+                files, form_data, handles, attachment_errors = api_files.build_multipart(
+                    payload, attachments, body_mode, body_part_name
+                )
+                if attachment_errors:
+                    api_files.close_handles(handles)
+                    raise ValueError("; ".join(attachment_errors))
+
+                # requests must set Content-Type itself so it can append the
+                # boundary of the body it builds; the sheet's application/json
+                # would leave the server unable to parse it.
+                headers = api_files.without_content_type(headers)
+
+                # Summarised while the handles are open and without the bytes:
+                # results reach the LLM analyser and the HTML report on disk.
+                # Written back onto the row so api_runner can report it too.
+                multipart_summary = api_files.describe_multipart(files, form_data)
+                data_dictionary["_multipart_summary"] = multipart_summary
+                allure.attach(multipart_summary, "Request Parts", allure.attachment_type.TEXT)
+                print("make_api_call_multipart", multipart_summary)
+            elif api_files.is_form_urlencoded(headers):
+                # The row asked for application/x-www-form-urlencoded — a token
+                # endpoint taking client_id/client_secret as form fields, most
+                # often. It has to be sent as data=, not json=: json= writes a
+                # JSON body, and the server reads it against the form
+                # Content-Type the header promised and rejects the request
+                # before it ever looks at the credentials.
+                form_body, form_errors = api_files.build_form_data(payload)
+                if form_errors:
+                    raise ValueError("; ".join(form_errors))
+
+                allure.attach(
+                    ", ".join(sorted(form_body)),
+                    "Request Form Fields",
+                    allure.attachment_type.TEXT
+                )
+                # Field names only — the values are credentials.
+                print("make_api_call_form_body fields", sorted(form_body))
+            else:
+                json_body = payload
                 allure.attach(
                     json.dumps(json_body, indent=2),
                     "Request Body",
                     allure.attachment_type.JSON
                 )
-
-            except Exception as e:
-                raise ValueError(f"Invalid request payload: {e}")
+                print("make_api_call_json_body", json_body)
 
         # -------------------------------
         # 3. Send request
         # -------------------------------
+        # One kwargs dict rather than a per-method branch, so the multipart
+        # arguments are assembled in exactly one place.
+        send_kwargs = {"headers": headers, "params": query_params, "verify": False}
+        if files is not None:
+            send_kwargs["files"] = files
+            if form_data:
+                send_kwargs["data"] = form_data
+        elif form_body is not None:
+            send_kwargs["data"] = form_body
+        elif json_body is not None:
+            send_kwargs["json"] = json_body
+
+        sender = {
+            "GET": requests.get,
+            "POST": requests.post,
+            "PUT": requests.put,
+            "PATCH": requests.patch,
+            "DELETE": requests.delete,
+        }.get(http_method)
+
+        if sender is None:
+            api_files.close_handles(handles)
+            raise ValueError(f"Unsupported HTTP method: {http_method}")
+
         try:
             with allure.step(f"Sending {http_method} Request"):
-                if http_method == "GET":
-                    response = requests.get(combinedurl, headers=headers, params=query_params, verify=False)
-                    print("Swegger GET Reposne",response)
-                elif http_method == "POST":
-                    print("Swegger_make_api_call_JSON_BODY", json_body)
-                    response = requests.post(
-                        combinedurl,
-                        json=json_body,
-                        headers=headers,
-                        params=query_params,
-                        verify=False
-                    )
-                    print("Swegger_make_api_call_resposne", response.json)
-                elif http_method == "PUT":
-                    response = requests.put(
-                        combinedurl,
-                        json=json_body,
-                        headers=headers,
-                        params=query_params,
-                        verify=False
-                    )
-
-                elif http_method == "PATCH":
-                    response = requests.patch(
-                        combinedurl,
-                        json=json_body,
-                        headers=headers,
-                        params=query_params,
-                        verify=False
-                    )
-
-                elif http_method == "DELETE":
-                    response = requests.delete(
-                        combinedurl,
-                        headers=headers,
-                        params=query_params,
-                        verify=False
-                    )
-
-                else:
-                    raise ValueError(f"Unsupported HTTP method: {http_method}")
+                response = sender(combinedurl, **send_kwargs)
+                print(f"make_api_call {http_method} response", response)
 
             with allure.step("Response Details"):
                 allure.attach(str(response.status_code), "Status Code", allure.attachment_type.TEXT)
@@ -1147,6 +1241,11 @@ class Apicore:
             logger.error(f"API Call Error: {e}")
             allure.attach(str(e), "Exception", allure.attachment_type.TEXT)
             raise
+
+        finally:
+            # A handle is consumed by the request that sent it, so nothing may
+            # outlive this call — closed whether it succeeded, failed or raised.
+            api_files.close_handles(handles)
 
     def makeperformancecall(self, data_dictionary, api_input_type):
         import configparser
@@ -1169,7 +1268,8 @@ class Apicore:
             performance_required = data_dictionary.get("performance")
             if not performance_required:
                 print("Skipping performance test.")
-                return None
+                # Callers unpack two values; a bare None raises TypeError on unpack.
+                return None, None
 
         # -----------------------------------
         # 3. Resolve inputs
@@ -1179,9 +1279,14 @@ class Apicore:
             base_url = data_dictionary.get("baseUrl", "")
             endpoint = data_dictionary.get("endpoint", "")
             headers = self.get_auth_headers(data_dictionary)
-            # Excel payload (string JSON)
+            # Excel payload. Prefer the parsed 'payload' the way makeapicall
+            # does: body_format is the raw cell, so its {{env_var}} placeholders
+            # and ${chained} values are still unresolved text there — the load
+            # test would send a literal '{{api_client_secret}}' on every sample.
             print("**********raw_payload_file_performance_dictinary***********", data_dictionary)
-            raw_payload = data_dictionary.get("body_format")
+            raw_payload = data_dictionary.get("payload")
+            if not raw_payload:
+                raw_payload = data_dictionary.get("body_format")
             print("**********raw_payload_file_performance***********", raw_payload)
 
 
@@ -1212,11 +1317,60 @@ class Apicore:
         # -----------------------------------
         # 5. Set Locust ENV variables
         # -----------------------------------
+        # Attachments: the worker is a separate process, so the parts travel as
+        # absolute paths rather than bytes and it reopens each file per
+        # iteration. Always assigned — os.environ persists across rows in this
+        # process, and a stale value would attach one row's file to the next.
+        attachments = data_dictionary.get("attachments") or []
+        multipart_plan = ""
+        if http_method in ["POST", "PUT", "PATCH"] and attachments:
+            # Prefer the already-parsed payload: form fields have to be built
+            # from real values, not from the raw cell text.
+            payload_for_parts = data_dictionary.get("payload")
+            if not isinstance(payload_for_parts, (dict, list)):
+                payload_for_parts = raw_payload
+            if isinstance(payload_for_parts, str):
+                try:
+                    payload_for_parts = json.loads(payload_for_parts)
+                except Exception:
+                    payload_for_parts = {}
+            multipart_plan = json.dumps(api_files.multipart_plan(
+                payload_for_parts,
+                attachments,
+                data_dictionary.get("body_mode") or "form",
+                data_dictionary.get("body_part_name") or api_files.DEFAULT_JSON_PART_NAME,
+            ))
+            # Same reason as the functional call: requests sets Content-Type
+            # itself, with the boundary of the body it builds.
+            headers = api_files.without_content_type(headers)
+
+        # A form-encoded row has to stay form-encoded in the worker too, or the
+        # load test measures a request the functional run never sent — and on a
+        # token endpoint every sample would fail on the encoding alone. Sent
+        # pre-flattened, since the worker cannot see the sheet.
+        form_body = ""
+        if http_method in ["POST", "PUT", "PATCH"] and not multipart_plan \
+                and api_files.is_form_urlencoded(headers):
+            payload_for_form = data_dictionary.get("payload")
+            if not isinstance(payload_for_form, dict):
+                try:
+                    payload_for_form = json.loads(str(raw_payload or "{}"))
+                except Exception:
+                    payload_for_form = {}
+            form_fields, form_errors = api_files.build_form_data(payload_for_form)
+            if form_errors:
+                raise ValueError("; ".join(form_errors))
+            form_body = json.dumps(form_fields)
+
         os.environ["LOCUST_BASEURL"] = base_url
         os.environ["LOCUST_ENDPOINT"] = endpoint
         os.environ["LOCUST_METHOD"] = http_method
-        os.environ["LOCUST_AUTH"] = json.dumps(headers)
-        if http_method in ["POST", "PUT", "PATCH"] and raw_payload:
+        os.environ["LOCUST_AUTH"] = json.dumps(headers or {})
+        os.environ["LOCUST_MULTIPART"] = multipart_plan
+        # Always assigned: os.environ outlives the row, and a stale value would
+        # form-encode the next row's JSON body.
+        os.environ["LOCUST_FORM"] = form_body
+        if http_method in ["POST", "PUT", "PATCH"] and raw_payload and not multipart_plan:
             if isinstance(raw_payload, str):
                 os.environ["LOCUST_DATA"] = raw_payload
             else:
@@ -1239,19 +1393,24 @@ class Apicore:
 
         locust_csv_path = os.path.join(REPORT_DIR, f"locust_csv_{http_method}_{sanitized_api}_{timestamp}")
 
-        locustfile_path = os.path.join(os.getcwd(), "locustfile.py")
+        # locustfile.py lives next to this module, NOT in the repo root. Resolving it
+        # against os.getcwd() made locust exit with "Could not find any locustfile",
+        # which produced no HTML and surfaced later as "Report not found: ...".
+        locustfile_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "locustfile.py")
+        if not os.path.exists(locustfile_path):
+            raise FileNotFoundError(f"Locust file missing: {locustfile_path}")
 
         # -----------------------------------
         # 7. Build Locust command
         # -----------------------------------
         command = [
-            "locust",
+            sys.executable, "-m", "locust",
             "-f", locustfile_path,
             "--headless",
-            "--users", locust_config.get("api-performance", "ramp_users"),
-            "--spawn-rate", locust_config.get("api-performance", "spawn_rate"),
-            "--run-time", locust_config.get("api-performance", "run_time"),
-            "--stop-timeout", locust_config.get("api-performance", "stop_time"),
+            "--users", locust_config.get("api-performance", "ramp_users", fallback="20"),
+            "--spawn-rate", locust_config.get("api-performance", "spawn_rate", fallback="0.5"),
+            "--run-time", locust_config.get("api-performance", "run_time", fallback="10s"),
+            "--stop-timeout", locust_config.get("api-performance", "stop_time", fallback="100"),
             "--host", base_url,
             "--csv", locust_csv_path,
             "--csv-full-history",
@@ -1261,15 +1420,29 @@ class Apicore:
         # -----------------------------------
         # 8. Execute Locust
         # -----------------------------------
+        # No shell=True: the args are passed straight to the interpreter, so paths
+        # containing spaces survive and we run locust from THIS interpreter's env.
         result = subprocess.run(
             command,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            shell=True
+            stderr=subprocess.PIPE
         )
 
-        allure.attach(result.stdout.decode(), "Locust Output", allure.attachment_type.TEXT)
-        allure.attach(result.stderr.decode(), "Locust Errors", allure.attachment_type.TEXT)
+        stdout = result.stdout.decode("utf-8", errors="replace")
+        stderr = result.stderr.decode("utf-8", errors="replace")
+
+        allure.attach(stdout, "Locust Output", allure.attachment_type.TEXT)
+        allure.attach(stderr, "Locust Errors", allure.attachment_type.TEXT)
+
+        # Surface the real failure here instead of letting it show up downstream as
+        # a missing report file.
+        if result.returncode != 0 or not os.path.exists(html_report_file):
+            logger.error("Locust run failed (rc=%s): %s", result.returncode, stderr)
+            raise RuntimeError(
+                f"Locust run failed for {http_method} {combinedurl} "
+                f"(exit code {result.returncode}). "
+                f"{(stderr or stdout).strip()[-500:]}"
+            )
 
         print(f"Locust report generated: {html_report_file}")
 

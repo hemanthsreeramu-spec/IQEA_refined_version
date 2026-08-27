@@ -16,11 +16,16 @@ it; progress is reported through an optional callback.
 
 import json
 import re
+from urllib.parse import unquote_plus
 
 from .api_context import ApiContext, MissingVariableError, find_variables, parse_extract_spec
 from . import api_core_model as api_utils
 
 PATH_PARAM_PATTERN = re.compile(r"\{([^{}]+)\}")
+
+# A ${var} written inside a longer string — removed before hunting for path
+# placeholders so '${uid}' is not mistaken for the path parameter '{uid}'.
+VAR_IN_TEXT_PATTERN = re.compile(r"\$\{[^{}]*\}")
 
 RESULT_PASS = "PASS"
 RESULT_FAIL = "FAIL"
@@ -92,6 +97,20 @@ class RowView:
     def produces(self):
         return [name for name, _ in parse_extract_spec(self.extract_spec)]
 
+    @property
+    def open_path_params(self):
+        """
+        '{param}' names in the endpoint that nothing on the row itself fills.
+
+        These are bound at run time from values extracted earlier in the run, so
+        for ordering purposes they count as references exactly like ${param}.
+        """
+        filled = {
+            str(name) for name, value in _param_items(self.row.get("pathParams"))
+            if name and value is not None and str(value).strip()
+        }
+        return [name for name in path_placeholders(self.endpoint) if name not in filled]
+
     def references(self):
         """${var} names this row depends on, across every field we resolve."""
         return find_variables(
@@ -102,8 +121,14 @@ class RowView:
                 "payload": self.row.get("payload"),
                 "body_format": self.row.get("body_format"),
                 "authorization": self.row.get("authorization"),
+                # '${access_token}' in the sheet's bearer column is a dependency
+                # like any other: without it here the row that consumes the token
+                # can be ordered before the row that issues it.
+                "_bearer_token": self.row.get("_bearer_token"),
                 "pathParams": self.row.get("pathParams"),
                 "queryParams": self.row.get("queryParams"),
+                # A file name can be chained too: 'files=${invoice_name}'
+                "attachments": self.row.get("attachments"),
             }
         )
 
@@ -139,6 +164,13 @@ def build_execution_plan(rows, mode, global_headers=None):
             else:
                 producer_of[var] = view.index
 
+    # Same map keyed loosely, so a camelCase '{agentId}' in a Swagger path can
+    # find a snake_case 'agent_id' extract. Only consulted when the exact name
+    # misses, and only when one producer normalises to it.
+    producer_loose = {}
+    for var, index in producer_of.items():
+        producer_loose.setdefault(_normalize(var), set()).add(index)
+
     edges = {view.index: set() for view in views}
 
     # A ${var} in a global header is referenced by every row that receives it, so
@@ -170,6 +202,14 @@ def build_execution_plan(rows, mode, global_headers=None):
                     f"'{view.name}' references ${{{var}}} but also extracts it — "
                     f"a value cannot be consumed by the API that produces it"
                 )
+                continue
+            edges[view.index].add(producer)
+
+        # implicit: a bare '{param}' left in the path is filled from the store
+        # at send time, so whoever extracts that name has to run first
+        for name in view.open_path_params:
+            producer = _lookup_producer(name, producer_of, producer_loose)
+            if producer is None or producer == view.index:
                 continue
             edges[view.index].add(producer)
 
@@ -205,23 +245,95 @@ def _topological_sort(views, edges):
 
 
 # ======================================================================
+# path placeholders
+# ======================================================================
+def path_placeholders(endpoint):
+    """
+    The '{param}' names in a path, ignoring any ${var} placeholders.
+
+    '/users/${uid}/orders/{order_id}' has one path parameter, 'order_id' —
+    '${uid}' contains the substring '{uid}' but is a chained variable that
+    resolves on its own, not an unfilled path parameter.
+    """
+    return PATH_PARAM_PATTERN.findall(VAR_IN_TEXT_PATTERN.sub("", str(endpoint or "")))
+
+
+def _normalize(name):
+    """Case- and separator-insensitive key: 'agentId' and 'agent_id' agree."""
+    return re.sub(r"[^a-z0-9]", "", str(name).lower())
+
+
+def _lookup_producer(name, producer_of, producer_loose):
+    """Row index that extracts `name`, exact match first, then loosely."""
+    if name in producer_of:
+        return producer_of[name]
+    candidates = producer_loose.get(_normalize(name)) or set()
+    return next(iter(candidates)) if len(candidates) == 1 else None
+
+
+def bind_path_placeholders(endpoint, context):
+    """
+    Fill '{param}' placeholders left in a path from values already extracted.
+
+    An endpoint copied off a Swagger path keeps its own braces —
+    '/agents/{agent_id}' — and the natural expectation is that an upstream
+    Extract-Values named agent_id fills it, without the endpoint also having to
+    be rewritten as '/agents/${agent_id}'. Exact name first; failing that a
+    case- and separator-insensitive match, so a camelCase path parameter binds
+    to a snake_case extracted value. The loose match is used only when exactly
+    one stored name normalises to it, so it can never pick between two.
+
+    Returns (endpoint, bound, loosely_bound) — bound maps placeholder to the
+    value used, loosely_bound maps it to the stored name it came from so the
+    result row can say where the value came from.
+    """
+    names = path_placeholders(endpoint)
+    if not names:
+        return endpoint, {}, {}
+
+    stored = context.as_dict()
+    loose = {}
+    for stored_name in stored:
+        loose.setdefault(_normalize(stored_name), []).append(stored_name)
+
+    bound, loosely_bound = {}, {}
+    for name in names:
+        if name in stored:
+            source = name
+        else:
+            candidates = loose.get(_normalize(name)) or []
+            if len(candidates) != 1:
+                continue
+            source = candidates[0]
+            loosely_bound[name] = source
+
+        value = stored[source]
+        bound[name] = value
+        endpoint = endpoint.replace("{" + name + "}", str(value))
+
+    return endpoint, bound, loosely_bound
+
+
+# ======================================================================
 # request preparation
 # ======================================================================
+def _param_items(spec):
+    """(name, value) pairs out of either param shape the grid produces."""
+    if not spec:
+        return []
+    if isinstance(spec, dict):
+        return list(spec.items())
+    return [(entry.get("name"), entry.get("value")) for entry in spec if isinstance(entry, dict)]
+
+
 def _flatten_params(spec, context):
     """
     Turn the grid's param metadata into a flat {name: value} dict, resolving
     ${vars} and dropping anything the user left blank.
     """
     flat = {}
-    if not spec:
-        return flat
 
-    if isinstance(spec, dict):
-        items = spec.items()
-    else:
-        items = [(entry.get("name"), entry.get("value")) for entry in spec if isinstance(entry, dict)]
-
-    for name, value in items:
+    for name, value in _param_items(spec):
         if not name:
             continue
         if value is None or (isinstance(value, str) and not value.strip()):
@@ -235,7 +347,7 @@ def prepare_row(view, context, global_headers=None):
     """
     Resolve a row into something makeapicall can send.
 
-    Returns (resolved_row, path_params, query_params). Raises
+    Returns (resolved_row, path_params, query_params, notes). Raises
     MissingVariableError if a ${var} was never produced.
 
     global_headers are merged in here rather than written onto the row, so the
@@ -249,12 +361,21 @@ def prepare_row(view, context, global_headers=None):
     resolvable = {k: v for k, v in row.items() if k not in ("pathParams", "queryParams")}
     resolved = context.resolve(resolvable, field=view.name)
 
+    # An auth_type=BEARER row may carry its own token in the sheet. Read before
+    # the global headers are merged: a row that brought its own token must not
+    # have the UI's Authorization laid on top of it, since that header is
+    # checked first when the request is built and would win by default.
+    wants_bearer = view.is_file and str(row.get("auth_type") or "").strip().upper() == "BEARER"
+    row_token = str(resolved.get("_bearer_token") or "").strip() if wants_bearer else ""
+
     if global_headers:
         headers = dict(resolved.get("headers") or {})
         produced = set(view.produces)
         for name, value in global_headers.items():
             if name in headers:
                 continue  # an explicit per-row header wins
+            if row_token and str(name).strip().lower() == "authorization":
+                continue  # so does a token written on the row
             if find_variables(value) & produced:
                 continue  # the API that issues the token must not consume it
             headers[name] = context.resolve(value, field=f"global header '{name}'")
@@ -264,24 +385,41 @@ def prepare_row(view, context, global_headers=None):
     endpoint = str(resolved.get("endpoint") or "")
     for name, value in path_params.items():
         endpoint = endpoint.replace("{" + name + "}", str(value))
-    resolved["endpoint"] = endpoint
 
+    # Whatever is still in braces is filled from values extracted earlier in
+    # this run — the Excel flow has no path-parameter column at all, so this is
+    # the only way '/agents/{agent_id}' can be chained there.
+    endpoint, bound, loosely_bound = bind_path_placeholders(endpoint, context)
+    for name, value in bound.items():
+        path_params.setdefault(name, value)
+
+    notes = [
+        f"path {{{name}}} filled from extracted '{source}'"
+        for name, source in loosely_bound.items()
+    ]
+
+    resolved["endpoint"] = endpoint
     resolved["queryParams"] = query_params
     resolved["pathParams"] = path_params
 
-    # Excel rows using auth_type=BEARER: hand over a token captured earlier in
-    # this run so they don't fall back to the standalone auth_config.ini call.
-    if view.is_file and str(row.get("auth_type") or "").strip().upper() == "BEARER":
-        for candidate in ("token", "access_token", "accessToken", "bearer_token"):
-            if context.has(candidate):
-                resolved["_bearer_token"] = context.get(candidate)
-                break
+    # Excel rows using auth_type=BEARER, most specific source first:
+    #   1. the sheet's bearer column, already resolved above
+    #   2. a token captured earlier in this run under one of the usual names
+    #   3. (in get_auth_headers) the UI global header, then auth_config.ini
+    if wants_bearer:
+        if row_token:
+            resolved["_bearer_token"] = row_token
+        else:
+            for candidate in ("token", "access_token", "accessToken", "bearer_token"):
+                if context.has(candidate):
+                    resolved["_bearer_token"] = context.get(candidate)
+                    break
 
-    return resolved, path_params, query_params
+    return resolved, path_params, query_params, notes
 
 
 def unresolved_path_params(endpoint):
-    return PATH_PARAM_PATTERN.findall(endpoint or "")
+    return path_placeholders(endpoint)
 
 
 # ======================================================================
@@ -340,19 +478,33 @@ def run_suite(
             continue
 
         # ---- editor left the row in an unparseable state? ----
-        edit_error = view.row.get("_headers_error") or view.row.get("_payload_error")
+        edit_error = (
+            view.row.get("_headers_error")
+            or view.row.get("_payload_error")
+            # A named-but-missing file is refused here rather than sent without
+            # the upload, which would come back as an opaque 400 — or worse, a
+            # 200 that quietly did nothing.
+            or view.row.get("_attachment_error")
+        )
         if edit_error:
+            remedy = (
+                "add the file and run again"
+                if edit_error == view.row.get("_attachment_error")
+                else "fix the JSON and run again"
+            )
             results.append(
                 _result_row(view, endpoint=view.endpoint, status="NOT SENT", result=RESULT_FAIL,
-                            note=f"{edit_error} — fix the JSON and run again")
+                            note=f"{edit_error} — {remedy}")
             )
             failed_indexes.add(view.index)
             continue
 
         # ---- resolve ${vars} ----
         try:
-            resolved, path_params, query_params = prepare_row(view, context, global_headers)
-        except MissingVariableError as exc:
+            resolved, path_params, query_params, prep_notes = prepare_row(view, context, global_headers)
+        # ValueError covers a generator that could not produce a value —
+        # ${__fileBase64(missing.pdf)} fails this row, it does not kill the run.
+        except (MissingVariableError, ValueError) as exc:
             results.append(
                 _result_row(view, endpoint=view.endpoint, status="NOT SENT", result=RESULT_FAIL, note=str(exc))
             )
@@ -369,7 +521,9 @@ def run_suite(
                     endpoint=combined_url,
                     status="NOT SENT",
                     result=RESULT_FAIL,
-                    note=f"path parameter(s) not supplied: {', '.join(leftover)}",
+                    note=f"path parameter(s) not supplied: {', '.join(leftover)} — "
+                         f"put a value in the endpoint, or have an earlier API "
+                         f"Extract-Values a value named {leftover[0]}",
                 )
             )
             failed_indexes.add(view.index)
@@ -377,7 +531,7 @@ def run_suite(
 
         # ---- send ----
         response = None
-        note_parts = []
+        note_parts = list(prep_notes)
         if view.validate:
             try:
                 response, combined_url, http_method = core.makeapicall(resolved, mode)
@@ -416,7 +570,9 @@ def run_suite(
                     result=result,
                     extracted=extracted,
                     note="; ".join(note_parts),
-                    extra={**(extra or {}), **describe_request(response)},
+                    # makeapicall records the parts it opened on the resolved row
+                    extra={**(extra or {}),
+                           **describe_request(response, resolved.get("_multipart_summary"))},
                     query_params=query_params,
                     response_text=response.text,
                 )
@@ -462,15 +618,26 @@ def mask_header(name, value):
     return f"{text[:4]}…{text[-4:]} ({len(text)} chars)"
 
 
-def describe_request(response):
-    """Read back the request requests actually sent, with secrets masked."""
+def describe_request(response, multipart_summary=None):
+    """
+    Read back the request requests actually sent, with secrets masked.
+
+    A multipart body is described rather than transcribed: it is raw file bytes,
+    and these results are shown in the grid, written into HTML reports and fed
+    to the LLM analyser.
+    """
     request = getattr(response, "request", None)
     if request is None:
         return {}
 
     headers = {k: mask_header(k, v) for k, v in dict(request.headers or {}).items()}
     body = request.body
-    if isinstance(body, bytes):
+
+    if _is_multipart(request):
+        body = multipart_summary or f"<multipart/form-data, {_body_length(body)}>"
+    elif _is_form_urlencoded(request):
+        body = _mask_form_body(body)
+    elif isinstance(body, bytes):
         try:
             body = body.decode("utf-8", errors="replace")
         except Exception:
@@ -481,6 +648,69 @@ def describe_request(response):
         "Request Headers": json.dumps(headers, indent=2),
         "Request Body": _truncate(body, RESPONSE_PREVIEW_CHARS),
     }
+
+
+def _is_multipart(request):
+    return _sent_content_type(request).startswith("multipart/")
+
+
+def _is_form_urlencoded(request):
+    return _sent_content_type(request).startswith("application/x-www-form-urlencoded")
+
+
+def _sent_content_type(request):
+    headers = dict(request.headers or {})
+    return str(headers.get("Content-Type") or headers.get("content-type") or "").lower()
+
+
+# A form body carries credentials as ordinary fields, so the header masking above
+# never sees them. 'password' is here and not in SENSITIVE_HEADERS because it is
+# a body field name, not a header one.
+SENSITIVE_BODY_FIELDS = SENSITIVE_HEADERS + (
+    "password", "passwd", "pwd", "credential", "assertion", "client_id",
+)
+
+
+def _mask_form_body(body):
+    """
+    Mask credential fields in an x-www-form-urlencoded body.
+
+    This body is shown in the results grid, written into the HTML report on disk
+    and sent to the LLM analyser. A token request sends client_secret as a plain
+    form field, so transcribing it verbatim would put the secret in all three.
+    """
+    if isinstance(body, bytes):
+        body = body.decode("utf-8", errors="replace")
+    text = str(body or "")
+    if "=" not in text:
+        return text
+
+    pairs = []
+    for chunk in text.split("&"):
+        name, separator, value = chunk.partition("=")
+        if not separator:
+            pairs.append(chunk)
+            continue
+        name = unquote_plus(name)
+        pairs.append(f"{name}={_mask_form_value(name, unquote_plus(value))}")
+    return "&".join(pairs)
+
+
+def _mask_form_value(name, value):
+    if not any(marker in (name or "").lower() for marker in SENSITIVE_BODY_FIELDS):
+        return value
+    text = str(value)
+    if len(text) <= 12:
+        return "***"
+    return f"{text[:4]}…{text[-4:]} ({len(text)} chars)"
+
+
+def _body_length(body):
+    try:
+        return f"{len(body)} bytes"
+    except TypeError:
+        # A streamed body (a file handle) has no length
+        return "streamed"
 
 
 def _result_row(view, endpoint, status, result, extracted=None, note="", extra=None,
