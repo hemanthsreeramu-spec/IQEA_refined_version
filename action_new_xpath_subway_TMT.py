@@ -33,8 +33,8 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 #setting details - source either file or database
 from config.settings_reader import get_source, get_update_user,get_model,get_xpath_key
-from desktop.session import *
-from desktop.recorder import *
+#from desktop.session import *
+#from desktop.recorder import *
 source = get_source()
 model_type= get_model()
 xpath_tag_keys= get_xpath_key()
