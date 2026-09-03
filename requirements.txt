@@ -149,17 +149,20 @@ PyGithub
 python-gitlab==7.1.0
 
 # ── Windows & Desktop Automation ───────────────────────────────
-pywin32==311
-pywinauto==0.6.8
-comtypes==1.4.16
-pygetwindow==0.0.9
+#pywin32==311; sys_platform == "win32"
+#pywinauto==0.6.8; sys_platform == "win32"
+comtypes==1.4.16; sys_platform == "win32"
+pygetwindow==0.0.9; sys_platform == "win32"
+keyboard==0.13.5; sys_platform == "win32"
+mouse==0.7.1; sys_platform == "win32"
+pyreadline3==3.5.4; sys_platform == "win32"
+win32_setctime==1.2.0; sys_platform == "win32"
+
+# Cross-platform packages
 pyautogui==0.9.54
-keyboard==0.13.5
-mouse==0.7.1
 mss
 clipboard
 pyperclip==1.8.2
-win32_setctime==1.2.0
 
 # ── Templating ────────────────────────────────────────────────
 Jinja2==3.1.6

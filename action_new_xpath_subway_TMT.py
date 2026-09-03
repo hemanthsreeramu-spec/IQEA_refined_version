@@ -504,75 +504,76 @@ if _tool == "recorder":
         if option == 'Desktop':
 
             st.subheader("Record User Actions & Capture Screenshots of User Navigation")
+            st.text("This feature is under the development.")
 
-            # FIX: use a SEPARATE session state key for desktop recording
-            # so it doesn't conflict with st.session_state.recording_started
-            # used by the Web recorder tab.
-            if "desktop_recording_started" not in st.session_state:
-                st.session_state.desktop_recording_started = False
-            if "recorder" not in st.session_state:
-                st.session_state.recorder = None
+            # # FIX: use a SEPARATE session state key for desktop recording
+            # # so it doesn't conflict with st.session_state.recording_started
+            # # used by the Web recorder tab.
+            # if "desktop_recording_started" not in st.session_state:
+            #     st.session_state.desktop_recording_started = False
+            # if "recorder" not in st.session_state:
+            #     st.session_state.recorder = None
 
-            application_path = st.text_input(
-                "Enter full path to application (.exe):",
-                placeholder=r"C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE"
-            )
+            # application_path = st.text_input(
+            #     "Enter full path to application (.exe):",
+            #     placeholder=r"C:\Program Files\Microsoft Office\root\Office16\EXCEL.EXE"
+            # )
 
-            # ── START ──────────────────────────────────────────────────────────
-            if application_path and not st.session_state.desktop_recording_started:
-                if st.button("🎥 Launch and Start Recording"):
-                    with st.spinner("Launching application, please wait..."):
-                        try:
-                            session = DesktopSession(application_path)
-                            app = session.start(timeout=15)  # waits for window ready
+            # # ── START ──────────────────────────────────────────────────────────
+            # if application_path and not st.session_state.desktop_recording_started:
+            #     if st.button("🎥 Launch and Start Recording"):
+            #         with st.spinner("Launching application, please wait..."):
+            #             try:
+            #                 session = DesktopSession(application_path)
+            #                 app = session.start(timeout=15)  # waits for window ready
 
-                            recorder = DesktopRecorder()
-                            recorder.start()
+            #                 recorder = DesktopRecorder()
+            #                 recorder.start()
 
-                            st.session_state.recorder = recorder
-                            st.session_state.desktop_recording_started = True
-                            st.rerun()
+            #                 st.session_state.recorder = recorder
+            #                 st.session_state.desktop_recording_started = True
+            #                 st.rerun()
 
-                        except Exception as e:
-                            st.error(f"Failed to launch application: {e}")
+            #             except Exception as e:
+            #                 st.error(f"Failed to launch application: {e}")
 
-            # ── RECORDING IN PROGRESS ─────────────────────────────────────────
-            if st.session_state.desktop_recording_started:
-                st.info("🔴 Recording in progress... Interact with the application, then click Stop.")
+            # # ── RECORDING IN PROGRESS ─────────────────────────────────────────
+            # if st.session_state.desktop_recording_started:
+            #     st.info("🔴 Recording in progress... Interact with the application, then click Stop.")
 
-                if st.button("🛑 Stop Recording"):
-                    st.session_state.recorder.stop()
-                    st.session_state.desktop_recording_started = False
-                    action_count = len(st.session_state.recorder.get_actions())
-                    st.success(f"✅ Recording stopped. {action_count} action(s) captured.")
-                    st.rerun()
+            #     if st.button("🛑 Stop Recording"):
+            #         st.session_state.recorder.stop()
+            #         st.session_state.desktop_recording_started = False
+            #         action_count = len(st.session_state.recorder.get_actions())
+            #         st.success(f"✅ Recording stopped. {action_count} action(s) captured.")
+            #         st.rerun()
 
-            # ── SAVE ──────────────────────────────────────────────────────────
-            if (not st.session_state.desktop_recording_started
-                    and st.session_state.recorder
-                    and st.session_state.recorder.get_actions()):
+            # # ── SAVE ──────────────────────────────────────────────────────────
+            # if (not st.session_state.desktop_recording_started
+            #         and st.session_state.recorder
+            #         and st.session_state.recorder.get_actions()):
 
-                workflow_name = st.text_input("Enter name for saving the workflow:")
+            #     workflow_name = st.text_input("Enter name for saving the workflow:")
 
-                if workflow_name:
-                    if st.button("💾 Save Desktop Workflow"):
-                        file_name = workflow_name
-                        st.session_state.workflow_text_desktop=st.session_state.recorder.save(file_name)
-                        filename = os.path.join(Action_collection_desktop, f"{file_name}_desktop_actions.txt")
-                        def clean_text(s):
-                            return (
-                                s.replace("\u200b", "")
-                                .replace("\xa0", " ")
-                                .strip()
-                            )
-                        cleaned = [clean_text(x) for x in st.session_state.workflow_text_desktop]
-                        with open(filename, "w", encoding="utf-8") as f:
-                            f.write("\n".join(cleaned))
-                        st.success(f"✅ Workflow saved: {filename}")
-                        st.download_button("⬇ Download Workflow", data="\n".join(st.session_state.workflow_text_desktop),
-                                           file_name=f"{file_name}_actions.txt")
-                        st.session_state.recorder = None
-                        st.session_state.workflow_text_desktop=[]
+            #     if workflow_name:
+            #         if st.button("💾 Save Desktop Workflow"):
+            #             file_name = workflow_name
+            #             st.session_state.workflow_text_desktop=st.session_state.recorder.save(file_name)
+            #             filename = os.path.join(Action_collection_desktop, f"{file_name}_desktop_actions.txt")
+            #             def clean_text(s):
+            #                 return (
+            #                     s.replace("\u200b", "")
+            #                     .replace("\xa0", " ")
+            #                     .strip()
+            #                 )
+            #             cleaned = [clean_text(x) for x in st.session_state.workflow_text_desktop]
+            #             with open(filename, "w", encoding="utf-8") as f:
+            #                 f.write("\n".join(cleaned))
+            #             st.success(f"✅ Workflow saved: {filename}")
+            #             st.download_button("⬇ Download Workflow", data="\n".join(st.session_state.workflow_text_desktop),
+            #                                file_name=f"{file_name}_actions.txt")
+            #             st.session_state.recorder = None
+            #             st.session_state.workflow_text_desktop=[]
 
         # ── Record & Playback: Quick Script Generator ─────────────────────
         if st.session_state.rb_actions_snapshot:

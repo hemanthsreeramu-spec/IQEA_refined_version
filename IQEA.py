@@ -1,7 +1,6 @@
 import streamlit as st
 import sys
 import os
-import platform
 
 st.set_page_config(page_title="IQEA Platform", layout="wide", initial_sidebar_state="expanded")
 
@@ -472,13 +471,7 @@ elif page == "💬  Chat Agent":
     run_page(os.path.join(BASE_DIR, "chat_agent.py"))
 
 elif page == "🧠  IQEA":
-    if platform.system() == "Windows":
-        run_page(os.path.join(BASE_DIR, "action_new_xpath_subway_TMT.py"))
-    else:
-        st.warning(
-            "🧠 IQEA desktop automation requires Windows "
-            "and is not available on Azure Linux."
-        )
+    run_page(os.path.join(BASE_DIR, "action_new_xpath_subway_TMT.py"))
 
 elif page == "🔁  Self Healing":
     run_page(os.path.join(BASE_DIR, "Self_healing_web_application", "Self_healing_streamlet.py"))
