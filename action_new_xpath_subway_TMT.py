@@ -240,10 +240,10 @@ if "select_all" not in st.session_state:
 st.title(" 🤖 TigerQE AI Platform - iQEA (Intelligent QE Assistant)")
 
 ###desktop
-if "desktop_action_name" not in st.session_state:
-    st.session_state.desktop_action_name = ""
-if "recorder" not in st.session_state:
-    st.session_state.recorder = DesktopRecorder()
+# if "desktop_action_name" not in st.session_state:
+#     st.session_state.desktop_action_name = ""
+# if "recorder" not in st.session_state:
+#     st.session_state.recorder = DesktopRecorder()
 
 ##playback
 if "rb_language" not in st.session_state:
