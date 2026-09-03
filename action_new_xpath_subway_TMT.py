@@ -27,7 +27,7 @@ import io
 import base64
 from langchain_core.messages import HumanMessage
 from langchain_openai import AzureChatOpenAI
-from dotenv import load_dotenv; load_dotenv()
+#from dotenv import load_dotenv; load_dotenv()
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 

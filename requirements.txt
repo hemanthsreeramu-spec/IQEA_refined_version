@@ -231,3 +231,4 @@ uuid_utils==0.13.0
 pyee==13.0.0
 py_rust_stemmers==0.1.5
 getpass4
+locust==2.37.10
