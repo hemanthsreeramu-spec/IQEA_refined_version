@@ -8,8 +8,8 @@ from collections import defaultdict
 from urllib.parse import urlparse
 from langchain_core.messages import HumanMessage
 from langchain_openai import AzureChatOpenAI
-from dotenv import load_dotenv
-load_dotenv()
+# from dotenv import load_dotenv
+# load_dotenv()
 
 JS_action_listeners_agentflow= """(function (statusKey) {
     if (window.__intentRecorderInjected) return;

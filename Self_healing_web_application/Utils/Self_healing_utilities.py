@@ -15,8 +15,8 @@ from io import StringIO
 import streamlit as st
 from src.mcp_use_client import start_mcp_client, execute_mcp_use, close_mcp_client
 ### Load env ####
-from dotenv import load_dotenv
-load_dotenv()
+# from dotenv import load_dotenv
+# load_dotenv()
 ### define output path #####
 current_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 output_folder = os.path.join(current_path, "output")

@@ -136,7 +136,8 @@ zstandard==0.25.0
 
 # ── Database ──────────────────────────────────────────────────
 pyodbc
-psycopg2
+#psycopg2
+psycopg2-binary==2.9.12
 sqlalchemy
 snowflake-connector-python
 databricks-sql-connector
