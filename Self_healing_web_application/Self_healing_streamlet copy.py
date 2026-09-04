@@ -83,9 +83,30 @@ with st.expander("🔴 User Workflow Recorder"):
         if page_url:
             #chromedriver_path = os.path.join(input_folder, "chromedriver.exe")
             chrome_options = Options()
-            chrome_options.add_argument("--remote-debugging-port=9222")
+            chrome_options.binary_location = "/usr/bin/google-chrome"
+# Required for Azure / Docker
+            chrome_options.add_argument("--headless=new")
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-gpu")
+
+# Azure container stability
+            chrome_options.add_argument("--disable-software-rasterizer")
+            chrome_options.add_argument("--disable-extensions")
+
+# Window size
+            chrome_options.add_argument("--window-size=1920,1080")
+
+# Create a unique Chrome profile
+            chrome_options.add_argument(
+                   f"--user-data-dir={tempfile.mkdtemp()}"
+                )
+            # chrome_options.add_argument("--remote-debugging-port=9222")
+            # chrome_options.add_argument("--no-sandbox")
+            # chrome_options.add_argument("--disable-dev-shm-usage")
+            # chrome_options.binary_location = "/usr/bin/google-chrome"
+            # chrome_options.add_argument("--headless=new")
+            # chrome_options.add_argument("--disable-gpu")
             #chrome_options.binary_location = chromedriver_path
             #service = Service(executable_path=chromedriver_path)
             #service = Service(ChromeDriverManager().install())
