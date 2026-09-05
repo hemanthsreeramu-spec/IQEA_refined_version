@@ -96,24 +96,52 @@ def save_excel_to_onedrive(file_path):
 @pytest.fixture(scope="module")
 def driver():
     chrome_options = Options()
-    chrome_options.binary_location = "/usr/bin/google-chrome"
-# Required for Azure / Docker
-    chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
 
-# Azure container stability
-    chrome_options.add_argument("--disable-software-rasterizer")
-    chrome_options.add_argument("--disable-extensions")
+        # Chrome binary inside Linux container
+        chrome_options.binary_location = "/usr/bin/google-chrome"
 
-# Window size
-    chrome_options.add_argument("--window-size=1920,1080")
+        # Required for Azure / Docker
+        chrome_options.add_argument("--headless=new")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
 
-# Create a unique Chrome profile
-    chrome_options.add_argument(
-                   f"--user-data-dir={tempfile.mkdtemp()}"
-                )
+        # Container stability
+        chrome_options.add_argument("--disable-software-rasterizer")
+        chrome_options.add_argument("--disable-extensions")
+
+        # Window size
+        chrome_options.add_argument("--window-size=1920,1080")
+
+        # Unique Chrome profile
+        chrome_options.add_argument(
+            f"--user-data-dir={tempfile.mkdtemp()}"
+        )
+
+        # Let Selenium Manager find the correct ChromeDriver
+        driver = webdriver.Chrome(options=chrome_options)
+
+        driver.get(page_url)
+    
+#     chrome_options = Options()
+#     chrome_options.binary_location = "/usr/bin/google-chrome"
+# # Required for Azure / Docker
+#     chrome_options.add_argument("--headless=new")
+#     chrome_options.add_argument("--no-sandbox")
+#     chrome_options.add_argument("--disable-dev-shm-usage")
+#     chrome_options.add_argument("--disable-gpu")
+
+# # Azure container stability
+#     chrome_options.add_argument("--disable-software-rasterizer")
+#     chrome_options.add_argument("--disable-extensions")
+
+# # Window size
+#     chrome_options.add_argument("--window-size=1920,1080")
+
+# # Create a unique Chrome profile
+#     chrome_options.add_argument(
+#                    f"--user-data-dir={tempfile.mkdtemp()}"
+#                 )
     # chrome_options.add_argument("--disable-gpu")  # 🔑 prevents Skia/SharedImage GPU errors
     # chrome_options.add_argument("--disable-software-rasterizer")
     # chrome_options.add_argument("--remote-debugging-port=9222")

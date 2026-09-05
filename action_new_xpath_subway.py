@@ -210,26 +210,55 @@ page_url = st.text_input("Enter the URL of the page:")
 st.session_state.page_url = page_url
 if st.button("Open Browser"):
     if page_url:
-        chromedriver_path = os.path.join(input_folder, "chromedriver.exe")
+
         chrome_options = Options()
+
+        # Chrome binary inside Linux container
         chrome_options.binary_location = "/usr/bin/google-chrome"
-# Required for Azure / Docker
+
+        # Required for Azure / Docker
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
 
-# Azure container stability
+        # Container stability
         chrome_options.add_argument("--disable-software-rasterizer")
         chrome_options.add_argument("--disable-extensions")
 
-# Window size
+        # Window size
         chrome_options.add_argument("--window-size=1920,1080")
 
-# Create a unique Chrome profile
+        # Unique Chrome profile
         chrome_options.add_argument(
-                   f"--user-data-dir={tempfile.mkdtemp()}"
-                )
+            f"--user-data-dir={tempfile.mkdtemp()}"
+        )
+
+        # Let Selenium Manager find the correct ChromeDriver
+        driver = webdriver.Chrome(options=chrome_options)
+
+        driver.get(page_url)
+#     if page_url:
+#         chromedriver_path = os.path.join(input_folder, "chromedriver.exe")
+#         chrome_options = Options()
+#         chrome_options.binary_location = "/usr/bin/google-chrome"
+# # Required for Azure / Docker
+#         chrome_options.add_argument("--headless=new")
+#         chrome_options.add_argument("--no-sandbox")
+#         chrome_options.add_argument("--disable-dev-shm-usage")
+#         chrome_options.add_argument("--disable-gpu")
+
+# # Azure container stability
+#         chrome_options.add_argument("--disable-software-rasterizer")
+#         chrome_options.add_argument("--disable-extensions")
+
+# # Window size
+#         chrome_options.add_argument("--window-size=1920,1080")
+
+# # Create a unique Chrome profile
+#         chrome_options.add_argument(
+#                    f"--user-data-dir={tempfile.mkdtemp()}"
+#                 )
 
         # chrome_options.add_argument("--disable-gpu")  # 🔑 prevents Skia/SharedImage GPU errors
         # chrome_options.add_argument("--disable-software-rasterizer")
