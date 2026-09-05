@@ -253,27 +253,79 @@ page_url = st.text_input("Enter the URL of the page:")
 st.session_state.page_url = page_url
 if st.button("Open Browser"):
     if page_url:
-        clean_url = page_url.strip()
-        if clean_url and not clean_url.startswith(("http://", "https://")):
-            clean_url = "https://" + clean_url
-        if not clean_url:
-            st.warning("⚠️ Please enter a valid URL.")
-        else:
-            chromedriver_path = os.path.join(input_folder, "chromedriver.exe")
+
+    clean_url = page_url.strip()
+
+    if clean_url and not clean_url.startswith(("http://", "https://")):
+        clean_url = "https://" + clean_url
+
+    if not clean_url:
+        st.warning("⚠️ Please enter a valid URL.")
+
+    else:
+
+        try:
             chrome_options = Options()
+
+            # Chrome installed in the Azure Linux container
+            chrome_options.binary_location = "/usr/bin/google-chrome"
+
+            # Required for Azure/Linux container
+            chrome_options.add_argument("--headless=new")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+
+            # Stability options
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--disable-software-rasterizer")
+            chrome_options.add_argument("--disable-extensions")
+            chrome_options.add_argument("--window-size=1920,1080")
+
+            # Selenium/Chrome communication
             chrome_options.add_argument("--remote-debugging-port=9222")
-            chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--remote-allow-origins=*")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            st.session_state.driver = webdriver.Chrome(options=chrome_options)
+
+            # DO NOT use chromedriver.exe
+            st.session_state.driver = webdriver.Chrome(
+                options=chrome_options
+            )
+
+            st.session_state.driver.set_page_load_timeout(60)
+
             st.session_state.driver.get(clean_url)
-            st.session_state.driver.maximize_window()
-            WebDriverWait(st.session_state.driver, 30).until(utils.is_page_loaded)
+
+            # Do not use maximize_window() in headless mode
+            WebDriverWait(
+                st.session_state.driver,
+                30
+            ).until(utils.is_page_loaded)
+
             st.success("✅ Browser opened and ready.")
-    else:
-        st.warning("⚠️ Please enter a URL before opening the browser.")
+
+        except Exception as e:
+            st.error(f"❌ Could not open browser: {str(e)}")
+    # if page_url:
+    #     clean_url = page_url.strip()
+    #     if clean_url and not clean_url.startswith(("http://", "https://")):
+    #         clean_url = "https://" + clean_url
+    #     if not clean_url:
+    #         st.warning("⚠️ Please enter a valid URL.")
+    #     else:
+    #         chromedriver_path = os.path.join(input_folder, "chromedriver.exe")
+    #         chrome_options = Options()
+    #         chrome_options.add_argument("--disable-gpu")
+    #         chrome_options.add_argument("--disable-software-rasterizer")
+    #         chrome_options.add_argument("--remote-debugging-port=9222")
+    #         chrome_options.add_argument("--no-sandbox")
+    #         chrome_options.add_argument("--remote-allow-origins=*")
+    #         chrome_options.add_argument("--disable-dev-shm-usage")
+    #         st.session_state.driver = webdriver.Chrome(options=chrome_options)
+    #         st.session_state.driver.get(clean_url)
+    #         st.session_state.driver.maximize_window()
+    #         WebDriverWait(st.session_state.driver, 30).until(utils.is_page_loaded)
+    #         st.success("✅ Browser opened and ready.")
+    # else:
+    #     st.warning("⚠️ Please enter a URL before opening the browser.")
 
 # ==============================
 # TOOL RAIL  (one tool at a time — replaces the 9-accordion stack)
