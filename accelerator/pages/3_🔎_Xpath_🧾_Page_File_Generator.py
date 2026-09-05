@@ -49,34 +49,56 @@ else:
     selected_tags = []  # No tags for PowerBi
 if st.button("Open Browser"):
     if page_url:
+    st.markdown(
+        f"""
+        <a href="{page_url}" target="_blank" rel="noopener noreferrer">
+            <button style="
+                background-color: #ff4b4b;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+            ">
+                Open Browser
+            </button>
+        </a>
+        """,
+        unsafe_allow_html=True
+    )
+else:
+    st.warning("Please provide a URL.")
 
-        chrome_options = Options()
+    # if page_url:
 
-        # Chrome binary inside Linux container
-        chrome_options.binary_location = "/usr/bin/google-chrome"
+    #     chrome_options = Options()
 
-        # Required for Azure / Docker
-        chrome_options.add_argument("--headless=new")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
+    #     # Chrome binary inside Linux container
+    #     chrome_options.binary_location = "/usr/bin/google-chrome"
 
-        # Container stability
-        chrome_options.add_argument("--disable-software-rasterizer")
-        chrome_options.add_argument("--disable-extensions")
+    #     # Required for Azure / Docker
+    #     chrome_options.add_argument("--headless=new")
+    #     chrome_options.add_argument("--no-sandbox")
+    #     chrome_options.add_argument("--disable-dev-shm-usage")
+    #     chrome_options.add_argument("--disable-gpu")
 
-        # Window size
-        chrome_options.add_argument("--window-size=1920,1080")
+    #     # Container stability
+    #     chrome_options.add_argument("--disable-software-rasterizer")
+    #     chrome_options.add_argument("--disable-extensions")
 
-        # Unique Chrome profile
-        chrome_options.add_argument(
-            f"--user-data-dir={tempfile.mkdtemp()}"
-        )
+    #     # Window size
+    #     chrome_options.add_argument("--window-size=1920,1080")
 
-        # Let Selenium Manager find the correct ChromeDriver
-        driver = webdriver.Chrome(options=chrome_options)
+    #     # Unique Chrome profile
+    #     chrome_options.add_argument(
+    #         f"--user-data-dir={tempfile.mkdtemp()}"
+    #     )
 
-        driver.get(page_url)
+    #     # Let Selenium Manager find the correct ChromeDriver
+    #     driver = webdriver.Chrome(options=chrome_options)
+
+    #     driver.get(page_url)
 #     if page_url:
 #         st.session_state.selected_tags = selected_tags
 #         st.session_state.selected_app = selected_app
