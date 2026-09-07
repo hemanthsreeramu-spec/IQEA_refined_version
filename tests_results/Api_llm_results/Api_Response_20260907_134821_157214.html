@@ -1,0 +1,41 @@
+<h2>Run Summary</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Total</th><th>Passed</th><th>Failed</th><th>Skipped</th><th>Pass Rate</th><th>Overall Verdict</th></tr>
+<tr><td>5</td><td>5</td><td>0</td><td>0</td><td>100%</td><td>PASS (All tests passed)</td></tr>
+</table>
+
+<h2>Test Results</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Test Case</th><th>Method</th><th>Endpoint</th><th>Expected Status</th><th>Actual Status</th><th>Expected Message</th><th>Actual Message</th><th>Result</th><th>Root Cause</th></tr>
+<tr><td>TC01_BEARER_generation</td><td>POST</td><td>https://login.microsoftonline.com/e714ef31-faab-41d2-9f1e-e6df4af16ab8/oauth2/v2.0/token</td><td>200 or 201</td><td>200</td><td>Not Available</td><td>token_type=Bearer; access_token present (redacted)</td><td>PASS</td><td>Not Available</td></tr>
+<tr><td>TC_02_save_draft</td><td>POST</td><td>https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/save_draft</td><td>200 or 201</td><td>200</td><td>"message": "Agent Created &amp; Secured"</td><td>message=Agent Created &amp; Secured</td><td>PASS</td><td>Not Available</td></tr>
+<tr><td>TC_03_create_draft</td><td>POST</td><td>https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/create_draft</td><td>200 or 201</td><td>201</td><td>Not Available</td><td>Agent draft access policies provisioned successfully</td><td>PASS</td><td>Not Available</td></tr>
+<tr><td>TC_04_update_agent</td><td>PUT</td><td>https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/update</td><td>200 or 201</td><td>200</td><td>Not Available</td><td>Updated Successfully</td><td>PASS</td><td>Not Available</td></tr>
+<tr><td>TC_05_save_upadted</td><td>POST</td><td>https://agentflow-dev.tigeranalyticstest.in/aiapi/agents/save_draft</td><td>200 or 201</td><td>200</td><td>"message": "Agent Updated Successfully"</td><td>message=Agent Updated Successfully</td><td>PASS</td><td>Not Available</td></tr>
+</table>
+
+<h2>Issues Identified</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>#</th><th>Affected API</th><th>Issue</th><th>Severity</th><th>Evidence</th></tr>
+<tr><td colspan="5">No issues identified</td></tr>
+</table>
+
+<h2>Risk Assessment</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Area</th><th>Risk Level</th><th>Justification</th></tr>
+<tr><td>Functional</td><td>Low</td><td>All functional test cases executed and returned expected status codes and messages.</td></tr>
+<tr><td>Security</td><td>Medium</td><td>Bearer token was returned; ensure tokens are handled/redacted to prevent leakage in logs or responses.</td></tr>
+<tr><td>Data Integrity</td><td>Low</td><td>Create/update/save endpoints returned success messages indicating expected data operations completed.</td></tr>
+<tr><td>Reliability</td><td>Low</td><td>All endpoints responded with expected status codes during this run; no transient failures observed.</td></tr>
+</table>
+
+<h2>Recommendations</h2>
+<table border="1" cellspacing="0" cellpadding="6">
+<tr><th>Priority</th><th>Recommendation</th><th>Applies To</th><th>Expected Benefit</th></tr>
+<tr><td>High</td><td>Redact or avoid returning full access tokens in test output and logs; ensure tokens are masked before storage or display.</td><td>TC01_BEARER_generation</td><td>Reduce risk of credential leakage and improve security posture.</td></tr>
+<tr><td>Medium</td><td>Standardize response message formats (e.g., consistent JSON key/value formats) and validate messages in assertions.</td><td>All agent-related endpoints</td><td>Improves automated validation reliability and reduces false positives.</td></tr>
+<tr><td>Low</td><td>Add negative and edge-case tests (auth failures, malformed payloads) and enable monitoring for response regressions.</td><td>All APIs</td><td>Increases coverage and early detection of regressions.</td></tr>
+</table>
+
+<h2>Verdict</h2>
+<p>All five tests passed successfully with expected status codes and messages. Apply the recommended security hardening (token redaction) and increase negative test coverage to further reduce risk.</p>

@@ -14,22 +14,17 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 
 def start_browser(url: str, headless: bool = False):
-    """Open Chrome and navigate to the PBI report URL. Returns the Selenium driver."""
-    options = Options()
-    if headless:
-        options.add_argument("--headless=new")
-    options.add_argument("--start-maximized")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--disable-infobars")
-    options.add_argument("--disable-extensions")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option("useAutomationExtension", False)
+    """Open Chrome and navigate to the PBI report URL. Returns the Selenium driver.
 
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()),
-        options=options
-    )
-    driver.maximize_window()
+    Options and driver resolution moved to browser_factory's "pbi" profile.
+    Locally this is unchanged, ChromeDriverManager included. In Azure the driver
+    ships inside the Grid node instead — downloading one at runtime would fail on
+    restricted egress, or fetch a build that mismatches the node's Chrome.
+    """
+    from utilities.browser_factory import get_driver, safe_maximize
+
+    driver = get_driver("pbi", headless=headless)
+    safe_maximize(driver)
     driver.get(url)
     return driver
 

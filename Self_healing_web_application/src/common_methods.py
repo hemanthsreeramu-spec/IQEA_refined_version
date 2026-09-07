@@ -7,7 +7,7 @@ from langchain_openai import AzureChatOpenAI
 from langchain_core.messages import HumanMessage
 from openai import AzureOpenAI
 import warnings; warnings.simplefilter(action='ignore')
-from dotenv import load_dotenv; load_dotenv()
+from config.env_loader import load_dotenv; load_dotenv()
 import PyPDF2
 import docx2txt
 from PIL import Image
@@ -17,7 +17,7 @@ import pandas as pd
 from gherkin.token_scanner import TokenScanner
 from gherkin.parser import Parser
 import tldextract
-from dotenv import load_dotenv
+from config.env_loader import load_dotenv
 load_dotenv()
 # Define the Langchain LLM model
  # Access the variables

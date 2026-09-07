@@ -43,6 +43,14 @@ pandas==2.3.3
 pyarrow==22.0.0
 pillow==11.3.0
 pytesseract==0.3.13
+
+# ── Visual comparison (PBI Validator → Visual Comparison tab) ─────────────────
+# headless build: no Qt/GTK GUI deps, ~half the wheel size, and imshow is
+# never called from a Streamlit app
+opencv-python-headless==5.0.0.93
+scikit-image==0.26.0
+imagehash==4.3.2
+scipy==1.18.1
 fastembed==0.7.4
 onnxruntime==1.23.2
 tokenizers==0.22.2
@@ -149,13 +157,19 @@ PyGithub
 python-gitlab==7.1.0
 
 # ── Windows & Desktop Automation ───────────────────────────────
-pywin32==311
-pywinauto==0.6.8
-comtypes==1.4.16
-pygetwindow==0.0.9
-pyautogui==0.9.54
-keyboard==0.13.5
-mouse==0.7.1
+# PEP 508 markers: pip installs these on Windows and skips them on Linux.
+# Without the markers `pip install -r requirements.txt` HARD-FAILS inside the
+# Azure/Linux container — pywin32 and comtypes have no Linux wheel and no Linux
+# source build. Desktop (WinAppDriver) recording is a local-only feature; it is
+# gated off when execution_type=azure, so these are not needed there.
+# On Windows the resolved set is unchanged from before.
+pywin32==311;      sys_platform == "win32"
+pywinauto==0.6.8;  sys_platform == "win32"
+comtypes==1.4.16;  sys_platform == "win32"
+pygetwindow==0.0.9; sys_platform == "win32"
+pyautogui==0.9.54; sys_platform == "win32"
+keyboard==0.13.5;  sys_platform == "win32"
+mouse==0.7.1;      sys_platform == "win32"
 mss
 clipboard
 pyperclip==1.8.2
@@ -228,3 +242,5 @@ uuid_utils==0.13.0
 pyee==13.0.0
 py_rust_stemmers==0.1.5
 getpass4
+# ------perfromnace
+locust

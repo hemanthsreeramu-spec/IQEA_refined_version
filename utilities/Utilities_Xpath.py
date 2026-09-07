@@ -41,7 +41,30 @@ from selenium.webdriver.support.wait import WebDriverWait
 import hashlib
 from webdriver_manager.chrome import ChromeDriverManager
 from uuid import uuid4
-from dotenv import load_dotenv
+from config.env_loader import load_dotenv
+from config.settings_reader import debug_logs_enabled, get_recorder_poll_secs
+from utilities.driver_lock import driver_guard
+
+
+def _dbg(*args):
+    """Per-poll recorder tracing. Silent in azure (see [EXECUTION] debug_logs):
+    these fire on every thread on every poll for every concurrent user."""
+    if debug_logs_enabled():
+        print(*args)
+
+
+def _interruptible_sleep(stop_flag, seconds=None):
+    """Sleep in 0.5s slices so a stop request is noticed within 0.5s.
+    Replaces the hardcoded `for _ in range(4): time.sleep(0.5)` loops so the
+    poll interval can be lengthened in azure without touching each thread."""
+    if seconds is None:
+        seconds = get_recorder_poll_secs()
+    slept = 0.0
+    while slept < seconds:
+        if stop_flag["stop"]:
+            return
+        time.sleep(0.5)
+        slept += 0.5
 import os
 import utilities.db_utils.handler as db_handler
 
@@ -1388,30 +1411,34 @@ def thread_new_window_checker(driver, injected_windows, last_urls, stop_flag, sc
     print("thread 1 started")
     while not stop_flag["stop"]:
         try:
-            handles = driver.window_handles
-            for handle in handles:
-                if handle not in injected_windows:
-                    # New window detected
-                    driver.switch_to.window(handle)
-                    driver.execute_script(action_utils.injection_script_agentflow())
-                    # Mark as injected
-                    injected_windows[handle] = True
-                    last_urls[handle] = driver.current_url
-                    current_window_ref["handle"] = handle
-                    # Then take screenshot as before
-                    if source == "file":
-                        filepath = action_utils.take_screenshot(driver, screenshot_folder)
-                    elif source == "database":
-                        filepath = db_handler.take_screenshot_db(driver, "sathanantham")
-                    else:
-                        filepath = None
-                    print(f"📸 Screenshot taken for: {last_urls} => {filepath}")
-                    print("screenshot thread ended")
+            # switch_to.window mutates driver-wide state, so this whole block is
+            # serialised against the other monitor threads. The guard is taken
+            # per iteration and released before the sleep below.
+            with driver_guard(driver):
+                handles = driver.window_handles
+                for handle in handles:
+                    if handle not in injected_windows:
+                        # New window detected
+                        driver.switch_to.window(handle)
+                        driver.execute_script(action_utils.injection_script_agentflow())
+                        # Mark as injected
+                        injected_windows[handle] = True
+                        last_urls[handle] = driver.current_url
+                        current_window_ref["handle"] = handle
+                        # Then take screenshot as before
+                        if source == "file":
+                            filepath = action_utils.take_screenshot(driver, screenshot_folder)
+                        elif source == "database":
+                            filepath = db_handler.take_screenshot_db(driver, "sathanantham")
+                        else:
+                            filepath = None
+                        print(f"📸 Screenshot taken for: {last_urls} => {filepath}")
+                        print("screenshot thread ended")
 
 
-                    print(f"✅ JS injected in new window {handle} ({driver.current_url})")
-                    # Optionally: take screenshot
-                    # _take_screenshot(driver, driver.current_url, screenshot_folder)
+                        print(f"✅ JS injected in new window {handle} ({driver.current_url})")
+                        # Optionally: take screenshot
+                        # _take_screenshot(driver, driver.current_url, screenshot_folder)
             print("thread 1 ended")
         except Exception as e:
             print("New window monitor error:", e)
@@ -1419,10 +1446,7 @@ def thread_new_window_checker(driver, injected_windows, last_urls, stop_flag, sc
                 break
 
         # Check every 2 seconds (interruptible: 4 x 0.5s so stop is noticed within 0.5s)
-        for _ in range(4):
-            if stop_flag["stop"]:
-                break
-            time.sleep(0.5)
+        _interruptible_sleep(stop_flag)
 def thread_focus_screenshot_jan29_backup(driver,stop_flag,screenshot_folder,source="file"):
     """
     Screenshots
@@ -1836,10 +1860,7 @@ def thread_reinject_action_check(driver, stop_flag,
                 break
 
         # Interruptible 2-second sleep (4 x 0.5s)
-        for _ in range(4):
-            if stop_flag["stop"]:
-                break
-            time.sleep(0.5)
+        _interruptible_sleep(stop_flag)
 
     print("🛑 thread 3 stopped (idle reinject checker)")
 
@@ -1851,22 +1872,26 @@ def thread_focus_and_url_monitor(driver, injected_windows, last_urls, stop_flag,
 
     while not stop_flag["stop"]:
         try:
-            # Always read the last focused window
-            last_focused = driver.execute_script("return localStorage.getItem('lastFocusedWindow');")
-            print("last_focused------",last_focused)
-            current_handle = driver.current_window_handle
-            current_window_ref["handle"] = current_handle
-            print("current_window_ref------", current_window_ref["handle"])
-            current_url = driver.current_url
-            print("current_url------", current_url)
-            print("last url-----",last_urls.get(current_handle))
+            # Serialised against thread 1's switch_to.window: without this the
+            # handle/url read below can belong to a window thread 1 switched to
+            # mid-read, and the JS gets reinjected into the wrong page.
+            with driver_guard(driver):
+                # Always read the last focused window
+                last_focused = driver.execute_script("return localStorage.getItem('lastFocusedWindow');")
+                _dbg("last_focused------",last_focused)
+                current_handle = driver.current_window_handle
+                current_window_ref["handle"] = current_handle
+                _dbg("current_window_ref------", current_window_ref["handle"])
+                current_url = driver.current_url
+                _dbg("current_url------", current_url)
+                _dbg("last url-----",last_urls.get(current_handle))
 
-            # Compare last URL for current handle
-            print("last_urls.get(current_handle)",last_urls.get(current_handle))
-            if last_urls.get(current_handle) != current_url:
-                driver.execute_script(action_utils.injection_script_agentflow())
-                last_urls[current_handle] = current_url
-                print(f"🔄 URL changed in window {current_handle}, JS reinjected ({current_url})")
+                # Compare last URL for current handle
+                _dbg("last_urls.get(current_handle)",last_urls.get(current_handle))
+                if last_urls.get(current_handle) != current_url:
+                    driver.execute_script(action_utils.injection_script_agentflow())
+                    last_urls[current_handle] = current_url
+                    print(f"🔄 URL changed in window {current_handle}, JS reinjected ({current_url})")
 
             # # Check if another window has focus
             # if last_focused and last_focused != current_handle:
@@ -1886,10 +1911,7 @@ def thread_focus_and_url_monitor(driver, injected_windows, last_urls, stop_flag,
                 break
 
         # Interruptible 2-second sleep (4 x 0.5s)
-        for _ in range(4):
-            if stop_flag["stop"]:
-                break
-            time.sleep(0.5)
+        _interruptible_sleep(stop_flag)
 
     print("🛑 Focus/URL monitor stopped")
 

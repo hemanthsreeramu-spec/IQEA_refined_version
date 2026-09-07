@@ -10,7 +10,7 @@ from datetime import datetime
 import openai
 import pandas as pd
 import streamlit as st
-from dotenv import load_dotenv
+from PIL import Image
 
 # ── Path setup so sibling utilities are importable ────────────────────────────
 _THIS_DIR   = os.path.dirname(os.path.abspath(__file__))
@@ -18,6 +18,10 @@ _PARENT_DIR = os.path.dirname(_THIS_DIR)
 for _p in (_THIS_DIR, _PARENT_DIR):
     if _p not in sys.path:
         sys.path.insert(0, _p)
+
+# Imported AFTER the sys.path bootstrap above — repo root has to be importable
+# before `config` can be resolved when this page is launched directly.
+from config.env_loader import load_dotenv
 
 load_dotenv(os.path.join(_PARENT_DIR, ".env"))
 
@@ -37,6 +41,7 @@ from utils.comparator     import (build_validation_df, compare_values, export_to
                                   match_kpi_to_query, match_kpi_to_queries,
                                   extract_db_value, llm_match_fallback, tables_to_kpis)
 from utils               import pipeline, script_gen
+from utils               import visual_diff, visual_diff_llm, visual_report
 
 # ── Output folder ─────────────────────────────────────────────────────────────
 _OUTPUT_DIR = os.path.join(_THIS_DIR, "output", "reports")
@@ -64,6 +69,16 @@ _DEFAULTS = {
     "pbi_slicer_base_queries": [],      # placeholder base queries — Tab 3 "Run Combination Validation"
     "pbi_validation_results": [],
     "pbi_conn_string":        "",
+    # ── Visual Comparison page ────────────────────────────────────────────────
+    "pbi_vc_py_result":       None,     # Engine 1 (Python libs) result dict
+    "pbi_vc_llm_result":      None,     # Engine 2 (LLM vision) result dict
+    "pbi_vc_combined":        [],       # merged, agreement-tagged findings
+    "pbi_vc_verdict":         "",
+    "pbi_vc_src_bytes":       None,
+    "pbi_vc_tgt_bytes":       None,
+    "pbi_vc_src_name":        "",
+    "pbi_vc_tgt_name":        "",
+    "pbi_vc_ran_at":          "",
 }
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
@@ -450,11 +465,459 @@ st.markdown("""
 
 
 # ── Tabs ──────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3 = st.tabs([
+tab_vc, tab1, tab2, tab3 = st.tabs([
+    "🖼️  Visual Comparison",
     "🌐  Step 1 · Extract KPIs",
     "🧠  Step 2 · Generate SQL",
     "✅  Step 3 · Validate",
 ])
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# VISUAL COMPARISON — source vs target screenshot, no-UI-change validation
+# ════════════════════════════════════════════════════════════════════════════════
+_VERDICT_STYLE = {
+    "PASS":               ("#1E7B34", "#E7F6EA", "✅", "No UI differences detected"),
+    "PASS_WITH_WARNINGS": ("#8A5A00", "#FFF6E0", "⚠️", "Only minor differences detected"),
+    "FAIL":               ("#B3261E", "#FDECEA", "❌", "UI differences detected"),
+}
+_SEV_EMOJI = {"critical": "🔴", "major": "🟠", "minor": "🟡", "info": "🔵"}
+
+
+def _vc_reset_results():
+    for k in ("pbi_vc_py_result", "pbi_vc_llm_result"):
+        st.session_state[k] = None
+    st.session_state.pbi_vc_combined = []
+    st.session_state.pbi_vc_verdict = ""
+
+
+with tab_vc:
+    st.markdown('<p class="section-title">🖼️ Visual Comparison · '
+                'Pre vs Post Migration</p>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="info-box">The report and its data source moved from A to B '
+        'but the UI is <b>not</b> supposed to change. Upload the screenshot taken '
+        '<b>before</b> migration as <b>Source</b> and the one taken <b>after</b> as '
+        '<b>Target</b>. Every visual is checked for position, size, structure, '
+        'colour, chart type, text and slicer selection.</div>',
+        unsafe_allow_html=True)
+
+    # ── Uploads ───────────────────────────────────────────────────────────────
+    col_s, col_t = st.columns(2)
+    with col_s:
+        st.markdown("**1️⃣ Source — before migration**")
+        vc_src = st.file_uploader("Source screenshot",
+                                  type=["png", "jpg", "jpeg", "bmp", "webp"],
+                                  key="pbi_vc_src_upload",
+                                  label_visibility="collapsed")
+        if vc_src is not None:
+            st.image(vc_src, use_container_width=True,
+                     caption=f"SOURCE · {vc_src.name}")
+    with col_t:
+        st.markdown("**2️⃣ Target — after migration**")
+        vc_tgt = st.file_uploader("Target screenshot",
+                                  type=["png", "jpg", "jpeg", "bmp", "webp"],
+                                  key="pbi_vc_tgt_upload",
+                                  label_visibility="collapsed")
+        if vc_tgt is not None:
+            st.image(vc_tgt, use_container_width=True,
+                     caption=f"TARGET · {vc_tgt.name}")
+
+    st.markdown("---")
+
+    # ── Engine toggle ─────────────────────────────────────────────────────────
+    st.markdown('<p class="section-title">Comparison engine</p>',
+                unsafe_allow_html=True)
+    vc_engine = st.radio(
+        "Engine",
+        ["🐍  Python engine  (deterministic, px-accurate)",
+         "🧠  LLM engine  (semantic, explains the change)",
+         "⚡  Both  (recommended — cross-checked)"],
+        index=2, horizontal=True, key="pbi_vc_engine",
+        label_visibility="collapsed",
+    )
+    use_py = vc_engine.startswith(("🐍", "⚡"))
+    use_llm = vc_engine.startswith(("🧠", "⚡"))
+
+    c_desc1, c_desc2 = st.columns(2)
+    with c_desc1:
+        if use_py:
+            st.caption("🐍 **Python** — OpenCV registration + card segmentation, "
+                       "SSIM, perceptual hash, HSV histograms, Canny edge "
+                       "topology, Hungarian matching, Tesseract OCR. "
+                       "Authoritative for geometry and pixels.")
+    with c_desc2:
+        if use_llm:
+            st.caption("🧠 **LLM** — inventories each screenshot, then diffs the "
+                       "two inventories as text. Authoritative for semantics: "
+                       "chart type, what a text change means. Takes ~60-120s "
+                       "and cannot measure pixels, so treat any LLM-only "
+                       "position/size finding as a hint, not a measurement.")
+
+    # ── Advanced options ──────────────────────────────────────────────────────
+    with st.expander("⚙️ Advanced · tolerances, cropping and model", expanded=False):
+        if use_py:
+            st.markdown("**Python engine tolerances**")
+            a1, a2, a3 = st.columns(3)
+            with a1:
+                vc_pos_tol = st.number_input(
+                    "Position tolerance (px)", 0.0, 100.0, 6.0, 1.0,
+                    key="pbi_vc_pos_tol",
+                    help="Shifts up to this are ignored — absorbs capture jitter.")
+                vc_size_tol = st.number_input(
+                    "Size tolerance (px)", 0.0, 100.0, 6.0, 1.0,
+                    key="pbi_vc_size_tol")
+            with a2:
+                vc_ssim_pass = st.slider(
+                    "SSIM pass threshold", 0.50, 1.00, 0.95, 0.01,
+                    key="pbi_vc_ssim_pass",
+                    help="Structural similarity at or above this counts as "
+                         "unchanged. 0.95 is a good default for screenshots.")
+                vc_ssim_warn = st.slider(
+                    "SSIM warn threshold", 0.30, 1.00, 0.90, 0.01,
+                    key="pbi_vc_ssim_warn")
+            with a3:
+                vc_pdr_pass = st.slider(
+                    "Pixel-diff pass (%)", 0.0, 20.0, 2.0, 0.5,
+                    key="pbi_vc_pdr_pass") / 100.0
+                vc_ocr = st.checkbox(
+                    "Enable OCR text checks", value=True, key="pbi_vc_ocr",
+                    help="Detects renamed titles, truncated labels and changed "
+                         "numbers. Requires the Tesseract binary.")
+            if not visual_diff.ocr_available():
+                st.warning("⚠️ Tesseract binary not found — OCR text and "
+                           "displayed-value checks will be skipped. Install "
+                           "Tesseract-OCR to enable them.")
+            else:
+                st.caption("✅ Tesseract detected — OCR checks available.")
+
+            st.markdown("**Crop browser chrome** (fraction of the image to trim "
+                        "before comparing — stops the URL bar and PBI nav bar "
+                        "polluting every metric)")
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                vc_ct = st.slider("Top", 0.0, 0.4, 0.0, 0.01, key="pbi_vc_ct")
+            with c2:
+                vc_cb = st.slider("Bottom", 0.0, 0.4, 0.0, 0.01, key="pbi_vc_cb")
+            with c3:
+                vc_cl = st.slider("Left", 0.0, 0.4, 0.0, 0.01, key="pbi_vc_cl")
+            with c4:
+                vc_cr = st.slider("Right", 0.0, 0.4, 0.0, 0.01, key="pbi_vc_cr")
+        else:
+            vc_pos_tol = vc_size_tol = 6.0
+            vc_ssim_pass, vc_ssim_warn, vc_pdr_pass = 0.95, 0.90, 0.02
+            vc_ocr = True
+            vc_ct = vc_cb = vc_cl = vc_cr = 0.0
+
+        if use_llm:
+            st.markdown("---")
+            st.markdown("**LLM engine**")
+            b1, b2 = st.columns(2)
+            with b1:
+                vc_model = st.text_input(
+                    "Vision model / deployment", value=visual_diff_llm.DEFAULT_MODEL,
+                    key="pbi_vc_model",
+                    help="A stronger vision model gives better layout reasoning "
+                         "than a mini tier — switch if you have one deployed.")
+            with b2:
+                vc_llm_mode = st.radio(
+                    "LLM strategy",
+                    ["two_pass", "one_shot"], index=0, horizontal=True,
+                    key="pbi_vc_llm_mode",
+                    help="two_pass inventories each screenshot then diffs the "
+                         "text — more accurate on layout. one_shot sends both "
+                         "images in one call — faster, cheaper, less reliable.")
+        else:
+            vc_model = visual_diff_llm.DEFAULT_MODEL
+            vc_llm_mode = "two_pass"
+
+        vc_fail_major = st.checkbox(
+            "Treat 'major' findings as an overall FAIL", value=True,
+            key="pbi_vc_fail_major",
+            help="A migration should produce zero UI change, so major "
+                 "differences normally mean the check has failed.")
+
+    # ── Run ───────────────────────────────────────────────────────────────────
+    st.markdown("---")
+    run_col, clear_col, _ = st.columns([2, 1, 2])
+    with run_col:
+        vc_run = st.button("🔍 Compare Screenshots", type="primary",
+                           use_container_width=True, key="pbi_vc_run",
+                           disabled=(vc_src is None or vc_tgt is None))
+    with clear_col:
+        if st.button("🔄 Clear results", use_container_width=True,
+                     key="pbi_vc_clear"):
+            _vc_reset_results()
+            st.rerun()
+
+    if vc_src is None or vc_tgt is None:
+        st.caption("Upload both screenshots to enable comparison.")
+
+    if vc_run and vc_src is not None and vc_tgt is not None:
+        src_bytes, tgt_bytes = vc_src.getvalue(), vc_tgt.getvalue()
+        st.session_state.pbi_vc_src_bytes = src_bytes
+        st.session_state.pbi_vc_tgt_bytes = tgt_bytes
+        st.session_state.pbi_vc_src_name = vc_src.name
+        st.session_state.pbi_vc_tgt_name = vc_tgt.name
+        _vc_reset_results()
+
+        opts = visual_diff.DiffOptions(
+            pos_tol_px=vc_pos_tol, pos_warn_px=max(vc_pos_tol * 2.5, vc_pos_tol + 1),
+            size_tol_px=vc_size_tol, size_warn_px=max(vc_size_tol * 2.5, vc_size_tol + 1),
+            ssim_pass=vc_ssim_pass, ssim_warn=min(vc_ssim_warn, vc_ssim_pass),
+            pixel_diff_pass=vc_pdr_pass, pixel_diff_warn=max(vc_pdr_pass * 2.5, 0.01),
+            enable_ocr=vc_ocr,
+            crop_top=vc_ct, crop_bottom=vc_cb, crop_left=vc_cl, crop_right=vc_cr,
+            fail_on_major=vc_fail_major,
+        )
+
+        if use_py:
+            with st.spinner("🐍 Python engine · aligning, segmenting visuals, "
+                            "measuring every visual…"):
+                try:
+                    st.session_state.pbi_vc_py_result = \
+                        visual_diff.compare_screenshots(src_bytes, tgt_bytes, opts)
+                except Exception as exc:
+                    st.error(f"Python engine failed: {type(exc).__name__}: {exc}")
+
+        if use_llm:
+            status = st.empty()
+            try:
+                with st.spinner("🧠 LLM engine · analysing screenshots…"):
+                    st.session_state.pbi_vc_llm_result = \
+                        visual_diff_llm.compare_screenshots_llm(
+                            src_bytes, tgt_bytes, _get_llm(),
+                            model=vc_model, mode=vc_llm_mode,
+                            progress=lambda m: status.caption(f"🧠 {m}"))
+                status.empty()
+            except Exception as exc:
+                status.empty()
+                st.error(f"LLM engine failed: {type(exc).__name__}: {exc}")
+
+        py_r = st.session_state.pbi_vc_py_result
+        llm_r = st.session_state.pbi_vc_llm_result
+        if py_r or llm_r:
+            combined = visual_report.merge_findings(py_r, llm_r)
+            st.session_state.pbi_vc_combined = combined
+            st.session_state.pbi_vc_verdict = \
+                visual_report.combined_verdict(combined, vc_fail_major)
+            st.session_state.pbi_vc_ran_at = \
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # ── Results ───────────────────────────────────────────────────────────────
+    py_r = st.session_state.pbi_vc_py_result
+    llm_r = st.session_state.pbi_vc_llm_result
+    combined = st.session_state.pbi_vc_combined
+
+    if py_r or llm_r:
+        st.markdown("---")
+        verdict = st.session_state.pbi_vc_verdict or "PASS"
+        fg, bg, icon, blurb = _VERDICT_STYLE.get(verdict, _VERDICT_STYLE["FAIL"])
+        st.markdown(
+            f'<div style="background:{bg};border-left:6px solid {fg};'
+            f'padding:16px 20px;border-radius:6px;margin-bottom:14px;">'
+            f'<div style="font-size:24px;font-weight:900;color:{fg};">'
+            f'{icon} {verdict.replace("_", " ")}</div>'
+            f'<div style="font-size:14px;color:#444;margin-top:4px;">{blurb} · '
+            f'{len(combined)} finding(s) · run at '
+            f'{st.session_state.pbi_vc_ran_at}</div></div>',
+            unsafe_allow_html=True)
+
+        sev_counts = {k: 0 for k in ("critical", "major", "minor", "info")}
+        for f in combined:
+            sev_counts[f.get("severity", "info")] = \
+                sev_counts.get(f.get("severity", "info"), 0) + 1
+        agree = sum(1 for f in combined if f.get("agreement") == "both")
+
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("🔴 Critical", sev_counts["critical"])
+        m2.metric("🟠 Major", sev_counts["major"])
+        m3.metric("🟡 Minor", sev_counts["minor"])
+        m4.metric("🔵 Info", sev_counts["info"])
+        m5.metric("✅ Both engines", agree,
+                  help="Findings independently reported by both engines — "
+                       "highest confidence.")
+
+        for res in (py_r, llm_r):
+            for w in ((res or {}).get("warnings") or []):
+                st.warning(f"⚠️ {w}")
+
+        if llm_r and llm_r.get("summary"):
+            st.markdown('<p class="section-title">🧠 LLM summary</p>',
+                        unsafe_allow_html=True)
+            st.info(llm_r["summary"])
+
+        # ── Findings grid ─────────────────────────────────────────────────────
+        st.markdown('<p class="section-title">📋 Findings</p>',
+                    unsafe_allow_html=True)
+        if not combined:
+            st.success("No differences detected between the two screenshots.")
+        else:
+            f1, f2 = st.columns([2, 2])
+            with f1:
+                sev_filter = st.multiselect(
+                    "Severity", ["critical", "major", "minor", "info"],
+                    default=["critical", "major", "minor"],
+                    key="pbi_vc_sev_filter")
+            with f2:
+                eng_filter = st.multiselect(
+                    "Engine", ["Python", "LLM"], default=["Python", "LLM"],
+                    key="pbi_vc_eng_filter")
+
+            df_find = visual_report.findings_df(combined)
+            view = df_find[df_find["Severity"].isin(sev_filter)
+                           & df_find["Engine"].isin(eng_filter)]
+
+            def _sev_row(row):
+                colors = {"critical": "#FDECEA", "major": "#FFF1E3",
+                          "minor": "#FFFAE6", "info": "#EEF5FC"}
+                return [f"background-color: {colors.get(row['Severity'], '')}"] * len(row)
+
+            st.dataframe(view.style.apply(_sev_row, axis=1),
+                         use_container_width=True, height=340)
+            st.caption(f"Showing {len(view)} of {len(df_find)} finding(s). "
+                       "‘Both engines’ means the Python and LLM engines "
+                       "independently found the same defect.")
+
+        # ── Per-visual metrics ────────────────────────────────────────────────
+        if py_r and py_r.get("visual_table"):
+            st.markdown('<p class="section-title">📐 Per-visual measurements '
+                        '(Python engine)</p>', unsafe_allow_html=True)
+            vdf = pd.DataFrame(py_r["visual_table"])
+
+            def _verdict_row(row):
+                colors = {"PASS": "#E7F6EA", "WARN": "#FFFAE6", "FAIL": "#FDECEA"}
+                return [f"background-color: {colors.get(row.get('Verdict'), '')}"] * len(row)
+
+            st.dataframe(vdf.style.apply(_verdict_row, axis=1),
+                         use_container_width=True, height=300)
+            with st.expander("📖 What these columns mean", expanded=False):
+                st.markdown(
+                    "- **SSIM** — structural similarity, 1.0 = identical. "
+                    "Tolerant of anti-aliasing, sensitive to real structural change.\n"
+                    "- **Pixel diff %** — share of pixels differing beyond the "
+                    "per-channel tolerance.\n"
+                    "- **pHash dist** — perceptual-hash Hamming distance (0-64); "
+                    "low-frequency fingerprint, ignores font rendering noise.\n"
+                    "- **Hue corr** — HSV hue/saturation histogram correlation over "
+                    "non-background pixels only, so a recoloured thin line is still "
+                    "caught. 1.0 = same palette.\n"
+                    "- **Edge IoU** — Canny edge-map overlap. Catches bar→line "
+                    "chart changes even at an identical palette.\n"
+                    "- **Δx/Δy/Shift px** — how far the visual moved.\n"
+                    "- **Text Δ / Numbers Δ** — OCR token similarity. Numbers are "
+                    "tracked separately because a changed number is a *data* "
+                    "issue, not a layout one.")
+
+        # ── Artefacts ─────────────────────────────────────────────────────────
+        if py_r and py_r.get("artifacts"):
+            art = py_r["artifacts"]
+            st.markdown('<p class="section-title">🖼️ Visual evidence</p>',
+                        unsafe_allow_html=True)
+            a_tab1, a_tab2, a_tab3, a_tab4 = st.tabs([
+                "Side by side", "Annotated target", "Difference heatmap",
+                f"Changed visuals ({len(art.get('crops') or [])})"])
+            with a_tab1:
+                st.image(art["side_by_side"], use_container_width=True,
+                         caption="Green = unchanged · Red = failed · "
+                                 "Purple = missing in target · Blue = new in target")
+            with a_tab2:
+                st.image(art["annotated_target"], use_container_width=True,
+                         caption="Target screenshot with per-visual status")
+            with a_tab3:
+                st.image(art["heatmap"], use_container_width=True,
+                         caption="Red/warm areas differ most from the source "
+                                 "(inverted SSIM map)")
+                st.caption("Onion-skin blend — drag to fade between source and target:")
+                blend = st.slider("Source ⟷ Target", 0.0, 1.0, 0.5, 0.05,
+                                  key="pbi_vc_blend", label_visibility="collapsed")
+                try:
+                    _a = Image.open(io.BytesIO(st.session_state.pbi_vc_src_bytes)).convert("RGB")
+                    _b = Image.open(io.BytesIO(st.session_state.pbi_vc_tgt_bytes)).convert("RGB")
+                    if _b.size != _a.size:
+                        _b = _b.resize(_a.size)
+                    st.image(Image.blend(_a, _b, blend), use_container_width=True)
+                except Exception:
+                    st.caption("Blend preview unavailable.")
+            with a_tab4:
+                crops = art.get("crops") or []
+                if not crops:
+                    st.success("No visual changed enough to crop.")
+                for c in crops:
+                    st.markdown(f"**{c['visual_id']} · "
+                                f"{c.get('name') or '(untitled)'}** — {c['verdict']}")
+                    st.image(c["png"], use_container_width=True)
+
+        # ── LLM inventory ─────────────────────────────────────────────────────
+        if llm_r and llm_r.get("inventory_table"):
+            with st.expander("🧠 LLM inventory — what the model saw in each "
+                             "screenshot", expanded=False):
+                st.dataframe(pd.DataFrame(llm_r["inventory_table"]),
+                             use_container_width=True, height=300)
+
+        # ── Engine metrics ────────────────────────────────────────────────────
+        with st.expander("🔬 Engine run details", expanded=False):
+            e1, e2 = st.columns(2)
+            with e1:
+                if py_r:
+                    st.markdown("**🐍 Python engine**")
+                    st.write(f"Verdict: **{py_r['verdict']}**")
+                    st.table(pd.DataFrame(
+                        [{"Metric": k, "Value": str(v)}
+                         for k, v in py_r["page_metrics"].items()]))
+            with e2:
+                if llm_r:
+                    st.markdown("**🧠 LLM engine**")
+                    st.write(f"Verdict: **{llm_r['verdict']}**")
+                    st.table(pd.DataFrame(
+                        [{"Metric": k, "Value": str(v)}
+                         for k, v in llm_r["page_metrics"].items()]))
+
+        # ── Downloads ─────────────────────────────────────────────────────────
+        st.markdown("---")
+        st.markdown('<p class="section-title">📥 Download report</p>',
+                    unsafe_allow_html=True)
+        d1, d2, d3 = st.columns(3)
+        with d1:
+            try:
+                xls = visual_report.export_visual_comparison_excel(
+                    combined, py_r, llm_r, st.session_state.pbi_vc_verdict,
+                    meta={
+                        "Source screenshot": st.session_state.pbi_vc_src_name,
+                        "Target screenshot": st.session_state.pbi_vc_tgt_name,
+                        "Run at": st.session_state.pbi_vc_ran_at,
+                        "Engines": ", ".join(
+                            [n for n, on in (("Python", bool(py_r)),
+                                             ("LLM", bool(llm_r))) if on]),
+                    })
+                st.download_button(
+                    "📊 Excel report", data=xls,
+                    file_name="pbi_visual_comparison_report.xlsx",
+                    mime=_XLSX_MIME, type="primary",
+                    use_container_width=True, key="pbi_vc_dl_xls")
+            except Exception as exc:
+                st.error(f"Could not build Excel report: {exc}")
+        with d2:
+            if combined:
+                st.download_button(
+                    "📄 Findings CSV",
+                    data=visual_report.findings_df(combined).to_csv(index=False),
+                    file_name="pbi_visual_comparison_findings.csv",
+                    mime="text/csv", use_container_width=True,
+                    key="pbi_vc_dl_csv")
+        with d3:
+            if py_r and py_r.get("artifacts"):
+                _buf = io.BytesIO()
+                with zipfile.ZipFile(_buf, "w", zipfile.ZIP_DEFLATED) as z:
+                    for nm in ("side_by_side", "annotated_target", "heatmap"):
+                        z.writestr(f"{nm}.png", py_r["artifacts"][nm])
+                    for c in (py_r["artifacts"].get("crops") or []):
+                        z.writestr(f"changed/{c['visual_id']}.png", c["png"])
+                st.download_button(
+                    "🖼️ Evidence images (ZIP)", data=_buf.getvalue(),
+                    file_name="pbi_visual_comparison_evidence.zip",
+                    mime="application/zip", use_container_width=True,
+                    key="pbi_vc_dl_zip")
 
 
 # ════════════════════════════════════════════════════════════════════════════════

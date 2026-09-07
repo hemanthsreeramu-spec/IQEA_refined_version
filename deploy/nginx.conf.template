@@ -1,0 +1,72 @@
+# One public port fronting two backends.
+#
+# App Service exposes only a single port from the main container, so the Grid's
+# noVNC cannot be published directly — it is reverse-proxied here instead.
+#
+# BOTH backends are WebSocket-based: Streamlit uses one for its own client
+# transport, and noVNC is a WebSocket end to end. Miss the Upgrade/Connection
+# headers and each fails in its own confusing way — Streamlit shows "Please wait"
+# forever, noVNC shows a grey frame with no error.
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+upstream streamlit  { server 127.0.0.1:8501; }
+
+# Grid Hub address, substituted at container start from $GRID_UPSTREAM.
+#   App Service : 127.0.0.1:4444  — sidecars SHARE a network namespace, so they
+#                 reach each other over localhost. A Compose-style service name
+#                 does not resolve there.
+#   Compose/K8s : chrome:4444     — service/DNS name.
+upstream selenium   { server ${GRID_UPSTREAM}; }
+
+server {
+    listen 8000;
+    server_name _;
+
+    # Recording sessions are long-lived and mostly idle between user actions.
+    proxy_read_timeout    3600s;
+    proxy_send_timeout    3600s;
+    proxy_connect_timeout 75s;
+
+    client_max_body_size 200m;   # document/spec uploads
+
+    # ── Live browser view ────────────────────────────────────────────────────
+    # Selenium Grid proxies each session's screen under the Hub, keyed by
+    # session id, so this one location serves every concurrent user's browser
+    # and no per-node routing is needed.
+    location /vnc/ {
+        proxy_pass http://selenium/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host       $host;
+        proxy_set_header X-Real-IP  $remote_addr;
+        proxy_buffering off;
+    }
+
+    # Grid's own WebSocket endpoints (live view / session VNC) sit under
+    # /session/<id>/se/... — keep them on the same origin as the page.
+    location /session/ {
+        proxy_pass http://selenium;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade    $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host       $host;
+        proxy_buffering off;
+    }
+
+    # ── Streamlit ────────────────────────────────────────────────────────────
+    location / {
+        proxy_pass http://streamlit;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        $connection_upgrade;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}

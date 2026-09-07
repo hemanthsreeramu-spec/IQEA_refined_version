@@ -5,7 +5,10 @@ from langchain_core.messages import HumanMessage
 import PyPDF2
 import re
 from langchain_openai import AzureChatOpenAI
-from dotenv import load_dotenv
+try:  # this legacy app can be launched standalone, without repo root on sys.path
+    from config.env_loader import load_dotenv
+except ImportError:
+    from dotenv import load_dotenv
 
 
 # Function to check file extension

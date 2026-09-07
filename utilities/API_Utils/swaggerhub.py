@@ -9,7 +9,7 @@ import allure_commons
 from allure_commons.logger import AllureFileLogger
 from langchain_core.messages import HumanMessage
 from langchain_openai import AzureChatOpenAI
-from dotenv import load_dotenv
+from config.env_loader import load_dotenv
 import os
 from datetime import datetime
 

@@ -8,7 +8,7 @@ from collections import defaultdict
 from urllib.parse import urlparse
 from langchain_core.messages import HumanMessage
 from langchain_openai import AzureChatOpenAI
-from dotenv import load_dotenv
+from config.env_loader import load_dotenv
 load_dotenv()
 
 JS_action_listeners_agentflow= """(function (statusKey) {
@@ -2634,22 +2634,29 @@ def get_recorded_actions(driver):
     Collect recorded actions from all windows, merge by timestamp.
     injected_windows: dict of {window_handle: True}
     """
+    from utilities.driver_lock import driver_guard
+
     all_actions = []
-    handles = driver.window_handles
-    # Iterate through all known windows
-    for handle in handles:
-        try:
-            driver.switch_to.window(handle)
+    # Held across ALL windows: this walks every window with switch_to, and a
+    # monitor thread switching underneath it would make us read the wrong
+    # window's recordedActions — i.e. silently lose or duplicate the user's
+    # recording. Guarding per-window would not be enough.
+    with driver_guard(driver):
+        handles = driver.window_handles
+        # Iterate through all known windows
+        for handle in handles:
+            try:
+                driver.switch_to.window(handle)
 
-            # Fetch actions from this window's localStorage
-            actions = driver.execute_script("""
-                return JSON.parse(localStorage.getItem('recordedActions') || '[]');
-            """)
-            if actions:
-                all_actions.extend(actions)
+                # Fetch actions from this window's localStorage
+                actions = driver.execute_script("""
+                    return JSON.parse(localStorage.getItem('recordedActions') || '[]');
+                """)
+                if actions:
+                    all_actions.extend(actions)
 
-        except Exception as e:
-            print(f"⚠ Error fetching actions from window {handle}: {e}")
+            except Exception as e:
+                print(f"⚠ Error fetching actions from window {handle}: {e}")
 
     # Sort all actions by timestamp
     all_actions.sort(key=lambda x: x.get('timestamp', ''))

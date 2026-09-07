@@ -51,16 +51,23 @@ if st.button("Open Browser"):
     if page_url:
         st.session_state.selected_tags = selected_tags
         st.session_state.selected_app = selected_app
-        chrome_options = Options()
-        chrome_options.add_argument("--remote-debugging-port=9222")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        #service = Service(ChromeDriverManager().install())
-        # service = Service(r"C:\Users\sathanantham.aru\PycharmProjects\ai-accelerator\Input\chromedriver.exe")
-        # st.session_state.driver = webdriver.Chrome(service=service, options=chrome_options)
-        st.session_state.driver = webdriver.Chrome(options=chrome_options)
-        st.session_state.driver.get(page_url)
-        st.session_state.driver.maximize_window()
+        # Flags moved to browser_factory's "xpath_page" profile. Guarded because
+        # this legacy app can be launched standalone, without repo root on
+        # sys.path — then it falls back to the original inline construction.
+        safe_maximize = lambda d: d.maximize_window()
+        normalize_url = lambda u: (u or "").strip()
+        try:
+            from utilities.browser_factory import (get_driver, normalize_url,
+                                                   safe_maximize)
+            st.session_state.driver = get_driver("xpath_page")
+        except ImportError:
+            chrome_options = Options()
+            chrome_options.add_argument("--remote-debugging-port=9222")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            st.session_state.driver = webdriver.Chrome(options=chrome_options)
+        st.session_state.driver.get(normalize_url(page_url))
+        safe_maximize(st.session_state.driver)
         WebDriverWait(st.session_state.driver, 30).until(utils.is_page_loaded)
 
         st.info("Browser opened.")

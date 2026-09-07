@@ -3,7 +3,7 @@ from requests.auth import HTTPBasicAuth
 import urllib3
 import os
 import json
-from dotenv import load_dotenv
+from config.env_loader import load_dotenv
 
 load_dotenv()
 pat = os.getenv("Azure_board_access")

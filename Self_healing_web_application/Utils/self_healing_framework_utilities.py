@@ -7,7 +7,7 @@ from src.mcp_use_client import *
 import json
 import openai
 ### Load env ####
-from dotenv import load_dotenv
+from config.env_loader import load_dotenv
 load_dotenv()
 
  # Access the variables

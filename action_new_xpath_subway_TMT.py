@@ -22,19 +22,27 @@ import utilities.utils_action as action_utils
 import utilities.db_utils.handler as db_handler
 import utilities.TMT_Connection.Test_management_tool_utils as tmt_utils
 from PIL import Image
-import pytesseract
+import utilities.ocr as ocr
 import io
 import base64
 from langchain_core.messages import HumanMessage
 from langchain_openai import AzureChatOpenAI
-from dotenv import load_dotenv; load_dotenv()
+from config.env_loader import load_dotenv; load_dotenv()
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 #setting details - source either file or database
 from config.settings_reader import get_source, get_update_user,get_model,get_xpath_key
-from desktop.session import *
-from desktop.recorder import *
+# Desktop (WinAppDriver) recording is Windows-only: desktop/recorder.py imports
+# win32gui / win32process / pywinauto / mouse / keyboard at module scope. On
+# Linux that raises ImportError, and because this import sits at module level it
+# would take the ENTIRE app down rather than just this one feature. It is
+# therefore resolved lazily, on demand, through the capability gate.
+from utilities.capabilities import (desktop_unavailable_reason,
+                                    is_desktop_recording_available,
+                                    load_desktop_modules)
+from utilities.browser_factory import (get_driver, get_novnc_url, normalize_url,
+                                       quit_driver, safe_maximize)
 source = get_source()
 model_type= get_model()
 xpath_tag_keys= get_xpath_key()
@@ -243,7 +251,10 @@ st.title(" 🤖 TigerQE AI Platform - iQEA (Intelligent QE Assistant)")
 if "desktop_action_name" not in st.session_state:
     st.session_state.desktop_action_name = ""
 if "recorder" not in st.session_state:
-    st.session_state.recorder = DesktopRecorder()
+    # Was DesktopRecorder() — constructed on EVERY page load, even for users who
+    # never open the Desktop tab, which is impossible off Windows. Now created
+    # on demand in the Desktop tab; every consumer below already null-checks it.
+    st.session_state.recorder = None
 
 ##playback
 if "rb_language" not in st.session_state:
@@ -253,27 +264,42 @@ page_url = st.text_input("Enter the URL of the page:")
 st.session_state.page_url = page_url
 if st.button("Open Browser"):
     if page_url:
-        clean_url = page_url.strip()
-        if clean_url and not clean_url.startswith(("http://", "https://")):
-            clean_url = "https://" + clean_url
+        # Shared with the other pages so every URL box behaves identically.
+        clean_url = normalize_url(page_url)
         if not clean_url:
             st.warning("⚠️ Please enter a valid URL.")
         else:
-            chromedriver_path = os.path.join(input_folder, "chromedriver.exe")
-            chrome_options = Options()
-            chrome_options.add_argument("--disable-gpu")
-            chrome_options.add_argument("--disable-software-rasterizer")
-            chrome_options.add_argument("--remote-debugging-port=9222")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--remote-allow-origins=*")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            st.session_state.driver = webdriver.Chrome(options=chrome_options)
+            # Flags now live in utilities/browser_factory.py under the
+            # "recorder" profile — identical locally, container-safe in Azure.
+            # Release any previous browser first: in Azure an orphaned session
+            # keeps a whole Grid node busy and starves other users.
+            quit_driver(st.session_state.get("driver"))
+            st.session_state.driver = get_driver("recorder")
+            st.session_state.novnc_url = get_novnc_url(st.session_state.driver)
             st.session_state.driver.get(clean_url)
-            st.session_state.driver.maximize_window()
+            safe_maximize(st.session_state.driver)
             WebDriverWait(st.session_state.driver, 30).until(utils.is_page_loaded)
             st.success("✅ Browser opened and ready.")
     else:
         st.warning("⚠️ Please enter a URL before opening the browser.")
+
+# ── Live browser view (Azure only) ───────────────────────────────────────────
+# Locally the Chrome window is on the user's own screen. In Azure it lives on a
+# virtual display inside a Grid node, so it is streamed back here over noVNC.
+# Clicks inside this frame are real clicks in that Chrome, which is what keeps
+# the JS-injection recorder working exactly as it does locally.
+if st.session_state.get("novnc_url"):
+    with st.expander("🖥️ Live browser — interact here to record", expanded=True):
+        st.caption("This is the browser running in Azure. Click and type inside "
+                   "the frame; every action is recorded as if it were local.")
+        st.components.v1.iframe(st.session_state.novnc_url, height=760,
+                                scrolling=True)
+    if st.button("🧹 Close Browser"):
+        quit_driver(st.session_state.get("driver"))
+        st.session_state.driver = None
+        st.session_state.novnc_url = None
+        st.success("Browser released.")
+        st.rerun()
 
 # ==============================
 # TOOL RAIL  (one tool at a time — replaces the 9-accordion stack)
@@ -342,10 +368,19 @@ _tool = st.session_state.iqea_active_tool
 st.divider()
 if _tool == "recorder":
     with _workspace("🔴 User Workflow Recorder"):
-        option = st.radio(
-            "Choose where to record:",
-            ('Web', 'Desktop')
-        )
+        # Desktop recording drives a real Windows desktop, so it is offered only
+        # where one exists. Under execution_type=azure the choice collapses to
+        # Web rather than showing an option that cannot work.
+        if is_desktop_recording_available():
+            option = st.radio(
+                "Choose where to record:",
+                ('Web', 'Desktop')
+            )
+        else:
+            option = 'Web'
+            st.caption("🖥️ Desktop recording unavailable — %s"
+                       % desktop_unavailable_reason())
+
         if option == 'Web':
             # 2. Start Recording
             st.subheader("Record User Actions & Capture Screenshots of User Navigation")
@@ -523,6 +558,14 @@ if _tool == "recorder":
                 if st.button("🎥 Launch and Start Recording"):
                     with st.spinner("Launching application, please wait..."):
                         try:
+                            # Resolved here, not at import time — these classes
+                            # pull in win32gui/pywinauto, which exist only on
+                            # Windows.
+                            _ok, _why, DesktopSession, DesktopRecorder = \
+                                load_desktop_modules()
+                            if not _ok:
+                                raise RuntimeError(_why)
+
                             session = DesktopSession(application_path)
                             app = session.start(timeout=15)  # waits for window ready
 
@@ -932,7 +975,7 @@ if _tool == "testcases":
                         #st.image(image, caption=uploaded_file.name, use_container_width=True)
 
                         # Extract text using pytesseract
-                        extracted_text = pytesseract.image_to_string(image)
+                        extracted_text = ocr.image_to_string(image)
                         if extracted_text.strip():
                             Document_image_data += f"\nImage: {image_uploaded_file.name}\nExtracted Text:\n{extracted_text.strip()}\n"
                         else:
@@ -1086,7 +1129,7 @@ if _tool == "testcases":
                                 st.image(image, caption=image_name, use_container_width=True)
 
                                 try:
-                                    extracted_text = pytesseract.image_to_string(image)
+                                    extracted_text = ocr.image_to_string(image)
                                     if extracted_text:
                                         image_data += f"\nImage: {image_name}\nExtracted Text: {extracted_text}\n"
                                     else:
@@ -1108,7 +1151,7 @@ if _tool == "testcases":
                                     image = Image.open(io.BytesIO(db_image_map[image_key]))
                                     st.image(image, caption=image_key, use_container_width=True)
 
-                                    extracted_text = pytesseract.image_to_string(image)
+                                    extracted_text = ocr.image_to_string(image)
                                     if extracted_text:
                                         image_data += f"\nImage: {image_key}\nExtracted Text: {extracted_text}\n"
                                     else:

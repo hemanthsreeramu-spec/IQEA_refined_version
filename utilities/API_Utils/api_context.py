@@ -21,6 +21,7 @@ from datetime import datetime
 from jsonpath_ng import parse
 
 from . import api_files
+from . import api_value_generator
 
 # ${name} or ${name(args)} — also tolerates ${ name } and dotted names
 VAR_PATTERN = re.compile(r"\$\{\s*([A-Za-z_][A-Za-z0-9_.\-]*)\s*(?:\(([^()]*)\))?\s*\}")
@@ -29,6 +30,22 @@ VAR_PATTERN = re.compile(r"\$\{\s*([A-Za-z_][A-Za-z0-9_.\-]*)\s*(?:\(([^()]*)\))
 # These are replaced with the stored value keeping its native type.
 WHOLE_VALUE_PATTERN = re.compile(
     r"^\s*\$\{\s*([A-Za-z_][A-Za-z0-9_.\-]*)\s*(?:\(([^()]*)\))?\s*\}\s*$"
+)
+
+# $key$ or $key(args)$ — the named test-data generators in api_value_generator
+# ("$randommobile$", "$randomdob(%d/%m/%Y)$"). A separate, simpler syntax from
+# ${var} on purpose: these are self-contained values that need no Extract rule
+# and are not a dependency on another API. '{' is not a valid key character, so
+# this can never match a ${var} placeholder.
+#
+# The trailing (?!\{) keeps chaining safe in the one ambiguous spelling: in
+# "$randomtext${token}" the middle '$' could close the generator or open the
+# ${var}. Chaining wins — a swallowed '$' would leave a literal "{token}" in
+# the body and silently break a chained request, which is far worse than a
+# generator not firing.
+GENERATED_PATTERN = re.compile(r"\$([A-Za-z_][A-Za-z0-9_\-]*)(?:\(([^()]*)\))?\$(?!\{)")
+WHOLE_GENERATED_PATTERN = re.compile(
+    r"^\s*\$([A-Za-z_][A-Za-z0-9_\-]*)(?:\(([^()]*)\))?\$\s*$"
 )
 
 # Named time formats, including the JMeter spelling people paste in
@@ -279,6 +296,36 @@ class ApiContext:
             raise ValueError(f"${{{name}}} could not be evaluated: {exc}"
                              + (f" (in '{field}')" if field else ""))
 
+    def _generated(self, name, args, field):
+        """Evaluate a $key$ generator from api_value_generator."""
+        try:
+            return api_value_generator.generate(name, args)
+        except Exception as exc:
+            raise ValueError(f"${name}$ could not be generated: {exc}"
+                             + (f" (in '{field}')" if field else ""))
+
+    def _substitute_generated(self, text, field):
+        """
+        Replace every recognised $key$ in text.
+
+        An unrecognised $token$ is left exactly as it was rather than raising:
+        '$' is ordinary text in some bodies (prices, shell-style strings), so a
+        stray one must not fail the request.
+        """
+        if "$" not in text:
+            return text
+
+        def substitute(match):
+            name, args = match.group(1), match.group(2)
+            if not api_value_generator.has(name):
+                return match.group(0)
+            value = self._generated(name, args, field)
+            if isinstance(value, (dict, list)):
+                return json.dumps(value)
+            return "" if value is None else str(value)
+
+        return GENERATED_PATTERN.sub(substitute, text)
+
     def _resolve_string(self, text, field, strict):
         whole = WHOLE_VALUE_PATTERN.match(text)
         if whole:
@@ -291,6 +338,18 @@ class ApiContext:
             if strict:
                 raise MissingVariableError(name, field, self._producers.get(name))
             return text
+
+        # A cell that is exactly one generator keeps the generated value's own
+        # type, so "age": "$randomage$" sends a number and "$randomboolean$"
+        # sends a real JSON boolean rather than the string "True".
+        whole_generated = WHOLE_GENERATED_PATTERN.match(text)
+        if whole_generated and api_value_generator.has(whole_generated.group(1)):
+            return self._generated(
+                whole_generated.group(1), whole_generated.group(2), field)
+
+        # Generators run before ${var} so that a value extracted from a response
+        # is never itself scanned for $key$ — response data is not a template.
+        text = self._substitute_generated(text, field)
 
         def substitute(match):
             name, args = match.group(1), match.group(2)

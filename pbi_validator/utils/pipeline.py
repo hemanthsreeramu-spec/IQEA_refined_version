@@ -22,7 +22,7 @@ from io import BytesIO
 
 import openai
 import pandas as pd
-from dotenv import load_dotenv
+from config.env_loader import load_dotenv
 
 from .pbi_browser import (apply_combination, extract_kpis_via_llm,
                           extract_slicers_via_dom, get_slicer_options,

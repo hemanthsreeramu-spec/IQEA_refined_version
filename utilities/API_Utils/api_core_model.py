@@ -13,7 +13,7 @@ import os
 from jsonpath_ng import jsonpath, parse
 import logging
 import configparser
-from dotenv import load_dotenv
+from config.env_loader import load_dotenv
 from .DBconnect import getvaluefromdatabse
 from . import api_files
 

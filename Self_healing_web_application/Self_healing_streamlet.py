@@ -81,20 +81,26 @@ with st.expander("🔴 User Workflow Recorder"):
     st.session_state.page_url = page_url
     if st.button("Open Browser"):
         if page_url:
-            #chromedriver_path = os.path.join(input_folder, "chromedriver.exe")
-            chrome_options = Options()
-            chrome_options.add_argument("--remote-debugging-port=9222")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            #chrome_options.binary_location = chromedriver_path
-            #service = Service(executable_path=chromedriver_path)
-            #service = Service(ChromeDriverManager().install())
-            st.session_state.driver = webdriver.Chrome(options=chrome_options)
-            #st.session_state.driver = webdriver.Chrome(service=service, options=chrome_options)
-            st.session_state.driver.get(page_url)
-            st.session_state.driver.maximize_window()
-            WebDriverWait(st.session_state.driver, 30).until(action_utils.is_page_loaded)
-            st.success("✅ Browser opened and ready.")
+            # Flags moved to browser_factory's "self_healing" profile — same
+            # three locally, container-safe in Azure.
+            from utilities.browser_factory import (get_driver, get_novnc_url,
+                                                   normalize_url, quit_driver,
+                                                   safe_maximize)
+            # Chrome needs an absolute URL: "google.com" or a URL with stray
+            # whitespace makes driver.get() raise a bare InvalidArgumentException.
+            clean_url = normalize_url(page_url)
+            if not clean_url:
+                st.warning("⚠️ Please enter a valid URL.")
+            else:
+                quit_driver(st.session_state.get("driver"))
+                st.session_state.driver = get_driver("self_healing")
+                st.session_state.novnc_url = get_novnc_url(st.session_state.driver)
+                st.session_state.driver.get(clean_url)
+                safe_maximize(st.session_state.driver)
+                WebDriverWait(st.session_state.driver, 30).until(action_utils.is_page_loaded)
+                st.success("✅ Browser opened and ready.")
+        else:
+            st.warning("⚠️ Please enter a URL before opening the browser.")
 
     if not st.session_state.recording_started and st.button("🎥 Start Recording"):
         if st.session_state.driver:

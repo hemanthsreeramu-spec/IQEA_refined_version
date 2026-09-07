@@ -22,7 +22,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from dotenv import load_dotenv; load_dotenv()
+from config.env_loader import load_dotenv; load_dotenv()
 import openai
 
 try:

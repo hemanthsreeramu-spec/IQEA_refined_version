@@ -4,7 +4,10 @@ from PIL import Image
 import pytesseract
 from langchain_openai import AzureChatOpenAI
 import streamlit.components.v1 as components
-from dotenv import load_dotenv
+try:  # this legacy app can be launched standalone, without repo root on sys.path
+    from config.env_loader import load_dotenv
+except ImportError:
+    from dotenv import load_dotenv
 import os
 
 load_dotenv()

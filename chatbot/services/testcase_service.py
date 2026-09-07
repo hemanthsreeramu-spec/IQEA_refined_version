@@ -49,19 +49,24 @@ def save_uploaded_images(files):
 
 def ocr_images(filenames):
     """OCR the given screenshot filenames and return a concise, summarised context."""
-    import pytesseract
     from PIL import Image
+
+    import utilities.ocr as ocr
+
+    # Routed through utilities.ocr so a missing tesseract BINARY (the norm in a
+    # container) yields no text rather than pushing "TesseractNotFoundError"
+    # into the prompt as if it were page content.
+    if not ocr.is_available():
+        print("[testcase] %s -> skipping screenshot OCR" % ocr.status())
+        return ""
 
     raw = ""
     for name in filenames:
         path = os.path.join(SCREENSHOT_FOLDER, name)
         if not os.path.exists(path):
             continue
-        try:
-            text = pytesseract.image_to_string(Image.open(path))
-            raw += f"\nImage: {name}\nExtracted Text: {text.strip() or 'No text found'}\n"
-        except Exception as e:
-            raw += f"\nImage: {name}\nExtracted Text: (error: {e})\n"
+        text = ocr.image_to_string(Image.open(path))
+        raw += f"\nImage: {name}\nExtracted Text: {text.strip() or 'No text found'}\n"
 
     if not raw.strip():
         return ""

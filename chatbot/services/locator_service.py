@@ -31,19 +31,14 @@ def open_browser(url):
         except Exception:
             pass                           # dead handle -> make a new one
 
-    from selenium import webdriver
-    from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.support.wait import WebDriverWait
 
-    opts = Options()
-    for arg in ("--disable-gpu", "--disable-software-rasterizer",
-                "--remote-debugging-port=9222", "--no-sandbox",
-                "--remote-allow-origins=*", "--disable-dev-shm-usage"):
-        opts.add_argument(arg)
+    from utilities.browser_factory import get_driver, safe_maximize
 
-    driver = webdriver.Chrome(options=opts)
+    # Flags moved to browser_factory's "locator" profile — same six locally.
+    driver = get_driver("locator")
     driver.get(clean)
-    driver.maximize_window()
+    safe_maximize(driver)
     try:
         WebDriverWait(driver, 30).until(utils.is_page_loaded)
     except Exception:

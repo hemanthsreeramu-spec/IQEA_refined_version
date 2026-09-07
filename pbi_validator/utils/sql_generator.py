@@ -6,7 +6,7 @@ import openai
 import docx2txt
 import pandas as pd
 import PyPDF2
-from dotenv import load_dotenv
+from config.env_loader import load_dotenv
 
 load_dotenv()
 

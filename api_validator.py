@@ -6,7 +6,6 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 import urllib3
-import configparser
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # -------------------------------------------
@@ -18,6 +17,7 @@ from utilities.API_Utils import api_runner
 from utilities.API_Utils import api_report
 from utilities.API_Utils import api_files
 from utilities.API_Utils.api_context import ApiContext, find_variables, parse_extract_spec
+from utilities.API_Utils import api_value_generator
 import allure
 
 swagger_utils.init_allure_results()
@@ -26,10 +26,6 @@ if "swagger_apis" not in st.session_state:
     st.session_state.swagger_apis = []
 if "api_response_analysis" not in st.session_state:
     st.session_state.api_response_analysis=[]
-if "api_performance_analysis" not in st.session_state:
-    st.session_state.api_performance_analysis=[]
-if "locust_convert_response" not in st.session_state:
-    st.session_state.locust_convert_response=[]
 # -------------------------------------------
 # FOLDER CONFIG
 # -------------------------------------------
@@ -42,21 +38,6 @@ os.makedirs(REPORT_DIR, exist_ok=True)
 
 os.makedirs(input_folder, exist_ok=True)
 os.makedirs(output_folder, exist_ok=True)
-ini_file_path = os.path.join(input_folder, "locust_config.ini")
-locust_config = configparser.ConfigParser()
-locust_config.read(ini_file_path)
-# Fall back to sane defaults if Input/locust_config.ini is missing or partial,
-# so the page still loads instead of dying on NoSectionError/NoOptionError.
-_PERF_DEFAULTS = {
-    "ramp_users": "20",
-    "spawn_rate": "0.5",
-    "run_time": "10s",
-    "stop_time": "100",
-}
-performance_config = {
-    key: locust_config.get("api-performance", key, fallback=default)
-    for key, default in _PERF_DEFAULTS.items()
-}
 # -------------------------------------------
 # STREAMLIT CONFIG
 # -------------------------------------------
@@ -73,8 +54,7 @@ if "api_data" not in st.session_state:
 # RESULT CACHE  —  compute once on run, render in tabs (survives reruns)
 # ------------------------------------------------------------------
 for _k, _v in {
-    "api_val_results": [], "api_val_perf_paths": [],
-    "api_val_resp_html": None, "api_val_perf_html": None, "api_val_ran": False,
+    "api_val_results": [], "api_val_resp_html": None, "api_val_ran": False,
     "api_val_chain_vars": {}, "api_val_notes": [],
 }.items():
     st.session_state.setdefault(_k, _v)
@@ -85,17 +65,17 @@ st.markdown(
 )
 
 st.title("🤖 TigerQE AI Platform - API Validator")
-st.caption("Validate, benchmark and analyse APIs — each concern in its own panel, no long scroll.")
+st.caption("Validate and analyse APIs — each concern in its own panel, no long scroll.")
 
 
 # ==================================================================
 # COMPUTE  —  Document flow
 # ==================================================================
-def _run_document(performance_flag, recommendation_flag):
+def _run_document(recommendation_flag):
     api_list = st.session_state.api_data or []
-    runnable = [row for row in api_list if row.get("validate") or row.get("performance")]
+    runnable = [row for row in api_list if row.get("validate")]
     if not runnable:
-        st.warning("No rows are marked Validate? = Y (or Performance? = Y).")
+        st.warning("No rows are marked Validate? = Y.")
         return
 
     progress = st.progress(0)
@@ -106,13 +86,12 @@ def _run_document(performance_flag, recommendation_flag):
         progress.progress(done / total if total else 1.0)
 
     try:
-        results, performance_result, context, notes = api_runner.run_suite(
+        results,context, notes = api_runner.run_suite(
             api_list,
             mode="file",
             context=ApiContext(),
             validate_fn=api_runner.document_validate,
             on_progress=_on_progress,
-            performance=performance_flag,
             global_headers=_global_headers(),
         )
     except ValueError as exc:  # circular dependency between test cases
@@ -136,18 +115,8 @@ def _run_document(performance_flag, recommendation_flag):
         st.session_state.api_response_analysis = swagger_utils.get_queries_from_ai_updated(api_response_analysis_prompt)
         resp_html = swagger_utils.save_html_report(st.session_state.api_response_analysis, REPORT_DIR, "Api_Response")
 
-    perf_html = None
-    # if performance_result:
-    #     performance_extracted_data = swagger_utils.collect_locust_csv_from_paths(performance_result)
-    #     # locust_covert_prompt = swagger_utils.locust_convert_prompt(performance_extracted_data, performance_config)
-    #     # st.session_state.locust_convert_response = swagger_utils.get_queries_from_ai_updated(locust_covert_prompt)
-    #     perf_html = swagger_utils.save_html_report(st.session_state.locust_convert_response, REPORT_DIR,
-    #                                                "Api_Performance_Response")
-
     st.session_state.api_val_results = results
-    st.session_state.api_val_perf_paths = performance_result
     st.session_state.api_val_resp_html = resp_html
-    st.session_state.api_val_perf_html = perf_html
     st.session_state.api_val_ran = True
 
 
@@ -157,7 +126,7 @@ def _run_document(performance_flag, recommendation_flag):
 def _run_swagger():
     apis_to_run = [
         api for api in st.session_state.swagger_apis
-        if api.get("Validate?") or api.get("Performance?")
+        if api.get("Validate?")
     ]
     if not apis_to_run:
         st.warning("Select at least one API to validate.")
@@ -171,12 +140,11 @@ def _run_swagger():
         progress_bar.progress(done / total if total else 1.0)
 
     try:
-        results, performance_result, context, notes = api_runner.run_suite(
+        results,context, notes = api_runner.run_suite(
             apis_to_run,
             mode="Swegger",
             context=ApiContext(),
             on_progress=_on_progress,
-            performance=any(api.get("Performance?") for api in apis_to_run),
             global_headers=_global_headers(),
         )
     except ValueError as exc:  # circular dependency
@@ -195,22 +163,8 @@ def _run_swagger():
     st.session_state.api_response_analysis = swagger_utils.get_queries_from_ai_updated(api_response_analysis_prompt)
     resp_html = swagger_utils.save_html_report(st.session_state.api_response_analysis, REPORT_DIR, "Api_Response")
 
-    perf_html = None
-    if performance_result:
-        performance_extracted_data = swagger_utils.collect_locust_csv_from_paths(performance_result)
-        locust_covert_prompt = swagger_utils.locust_convert_prompt(performance_extracted_data)
-        st.session_state.locust_convert_response = swagger_utils.get_queries_from_ai_updated(locust_covert_prompt)
-        api_performance_analysis_prompt = swagger_utils.api_performace_reponse_prompt(
-            st.session_state.locust_convert_response, performance_config)
-        st.session_state.api_performance_analysis = swagger_utils.get_queries_from_ai_updated(
-            api_performance_analysis_prompt)
-        perf_html = swagger_utils.save_html_report(st.session_state.api_performance_analysis, REPORT_DIR,
-                                                   "Api_Performance_Response")
-
     st.session_state.api_val_results = results
-    st.session_state.api_val_perf_paths = performance_result
     st.session_state.api_val_resp_html = resp_html
-    st.session_state.api_val_perf_html = perf_html
     st.session_state.api_val_ran = True
 
 
@@ -224,7 +178,7 @@ MAX_ROWS_RENDERED = 150
 
 
 def _is_selected(api):
-    return bool(api.get("Validate?") or api.get("Performance?"))
+    return bool(api.get("Validate?"))
 
 
 def _global_headers():
@@ -271,14 +225,56 @@ def _render_global_header_inputs():
         st.caption("No global header set — authenticated endpoints will return 401.")
 
 
+def _render_generated_values_help():
+    """
+    The $key$ test-data generators, with a live sample of each.
+
+    Samples are generated on every rerun rather than hard-coded, so the table
+    can never drift from api_value_generator — and seeing them change makes it
+    obvious that a fresh value is produced per request.
+    """
+    st.markdown(
+        "Write `$key$` anywhere in a request — payload, endpoint, headers, path or query "
+        "params — and a fresh value is generated at send time. No `Extract-Values` rule "
+        "needed: these produce their own data, which is what a *create* API wants when it "
+        "rejects a duplicate name or mobile number on the second run.\n\n"
+        "```\n"
+        "{\"name\": \"$randomname$\", \"mobile\": \"$randommobile$\", \"dob\": \"$randomdob$\"}\n"
+        "```\n"
+        "Most keys take an optional argument in brackets — `$randomint(1,999)$`, "
+        "`$randomstring(12)$`, `$randomdob(21,45,%d/%m/%Y)$`.\n\n"
+        "A cell that is **exactly** one placeholder keeps the value's own type, so "
+        "`\"age\": \"$randomage$\"` sends the number `34` and `\"active\": \"$randomboolean$\"` "
+        "sends a real JSON `true`. Inside a longer string it is interpolated as text "
+        "(`\"QA $randomfirstname$\"`).\n\n"
+        "Case, `_` and `-` are ignored — `$randomDOB$` and `$random_dob$ `are the same key. "
+        "An unrecognised `$token$` is left in the body untouched, so a literal `$` in a "
+        "price or path is safe.\n\n"
+        "This is separate from `${var}` chaining above, and the two mix freely in one "
+        "payload. New keys are added in `utilities/API_Utils/api_value_generator.py` — "
+        "one function plus one line in `GENERATORS`."
+    )
+
+    listing = api_value_generator.available()
+    st.caption(f"{len(listing)} generators available — samples below are live, refresh to see new ones.")
+    st.dataframe(
+        pd.DataFrame(
+            [{"Key": f"${key}$", "What it produces": desc, "Sample": str(sample)}
+             for key, desc, sample in listing]
+        ),
+        use_container_width=True,
+        hide_index=True,
+        height=320,
+    )
+
+
 def _render_attachment_manager():
     """
     The files an Attachments cell can name.
 
     Uploads are written to Input/attachments rather than kept in session state:
-    a sheet references files by name, Streamlit's in-memory buffer dies on the
-    next rerun, and the Locust performance run is a separate process that can
-    only reach a file on disk.
+    a sheet references files by name and Streamlit's in-memory buffer dies on
+    the next rerun.
     """
     folder = api_files.ensure_attachments_folder()
 
@@ -338,9 +334,6 @@ def _set_selection(apis, value):
     for api in apis:
         api["Validate?"] = value
         st.session_state.pop(f"swagger_validate_{api['__id__']}", None)
-        if not value:
-            api["Performance?"] = False
-            st.session_state.pop(f"swagger_perf_{api['__id__']}", None)
 
 
 def _render_swagger_grid(all_apis):
@@ -385,11 +378,16 @@ def _render_swagger_grid(all_apis):
             "name each run): `${__uuid}`, `${__timestamp}`, `${__time(YMDHMS)}`, `${__datetime}`, "
             "`${__randomInt(1,999)}`, `${__randomString(8)}`, `${__counter}`, `${__threadNum}`.\n\n"
             "In a JSON payload always quote the placeholder (`\"connector_id\": \"${conn_id}\"`) — "
-            "if the stored value is a number it is substituted back as a number, not a string."
+            "if the stored value is a number it is substituted back as a number, not a string.\n\n"
+            "For fake test data — names, mobiles, dates of birth — use the `$key$` generators "
+            "listed under **🎲 Generated test data** below."
         )
 
         st.markdown("---")
         _render_global_header_inputs()
+
+    with st.expander("🎲 Generated test data — `$randomtext$`, `$randommobile$`, `$randomdob$`"):
+        _render_generated_values_help()
 
     # ---- filter ----
     needle = (search or "").strip().lower()
@@ -423,23 +421,18 @@ def _render_swagger_grid(all_apis):
     if hidden > 0:
         st.caption(f"Showing {len(shown)} of {len(visible)} matching endpoints — narrow the filter to see the rest.")
 
-    head = st.columns([7, 1.2, 1.4])
+    head = st.columns([8.4, 1.2])
     head[0].markdown("**Endpoint**")
     head[1].markdown("**Validate**")
-    head[2].markdown("**Perf**")
 
     for api in shown:
         api_id = api["__id__"]
-        cols = st.columns([7, 1.2, 1.4])
+        cols = st.columns([8.4, 1.2])
         cols[0].write(f"`{api['httpMethod']}` {api['endpoint']}")
 
         api["Validate?"] = cols[1].checkbox(
             "Validate", value=bool(api.get("Validate?")),
             key=f"swagger_validate_{api_id}", label_visibility="collapsed",
-        )
-        api["Performance?"] = cols[2].checkbox(
-            "Performance", value=bool(api.get("Performance?")),
-            key=f"swagger_perf_{api_id}", label_visibility="collapsed",
         )
 
         if _is_selected(api):
@@ -751,7 +744,7 @@ def _render_result_downloads(results):
 
 
 # ==================================================================
-# RESULT TABS  (Validation / Performance / AI Insights)
+# RESULT TABS  (Validation / AI Insights)
 # ==================================================================
 def _render_result_tabs():
     st.subheader("Results")
@@ -759,7 +752,7 @@ def _render_result_tabs():
         st.info("Configure a source above and run a validation — results appear here.")
         return
 
-    tab_v, tab_p, tab_ai = st.tabs(["🧪 Validation", "⚡ Performance", "🤖 AI Insights"])
+    tab_v, tab_ai = st.tabs(["🧪 Validation", "🤖 AI Insights"])
 
     with tab_v:
         results = st.session_state.api_val_results or []
@@ -822,15 +815,6 @@ def _render_result_tabs():
         else:
             st.info("No validation results.")
 
-    with tab_p:
-        paths = st.session_state.api_val_perf_paths or []
-        if paths:
-            api_utils.Apicore().show_locust_report(paths)
-            # if st.session_state.api_val_perf_html:
-            #     api_utils.Apicore().show_llm_response(st.session_state.api_val_perf_html, "Performance_response")
-        else:
-            st.info("No performance run — enable **Performance** before validating.")
-
     with tab_ai:
         if st.session_state.api_val_resp_html:
             api_utils.Apicore().show_llm_response(st.session_state.api_val_resp_html, "API_response")
@@ -864,10 +848,7 @@ with st.container(border=True):
                 st.download_button("⬇ Download Template", f, file_name="API_Test_Template.xlsx",
                                    use_container_width=True)
 
-        f1, f2 = st.columns(2)
-        performance_flag = f1.toggle("⚡ Performance test")
-        recommendation_flag = f2.toggle("🤖 AI recommendation")
-
+        recommendation_flag = st.toggle("🤖 AI recommendation")
         with st.expander("🔗 Chaining & auth — pass one API's response into another"):
             st.markdown(
                 "Add `Extract-Values` to the row that produces a value, then reference it as "
@@ -897,10 +878,15 @@ with st.container(border=True):
                 "matches **partially, case-insensitively** — `message:Created` passes against "
                 "\"Agent Created & Secured\". A bare value with no key must appear somewhere in the "
                 "response. Numbers and booleans are compared by value, so `id:3` will not pass "
-                "against `13243`."
+                "against `13243`.\n\n"
+                "For fake test data — names, mobiles, dates of birth — use the `$key$` "
+                "generators listed under **🎲 Generated test data** below."
             )
             st.markdown("---")
             _render_global_header_inputs()
+
+        with st.expander("🎲 Generated test data — `$randomtext$`, `$randommobile$`, `$randomdob$`"):
+            _render_generated_values_help()
 
         with st.expander("📎 Attachments — send a file with the payload"):
             _render_attachment_manager()
@@ -927,7 +913,6 @@ with st.container(border=True):
                         "Depends On": row["dependsOn"] or "-",
                         "Order": row["order"] or "auto",
                         "Validate": "Y" if row["validate"] else "N",
-                        "Perf": "Y" if row["performance"] else "N",
                     }
                     for row in api_list
                 ])
@@ -939,7 +924,7 @@ with st.container(border=True):
             if not st.session_state.api_data:
                 st.error("Upload API Excel file")
             else:
-                _run_document(performance_flag, recommendation_flag)
+                _run_document(recommendation_flag)
                 st.success("API Testing Completed")
 
     # ------------------------------------------------------------------
@@ -971,7 +956,6 @@ with st.container(border=True):
                         # Nothing is selected by default — a large spec would
                         # otherwise fire hundreds of requests on the first click.
                         api["Validate?"] = False
-                        api["Performance?"] = False
                         api["__id__"] = f"{api['httpMethod']}_{api['endpoint']}_{idx}"
                         # Give every endpoint a real test case name so results and
                         # exports are labelled by name, not by URL.

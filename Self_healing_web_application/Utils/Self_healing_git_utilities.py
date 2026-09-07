@@ -6,7 +6,7 @@ import shutil
 import Utils.self_healing_framework_utilities as healing_framework_utils
 import gitlab
 import streamlit as st
-from dotenv import load_dotenv
+from config.env_loader import load_dotenv
 load_dotenv()
 # ---------------------------
 # GitLab helper

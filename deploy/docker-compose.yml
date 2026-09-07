@@ -1,0 +1,69 @@
+# Local reproduction of the Azure topology. Run this BEFORE deploying — it
+# exercises the same code path (execution_type=azure, Remote WebDriver, noVNC)
+# on a laptop, so container problems surface here rather than in Azure.
+#
+#   docker compose -f deploy/docker-compose.yml up --build
+#   open http://localhost:8000
+#
+# `chrome-node` is the scaling unit: one concurrent recording session each.
+#   docker compose -f deploy/docker-compose.yml up --scale chrome-node=5
+
+services:
+  iqea:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      IQEA_EXECUTION_TYPE: azure
+      # Compose resolves service names, so both point at "chrome". On App
+      # Service these become 127.0.0.1 (the image defaults) because sidecars
+      # share a network namespace.
+      SELENIUM_REMOTE_URL: http://chrome:4444/wd/hub
+      GRID_UPSTREAM: chrome:4444
+      TESSERACT_CMD: /usr/bin/tesseract
+      # Real secrets come from Azure App Service application settings; .env is
+      # deliberately NOT in the image (see .dockerignore + config/env_loader.py).
+      # AZURE_OPENAI_API_KEY: ...
+    depends_on:
+      - chrome
+
+  # Selenium Grid Hub. The app talks WebDriver to it, and it also proxies each
+  # session's screen — which is why only this one service needs exposing.
+  chrome:
+    image: selenium/hub:4.27
+    environment:
+      # Reap sessions abandoned by users who just closed the tab. Without this a
+      # dead session pins a node forever and starves everyone else. This is the
+      # server-side backstop for the app's own quit_driver().
+      SE_SESSION_TIMEOUT: "300"
+      SE_SESSION_REQUEST_TIMEOUT: "120"
+    ports:
+      - "4444:4444"     # Grid console — internal only in Azure
+
+  # Chrome nodes: the scaling unit. Each runs Xvfb + fluxbox + HEADED Chrome
+  # plus a VNC server, so there is a real screen for the user to drive.
+  chrome-node:
+    image: selenium/node-chrome:4.27
+    shm_size: 2gb              # /dev/shm defaults to 64MB; Chrome crashes without this
+    depends_on:
+      - chrome
+    environment:
+      SE_EVENT_BUS_HOST: chrome
+      SE_EVENT_BUS_PUBLISH_PORT: "4442"
+      SE_EVENT_BUS_SUBSCRIBE_PORT: "4443"
+      # One session per node keeps each user on their OWN display. Raising this
+      # would put two users on one screen, where they would see and be able to
+      # click each other's browser.
+      SE_NODE_MAX_SESSIONS: "1"
+      SE_START_VNC: "true"
+      SE_START_XVFB: "true"
+      SE_VNC_NO_PASSWORD: "false"
+      SE_VNC_PASSWORD: "change-me-before-deploying"
+      SE_SCREEN_WIDTH: "1920"
+      SE_SCREEN_HEIGHT: "1080"
+    deploy:
+      resources:
+        limits:
+          memory: 2G          # Chrome comfortably uses ~1GB under load

@@ -431,7 +431,6 @@ def run_suite(
     context=None,
     validate_fn=None,
     on_progress=None,
-    performance=False,
     global_headers=None,
 ):
     """
@@ -440,7 +439,7 @@ def run_suite(
     validate_fn(response, resolved_row, view) -> (result, extra_columns)
     on_progress(done, total, label)
 
-    Returns (results, performance_paths, context, notes).
+    Returns (results, context, notes).
     """
     context = context or ApiContext()
     validate_fn = validate_fn or _default_validate
@@ -452,7 +451,7 @@ def run_suite(
 
     core = api_utils.Apicore()
     results = []
-    performance_paths = []
+    #performance_paths = []
 
     failed_indexes = set()
     view_by_index = {view.index: view for view in ordered}
@@ -578,16 +577,7 @@ def run_suite(
                 )
             )
 
-        # ---- performance ----
-        if performance and view.performance:
-            try:
-                path, _csv = core.makeperformancecall(resolved, mode)
-                if path:
-                    performance_paths.append(path)
-            except Exception as exc:
-                notes.append(f"performance run failed for '{view.name}': {exc}")
-
-    return results, performance_paths, context, notes
+    return results, context, notes
 
 
 def _blocking_dependency(index, edges, failed_indexes):
