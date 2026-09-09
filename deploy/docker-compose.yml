@@ -22,6 +22,7 @@ services:
       # share a network namespace.
       SELENIUM_REMOTE_URL: http://chrome:4444/wd/hub
       GRID_UPSTREAM: chrome:4444
+      NOVNC_UPSTREAM: chrome:7900
       TESSERACT_CMD: /usr/bin/tesseract
       # Real secrets come from Azure App Service application settings; .env is
       # deliberately NOT in the image (see .dockerignore + config/env_loader.py).

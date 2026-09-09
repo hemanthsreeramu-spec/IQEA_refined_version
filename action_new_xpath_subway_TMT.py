@@ -41,7 +41,8 @@ from config.settings_reader import get_source, get_update_user,get_model,get_xpa
 from utilities.capabilities import (desktop_unavailable_reason,
                                     is_desktop_recording_available,
                                     load_desktop_modules)
-from utilities.browser_factory import (get_driver, get_novnc_url, normalize_url,
+from utilities.browser_factory import (check_novnc_reachable, get_driver,
+                                       get_novnc_url, normalize_url,
                                        quit_driver, safe_maximize)
 source = get_source()
 model_type= get_model()
@@ -265,8 +266,8 @@ st.session_state.page_url = page_url
 if st.button("Open Browser"):
     if page_url:
         # Shared with the other pages so every URL box behaves identically.
-        clean_url = normalize_url(page_url)
-        if not clean_url:
+        st.session_state.page_url = normalize_url(page_url)
+        if not st.session_state.page_url:
             st.warning("⚠️ Please enter a valid URL.")
         else:
             # Flags now live in utilities/browser_factory.py under the
@@ -276,7 +277,7 @@ if st.button("Open Browser"):
             quit_driver(st.session_state.get("driver"))
             st.session_state.driver = get_driver("recorder")
             st.session_state.novnc_url = get_novnc_url(st.session_state.driver)
-            st.session_state.driver.get(clean_url)
+            st.session_state.driver.get(st.session_state.page_url)
             safe_maximize(st.session_state.driver)
             WebDriverWait(st.session_state.driver, 30).until(utils.is_page_loaded)
             st.success("✅ Browser opened and ready.")
@@ -292,12 +293,33 @@ if st.session_state.get("novnc_url"):
     with st.expander("🖥️ Live browser — interact here to record", expanded=True):
         st.caption("This is the browser running in Azure. Click and type inside "
                    "the frame; every action is recorded as if it were local.")
+        # Verify the panel will actually show noVNC. Streamlit answers ANY
+        # unknown path with its own index.html, so a misrouted /vnc/ renders
+        # IQEA inside this frame instead of failing — confusing to diagnose
+        # from the UI alone. Check once per browser session, not per rerun.
+        if "novnc_ok" not in st.session_state:
+            st.session_state.novnc_ok, st.session_state.novnc_detail = \
+                check_novnc_reachable()
+        if not st.session_state.novnc_ok:
+            st.error(
+                "⚠️ The live view is not serving noVNC, so this panel cannot "
+                "show the browser (it may show IQEA itself). The recording "
+                "session is still running — only the picture is missing.\n\n"
+                "Check: the Chrome sidecar has `SE_START_VNC=true` and listens "
+                "on **7900** (noVNC is a different port from WebDriver's 4444); "
+                "`NOVNC_UPSTREAM=127.0.0.1:7900`; and `WEBSITES_PORT=8000` so "
+                "traffic goes through nginx rather than straight to Streamlit."
+            )
+            with st.expander("Diagnostic detail"):
+                st.code(st.session_state.get("novnc_detail", ""), language="text")
         st.components.v1.iframe(st.session_state.novnc_url, height=760,
                                 scrolling=True)
     if st.button("🧹 Close Browser"):
         quit_driver(st.session_state.get("driver"))
         st.session_state.driver = None
         st.session_state.novnc_url = None
+        st.session_state.pop("novnc_ok", None)      # re-probe on the next open
+        st.session_state.pop("novnc_detail", None)
         st.success("Browser released.")
         st.rerun()
 

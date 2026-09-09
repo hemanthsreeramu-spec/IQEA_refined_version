@@ -24,6 +24,7 @@ to manage here. The per-session screen is reachable at
 which is why only the Hub needs to be exposed publicly.
 """
 
+import os
 import uuid
 
 from selenium import webdriver
@@ -158,8 +159,14 @@ def get_driver(profile="recorder", url=None, headless=False):
     options = build_options(profile, headless=headless)
 
     if is_azure():
+        target = get_selenium_remote_url()
+        # Preflight: a wrong address otherwise surfaces as a urllib3
+        # "Connection refused" with no hint about what to change.
+        ok, detail = check_grid_reachable(target)
+        if not ok:
+            raise RuntimeError(_grid_unreachable_message(target, detail))
         driver = webdriver.Remote(
-            command_executor=get_selenium_remote_url(),
+            command_executor=target,
             options=options,
         )
     else:
@@ -182,6 +189,147 @@ def _local_driver(profile, options):
         return webdriver.Chrome(service=Service(ChromeDriverManager().install()),
                                 options=options)
     return webdriver.Chrome(options=options)
+
+
+def check_grid_reachable(url=None, timeout=5):
+    """
+    Can we actually reach the Selenium Grid? Returns (ok: bool, detail: str).
+
+    Probes the Grid's /status endpoint. Called before creating a remote session
+    so a misconfigured address produces an explanatory message instead of a raw
+    "Connection refused" traceback from deep inside urllib3.
+    """
+    import json
+    import urllib.error
+    import urllib.request
+
+    target = url or get_selenium_remote_url()
+    # /status lives at the Grid root, not under /wd/hub
+    base = target.split("/wd/hub")[0].rstrip("/")
+    status_url = base + "/status"
+    try:
+        with urllib.request.urlopen(status_url, timeout=timeout) as resp:
+            body = json.loads(resp.read().decode("utf-8", "replace"))
+        value = body.get("value", {})
+        ready = value.get("ready")
+        nodes = value.get("nodes") or []
+        slots = sum(len(n.get("slots") or []) for n in nodes)
+        return bool(ready), ("ready=%s nodes=%d slots=%d — %s"
+                             % (ready, len(nodes), slots,
+                                value.get("message", "").strip() or "ok"))
+    except urllib.error.HTTPError as exc:
+        return False, "HTTP %s from %s" % (exc.code, status_url)
+    except Exception as exc:
+        return False, "%s: %s" % (type(exc).__name__, exc)
+
+
+def check_novnc_reachable(timeout=5):
+    """
+    Is the live-browser panel actually going to show a browser?
+
+    Checks two hops separately, because they fail for different reasons:
+      1. direct  -> NOVNC_UPSTREAM (the Chrome container's noVNC on :7900)
+      2. proxied -> our own nginx at novnc_path
+
+    Hop 2 has a specific trap: Streamlit is a single-page app that answers ANY
+    unknown path with its own index.html. So if nginx is not routing /vnc/ (or
+    nginx is not in the request path at all, e.g. WEBSITES_PORT points straight
+    at Streamlit), the panel does not error — it renders IQEA inside itself.
+    We detect that by looking for Streamlit's markers in the response body.
+
+    Returns (ok: bool, detail: str).
+    """
+    import urllib.request
+
+    upstream = os.environ.get("NOVNC_UPSTREAM", "127.0.0.1:7900")
+    notes = []
+
+    # Hop 1: the Chrome container's noVNC
+    direct_ok = False
+    try:
+        with urllib.request.urlopen("http://%s/vnc.html" % upstream,
+                                    timeout=timeout) as resp:
+            body = resp.read(4096).decode("utf-8", "replace")
+        direct_ok = resp.status == 200 and "noVNC" in body
+        notes.append("direct http://%s/vnc.html -> %s%s"
+                     % (upstream, resp.status,
+                        "" if direct_ok else " (not a noVNC page)"))
+    except Exception as exc:
+        notes.append("direct http://%s/vnc.html -> %s: %s"
+                     % (upstream, type(exc).__name__, exc))
+
+    # Hop 2: through our nginx, the path the browser actually requests
+    path = get_novnc_path()
+    if not path.endswith("/"):
+        path += "/"
+    proxied_url = "http://127.0.0.1:8000%svnc.html" % path
+    proxied_ok = False
+    try:
+        with urllib.request.urlopen(proxied_url, timeout=timeout) as resp:
+            body = resp.read(8192).decode("utf-8", "replace")
+        if "noVNC" in body:
+            proxied_ok = True
+            notes.append("proxied %s -> %s (noVNC)" % (proxied_url, resp.status))
+        elif "streamlit" in body.lower() or "stAppViewContainer" in body:
+            notes.append(
+                "proxied %s -> %s but returned the STREAMLIT APP, not noVNC. "
+                "nginx is not routing this path, so the panel renders IQEA "
+                "inside itself." % (proxied_url, resp.status))
+        else:
+            notes.append("proxied %s -> %s (unrecognised body)"
+                         % (proxied_url, resp.status))
+    except Exception as exc:
+        notes.append("proxied %s -> %s: %s"
+                     % (proxied_url, type(exc).__name__, exc))
+
+    return (direct_ok and proxied_ok), " | ".join(notes)
+
+
+def _grid_unreachable_message(target, detail):
+    """The actionable version of 'Connection refused'."""
+    host = target.split("//")[-1].split("/")[0]
+    loopback = host.startswith(("127.0.0.1", "localhost", "[::1]"))
+    lines = [
+        "Selenium Grid is not reachable at %s" % target,
+        "  probe: %s" % detail,
+        "",
+    ]
+    if loopback:
+        lines += [
+            "SELENIUM_REMOTE_URL points at loopback (%s)." % host,
+            "Loopback only works where the app and the Grid SHARE a network",
+            "namespace — i.e. Azure App Service sidecars. In Docker Compose, "
+            "plain",
+            "`docker run`, Kubernetes or Container Apps, each container has its "
+            "own",
+            "loopback, so 127.0.0.1 resolves to the APP container, where nothing",
+            "listens on 4444. That is this error.",
+            "",
+            "Fix — address the Grid by name and make sure both are on one network:",
+            "  Docker Compose : SELENIUM_REMOTE_URL=http://chrome:4444/wd/hub",
+            "                   GRID_UPSTREAM=chrome:4444",
+            "  docker run     : put both on the same --network, then use the",
+            "                   Selenium container's name as the host",
+            "  Container Apps : SELENIUM_REMOTE_URL=http://<grid-app-name>/wd/hub",
+            "  Grid on the host, app in a container:",
+            "                   SELENIUM_REMOTE_URL=http://host.docker.internal:4444/wd/hub",
+        ]
+    else:
+        lines += [
+            "Check that: the Grid container is running and healthy; '%s' resolves"
+            % host,
+            "from inside the app container; both are attached to the same network;",
+            "and the port matches the Grid's published port.",
+            "",
+            "Verify from inside the app container:",
+            "  curl -sS http://%s/status" % host,
+        ]
+    lines += [
+        "",
+        "Set execution_type=local in config/settings.ini to run Chrome on this "
+        "machine instead.",
+    ]
+    return "\n".join(lines)
 
 
 def normalize_url(url):
@@ -233,15 +381,27 @@ def get_novnc_url(driver):
     so only the Hub needs to be publicly reachable. Returns '' locally, where the
     browser is already on the user's own screen.
 
-    The exact path is Grid-version specific — confirm it against the Grid your
-    DevOps team deploys before relying on it in the UI.
+    Uses the noVNC web client that selenium's images serve on port 7900 (nginx
+    proxies it at novnc_path). `autoconnect` skips the connect button and
+    `resize=scale` fits the remote 1920x1080 desktop into the panel.
+
+    A VNC password (SE_VNC_PASSWORD) has to reach the client somehow; noVNC
+    accepts it as a query parameter. Prefer leaving the password off
+    (SE_VNC_NO_PASSWORD=true) and putting Azure Easy Auth in front of the app,
+    so the screen is protected by real identity rather than a shared string in
+    a URL.
     """
     if not is_azure():
         return ""
-    session_id = getattr(driver, "session_id", None)
-    if not session_id:
-        return ""
-    return "%s?session=%s" % (get_novnc_path(), session_id)
+    base = get_novnc_path()
+    if not base.endswith("/"):
+        base += "/"
+    url = base + "vnc.html?autoconnect=1&resize=scale"
+    password = os.environ.get("SE_VNC_PASSWORD", "").strip()
+    if password:
+        from urllib.parse import quote
+        url += "&password=" + quote(password)
+    return url
 
 
 def quit_driver(driver):
@@ -285,3 +445,69 @@ def test_browser_factory_parity():
                              "  expected: %s\n  actual:   %s" % (profile, want, got))
     print("browser_factory parity OK — all %d profiles match their "
           "original call-site flags" % len(expected))
+
+
+def diagnose():
+    """
+    Print how this process will reach a browser, and whether it can.
+
+    Run INSIDE the app container — that is the only place the answer is
+    meaningful, because container networking is what usually breaks:
+
+        python -m utilities.browser_factory
+    """
+    import os
+    from config.settings_reader import get_execution_type
+
+    print("IQEA browser diagnostics")
+    print("-" * 60)
+    print("  execution_type        : %s" % get_execution_type())
+    print("  (env IQEA_EXECUTION_TYPE = %r)"
+          % os.environ.get("IQEA_EXECUTION_TYPE"))
+
+    if not is_azure():
+        print("  mode                  : LOCAL — Chrome launches on this machine")
+        print("  Grid is not used. Nothing further to check.")
+        return 0
+
+    target = get_selenium_remote_url()
+    print("  mode                  : AZURE — remote WebDriver")
+    print("  SELENIUM_REMOTE_URL   : %s" % target)
+    print("  GRID_UPSTREAM (nginx) : %s"
+          % os.environ.get("GRID_UPSTREAM", "<unset -> 127.0.0.1:4444>"))
+    print("  noVNC path            : %s" % get_novnc_path())
+    print()
+
+    ok, detail = check_grid_reachable(target)
+    if ok:
+        print("  GRID REACHABLE        : yes")
+        print("  %s" % detail)
+        print()
+        print("  If a node has 0 slots, no Chrome node has registered with the "
+              "Hub yet.")
+        # WebDriver working does not mean the user can SEE the browser — that is
+        # a separate port and a separate nginx route.
+        vok, vdetail = check_novnc_reachable()
+        print("  LIVE VIEW (noVNC)     : %s" % ("yes" if vok else "NO"))
+        for part in vdetail.split(" | "):
+            print("    %s" % part)
+        if not vok:
+            print()
+            print("  The recorder will work but the user cannot see or click the")
+            print("  browser. Check, in order:")
+            print("    - the Chrome sidecar has SE_START_VNC=true and is listening")
+            print("      on 7900 (noVNC is a DIFFERENT port from WebDriver's 4444)")
+            print("    - NOVNC_UPSTREAM=127.0.0.1:7900 is set")
+            print("    - WEBSITES_PORT=8000 so traffic goes through OUR nginx.")
+            print("      If it points at 8501, requests hit Streamlit directly,")
+            print("      nginx never runs, and /vnc/ returns the IQEA app itself.")
+        return 0 if vok else 1
+
+    print("  GRID REACHABLE        : NO")
+    print()
+    print(_grid_unreachable_message(target, detail))
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(diagnose())

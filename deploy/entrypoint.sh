@@ -10,15 +10,17 @@
 set -e
 
 : "${GRID_UPSTREAM:=127.0.0.1:4444}"
-export GRID_UPSTREAM
+: "${NOVNC_UPSTREAM:=127.0.0.1:7900}"
+export GRID_UPSTREAM NOVNC_UPSTREAM
 
-# Only GRID_UPSTREAM is substituted — nginx's own $host / $http_upgrade
-# variables must survive verbatim.
-envsubst '${GRID_UPSTREAM}' \
+# Only these two are substituted — nginx's own $host / $http_upgrade variables
+# must survive verbatim.
+envsubst '${GRID_UPSTREAM} ${NOVNC_UPSTREAM}' \
     < /etc/nginx/nginx.conf.template \
     > /etc/nginx/sites-available/default
 
-echo "[entrypoint] nginx -> Grid Hub at ${GRID_UPSTREAM}"
+echo "[entrypoint] nginx /session/ -> WebDriver at ${GRID_UPSTREAM}"
+echo "[entrypoint] nginx /vnc/     -> noVNC     at ${NOVNC_UPSTREAM}"
 echo "[entrypoint] app   -> SELENIUM_REMOTE_URL=${SELENIUM_REMOTE_URL:-<unset>}"
 
 nginx -t

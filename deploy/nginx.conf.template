@@ -22,6 +22,11 @@ upstream streamlit  { server 127.0.0.1:8501; }
 #   Compose/K8s : chrome:4444     — service/DNS name.
 upstream selenium   { server ${GRID_UPSTREAM}; }
 
+# noVNC web client. This is a DIFFERENT port from WebDriver: selenium's images
+# serve WebDriver on 4444 and the noVNC client on 7900. Proxying /vnc/ to 4444
+# yields a blank panel with no error, which is easy to chase for hours.
+upstream novnc      { server ${NOVNC_UPSTREAM}; }
+
 server {
     listen 8000;
     server_name _;
@@ -38,7 +43,7 @@ server {
     # session id, so this one location serves every concurrent user's browser
     # and no per-node routing is needed.
     location /vnc/ {
-        proxy_pass http://selenium/;
+        proxy_pass http://novnc/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade    $http_upgrade;
         proxy_set_header Connection $connection_upgrade;

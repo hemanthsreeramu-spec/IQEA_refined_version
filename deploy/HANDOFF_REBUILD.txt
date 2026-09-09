@@ -1,0 +1,152 @@
+================================================================================
+IQEA - REBUILD REQUIRED (fixes the blank / recursive "Live browser" panel)
+================================================================================
+For : Hemanth (DevOps)
+From : Sathanantham
+App  : iqea-poc  |  RG: Quality-Engineering-CoE  |  ACR: daqeregistry
+
+
+THE PROBLEM
+-----------
+After clicking "Open Browser" in Azure, the "Live browser" panel appears but
+shows the IQEA application itself instead of the remote Chrome.
+
+The Selenium side is FINE - the browser really does open and navigate. Only the
+live picture is wrong.
+
+
+WHY - AND WHY SETTINGS ALONE WILL NOT FIX IT
+--------------------------------------------
+noVNC (the live screen) is on port 7900. WebDriver is on port 4444. They are
+two different services inside the same selenium/standalone-chrome container.
+
+The image currently deployed routes /vnc/ to 4444 (WebDriver) instead of 7900
+(noVNC). Its nginx config does not even reference NOVNC_UPSTREAM, so the
+App Service setting NOVNC_UPSTREAM=127.0.0.1:7900 is being ignored.
+
+Your app settings are already correct - we verified:
+    GRID_UPSTREAM   127.0.0.1:4444    OK
+    NOVNC_UPSTREAM  127.0.0.1:7900    OK
+    WEBSITES_PORT   8000              OK
+
+Nothing to change there. The fix is entirely in the image.
+
+
+WHAT CHANGED IN THE CODE (all require a rebuild)
+------------------------------------------------
+  deploy/nginx.conf.template
+      /vnc/ now proxies to a separate ${NOVNC_UPSTREAM} (7900) instead of the
+      WebDriver upstream (4444). /session/ still goes to 4444.
+
+  deploy/entrypoint.sh
+      Now substitutes BOTH ${GRID_UPSTREAM} and ${NOVNC_UPSTREAM} into the
+      nginx config at container start. Previously only GRID_UPSTREAM.
+
+  deploy/Dockerfile
+      Adds NOVNC_UPSTREAM=127.0.0.1:7900 default.
+
+  utilities/browser_factory.py
+      - get_novnc_url() now returns the real noVNC client URL
+        (/vnc/vnc.html?autoconnect=1&resize=scale)
+      - New check_novnc_reachable() and check_grid_reachable() probes
+      - New self-diagnostic: python -m utilities.browser_factory
+
+  action_new_xpath_subway_TMT.py
+      Shows a clear error above the panel if the live view is not serving
+      noVNC, instead of silently rendering IQEA inside itself.
+
+
+STEP 1 - REBUILD AND PUSH
+-------------------------
+You have AcrPush (confirmed), so build locally and push. Run from the REPO ROOT
+(the folder containing IQEA.py) - NOT from inside deploy/:
+
+    az acr login --name daqeregistry
+
+    docker build -f deploy/Dockerfile -t daqeregistry.azurecr.io/iqea:v2 .
+
+    docker push daqeregistry.azurecr.io/iqea:v2
+
+Note: the trailing "." is the build context and must be the repo root, because
+the Dockerfile does "COPY requirements.txt ." and "COPY deploy/...".
+
+(az acr build still fails for you with AuthorizationFailed - it needs
+Contributor on the registry, which AcrPush and Container Registry Tasks
+Contributor do not provide. Local build + push avoids that entirely.)
+
+
+STEP 2 - POINT THE APP AT THE NEW TAG
+-------------------------------------
+    az webapp config container set \
+      --name iqea-poc --resource-group Quality-Engineering-CoE \
+      --docker-custom-image-name daqeregistry.azurecr.io/iqea:v2
+
+    az webapp restart --name iqea-poc --resource-group Quality-Engineering-CoE
+
+Use a NEW tag (v2) rather than overwriting v1 - App Service caches images and
+may not re-pull the same tag.
+
+
+STEP 3 - CONFIRM THE SIDECAR SERVES noVNC
+-----------------------------------------
+The Chrome sidecar must have these environment variables. Please confirm
+SE_START_VNC in particular - without it, port 7900 is not listening and the
+panel stays blank no matter what nginx does:
+
+    SE_START_XVFB        = true
+    SE_START_VNC         = true          <-- REQUIRED for the live view
+    SE_VNC_NO_PASSWORD   = true
+    SE_SCREEN_WIDTH      = 1920
+    SE_SCREEN_HEIGHT     = 1080
+    SE_NODE_MAX_SESSIONS = 1
+    SE_SESSION_TIMEOUT   = 300
+
+Portal: App Service > Deployment Center > Containers > (chrome sidecar) > edit.
+
+
+STEP 4 - RUN THE DIAGNOSTIC AND SEND ME THE OUTPUT
+--------------------------------------------------
+    az webapp ssh --name iqea-poc --resource-group Quality-Engineering-CoE
+
+    cd /app && python -m utilities.browser_factory
+
+Expected when healthy:
+    execution_type        : azure
+    SELENIUM_REMOTE_URL   : http://127.0.0.1:4444/wd/hub
+    GRID REACHABLE        : yes
+      ready=True nodes=1 slots=1
+    LIVE VIEW (noVNC)     : yes
+      direct  http://127.0.0.1:7900/vnc.html -> 200
+      proxied http://127.0.0.1:8000/vnc/vnc.html -> 200 (noVNC)
+
+How to read a failure:
+  - "direct ... refused"            -> sidecar is not serving noVNC.
+                                       SE_START_VNC is missing (STEP 3).
+  - "direct OK, proxied returned
+     the STREAMLIT APP"             -> nginx is not routing /vnc/.
+                                       The old image is still deployed, or the
+                                       container did not restart.
+  - "GRID REACHABLE: NO"            -> the message printed tells you exactly
+                                       which address to change.
+
+
+STEP 5 - FUNCTIONAL TEST
+------------------------
+[ ] Open the app, go to IQEA
+[ ] Enter a URL, click "Open Browser"
+[ ] "Live browser" panel shows the REAL page you entered (not IQEA)
+[ ] Click inside the panel - you are driving the remote Chrome
+[ ] Start Recording, interact, Stop Recording, confirm actions captured
+
+
+PLEASE SEND BACK
+----------------
+1. The full output of:  python -m utilities.browser_factory
+2. Last ~50 lines of:   az webapp log tail --name iqea-poc \
+                          --resource-group Quality-Engineering-CoE
+3. Whether the panel now shows the entered URL
+
+Item 1 alone answers most questions - it separates "Grid working" from
+"live view working", which is the distinction that made this bug confusing.
+
+================================================================================

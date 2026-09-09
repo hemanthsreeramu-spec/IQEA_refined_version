@@ -20,6 +20,7 @@ ENV PYTHONUNBUFFERED=1 \
     # App Service defaults: sidecar containers share a network namespace, so the
     # Grid Hub is on localhost. Compose/K8s override both to a service name.
     GRID_UPSTREAM=127.0.0.1:4444 \
+    NOVNC_UPSTREAM=127.0.0.1:7900 \
     SELENIUM_REMOTE_URL=http://127.0.0.1:4444/wd/hub
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
